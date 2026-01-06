@@ -13,7 +13,6 @@ import ExpertScoresPanel from './components/Modals/ExpertScoresPanel';
 import ExpertAnalysisModal from './components/Modals/ExpertAnalysisModal';
 import ExportModal from './components/Modals/ExportModal'; 
 import UploadModal from './components/Modals/UploadModal';
-// 1. Import the ActivityLogProvider and ActivityLogPanel
 import { ActivityLogProvider } from './contexts/ActivityLogContext';
 import ActivityLogPanel from './components/ActivityLog/ActivityLogPanel';
 import { calculateAllData, filterData, findColumnName } from './utils/calculations';
@@ -51,7 +50,7 @@ function App() {
   const [selectedOwner, setSelectedOwner] = useState("All");
   const [selectedTransmissionVoltage, setSelectedTransmissionVoltage] = useState("All");
   const [selectedHasExcessCapacity, setSelectedHasExcessCapacity] = useState("All");
-  const [selectedProjectType, setSelectedProjectType] = useState("All"); // ADDED: Project Type state
+  const [selectedProjectType, setSelectedProjectType] = useState("All"); 
   const [allOwners, setAllOwners] = useState([]);
   const [allVoltages, setAllVoltages] = useState(["All"]);
   const [allData, setAllData] = useState([]);
@@ -61,15 +60,13 @@ function App() {
   const [showScoringPanel, setShowScoringPanel] = useState(false);
   const [showAddSiteModal, setShowAddSiteModal] = useState(false);
   const [showScoringModal, setShowScoringModal] = useState(false);
-  const [showExportModal, setShowExportModal] = useState(false); // ADDED: Export modal state
-  const [showUploadModal, setShowUploadModal] = useState(false); // ADDED: Upload modal state
+  const [showExportModal, setShowExportModal] = useState(false); 
+  const [showUploadModal, setShowUploadModal] = useState(false); 
   
-  // 2. Add a state for showing activity log panel
   const [showActivityLog, setShowActivityLog] = useState(false);
   
   const [currentUser, setCurrentUser] = useState("expert");
 
-  // Sorting state
   const [sortConfig, setSortConfig] = useState({
     column: null,
     direction: 'none',
@@ -135,14 +132,11 @@ function App() {
     selectedHasExcessCapacity,
     selectedProjectType
   };
-
-  // ===== EDIT/DELETE HANDLERS =====
   
   const handleEditProject = (project) => {
     console.log('🎯 handleEditProject called with:', project);
     
-    // Find the full project data from allData
-    const fullProjectData = allData.find(row => 
+      const fullProjectData = allData.find(row => 
       row['Project Name'] === project.asset || 
       row['Project Codename'] === project.asset ||
       (row.detailData && (row.detailData['Project Name'] === project.asset))
@@ -155,8 +149,7 @@ function App() {
   const handleDeleteProject = (projectId) => {
     console.log('🗑️ handleDeleteProject called with ID:', projectId);
     
-    // Find project to delete
-    const projectToDelete = pipelineRows.find(row => row.id === projectId);
+     const projectToDelete = pipelineRows.find(row => row.id === projectId);
     
     if (!projectToDelete) {
       alert('Project not found!');
@@ -172,14 +165,11 @@ function App() {
         return rowName !== projectName;
       });
       
-      // Remove from pipelineRows
-      const updatedPipelineRows = pipelineRows.filter(row => row.id !== projectId);
-      
-      // Update states
+         const updatedPipelineRows = pipelineRows.filter(row => row.id !== projectId);
+     
       setAllData(updatedAllData);
       setPipelineRows(updatedPipelineRows);
       
-      // Recalculate data
       const headers = Object.keys(updatedAllData[0] || {});
       calculateAllData(updatedAllData, headers, {
         setKpiRow1, setKpiRow2, setIsoData, setTechData, 
@@ -200,7 +190,6 @@ function App() {
       return;
     }
     
-    // Update in allData
     const updatedAllData = allData.map(row => {
       const rowName = row['Project Name'] || row['Project Codename'];
       if (rowName === projectName) {
@@ -209,7 +198,7 @@ function App() {
       return row;
     });
     
-    // Update in pipelineRows
+    
     const updatedPipelineRows = pipelineRows.map(row => {
       if (row.asset === projectName) {
         return {
