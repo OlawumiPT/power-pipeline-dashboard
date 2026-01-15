@@ -7,180 +7,149 @@ const AddSiteModal = ({
   newSiteData,
   handleInputChange,
   allData,
-  technologyOptions,
-  isoOptions,
-  processOptions,
-  US_CITIES
+  dropdownOptions, // ALL FROM DATABASE TABLES
+  US_CITIES,
+  allVoltages,
+  calculateStatusFromCODs
 }) => {
-  // Location autocomplete state
+  // ALL DROPDOWN OPTIONS FROM DATABASE TABLES
+  const {
+    // From lookup tables:
+    projectTypeOptions = [], // FROM project_types
+    redevFuelOptions = [], // FROM redev_fuels
+    redevelopmentBaseOptions = [], // FROM redev_base_cases
+    redevLeadOptions = [], // FROM redev_lead_options
+    redevSupportOptions = [], // FROM redev_support_options
+    coLocateRepowerOptions = [], // FROM co_locate_repower_options
+    
+    // From distinct values in main tables:
+    plantOwners = [], // DISTINCT plant_owner FROM projects
+    technologyOptions = [], // DISTINCT technology FROM technical_details
+    fuelTypes = [], // DISTINCT fuel_type FROM technical_details
+    isoOptions = [], // DISTINCT iso_rto FROM market_details
+    
+    // Fixed options (no database table needed):
+    processOptions = ["P", "B"],
+    redevTechOptions = ["ST", "GT", "CCGT", "Hydro", "Wind", "Solar", "BESS", "Other"],
+    redevTierOptions = ["0", "1", "2", "3"],
+    redevLandControlOptions = ["Y", "N"],
+    redevStageGateOptions = ["0", "1", "2", "3", "P"]
+  } = dropdownOptions || {};
+  
+  // State for form fields
   const [filteredLocations, setFilteredLocations] = useState([]);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
   const [locationInput, setLocationInput] = useState("");
   
-  // Refs
-  const locationInputRef = useRef(null);
-  
-  // Redevelopment bases state
+  // Multi-select states
   const [selectedRedevelopmentBases, setSelectedRedevelopmentBases] = useState([]);
   const [newRedevelopmentBase, setNewRedevelopmentBase] = useState("");
+  const [selectedProjectTypes, setSelectedProjectTypes] = useState([]);
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [selectedRedevFuels, setSelectedRedevFuels] = useState([]);
+  const [newRedevFuel, setNewRedevFuel] = useState("");
   
-  // Owner input state
+  // Add new options states
   const [showNewOwnerInput, setShowNewOwnerInput] = useState(false);
   const [newPlantOwner, setNewPlantOwner] = useState("");
-  
-  // Co-locate/Repower state
   const [showNewCoLocateRepowerInput, setShowNewCoLocateRepowerInput] = useState(false);
   const [newCoLocateRepower, setNewCoLocateRepower] = useState("");
-  
-  // Project Type state
-  const [selectedProjectTypes, setSelectedProjectTypes] = useState([]);
-  
-  // Transactability options based on screenshot
+
+  // Transactability options
   const transactabilityOptions = [
-    { value: "1.0", label: "1 -Bilateral w/ developed relationship" },
-    { value: "2.0", label: "2 -Bilateral w/new relationship or Process w/less than 10 bidders" },
-    { value: "3.0", label: "3 -Highly Competitive Process - More than 10 Bidders" }
-  ];
-  
-  // Project type options
-  const projectTypeOptions = [
-    { value: "Redev", label: "Redev" },
-    { value: "M&A", label: "M&A" },
-    { value: "Owned", label: "Owned" }
+    { value: "1", label: "1 - Bilateral w/ developed relationship" },
+    { value: "2", label: "2 - Bilateral w/new relationship or Process w/less than 10 bidders" },
+    { value: "3", label: "3 - Highly Competitive Process - More than 10 Bidders" }
   ];
 
-  // Extract redevelopment dropdown options from Excel data
-  const extractUniqueValues = (data, columnName) => {
-    const values = new Set();
-    data.forEach(row => {
-      const value = row[columnName];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
+  // Status options
+  const statusOptions = ["Operating", "Retired", "Future", "N/A", "Unknown"];
+
+  // Map frontend field names to database column names
+  const fieldNameMapping = {
+    "Project Name": "project_name",
+    "Plant Owner": "plant_owner",
+    "Project Codename": "project_codename",
+    "Location": "location",
+    "Site Acreage": "site_acreage",
+    "Status": "status",
+    "Legacy Nameplate Capacity (MW)": "legacy_nameplate_capacity_mw",
+    "Tech": "tech",
+    "Heat Rate (Btu/kWh)": "heat_rate_btu_kwh",
+    "2024 Capacity Factor": "capacity_factor_2024",
+    "Legacy COD": "legacy_cod",
+    "Fuel": "fuel",
+    "ISO": "iso",
+    "Zone/Submarket": "zone_submarket",
+    "Markets": "markets",
+    "Process (P) or Bilateral (B)": "process_type",
+    "Gas Reference": "gas_reference",
+    "Transactability": "transactability",
+    "Redev Tier": "redev_tier",
+    "Redevelopment Base Case": "redevelopment_base_case",
+    "Redev Capacity (MW)": "redev_capacity_mw",
+    "Redev Tech": "redev_tech",
+    "Redev Fuel": "redev_fuel",
+    "Redev Heatrate (Btu/kWh)": "redev_heatrate_btu_kwh",
+    "Redev COD": "redev_cod",
+    "Redev Land Control": "redev_land_control",
+    "Redev Stage Gate": "redev_stage_gate",
+    "Redev Lead": "redev_lead",
+    "Redev Support": "redev_support",
+    "Co-Locate/Repower": "co_locate_repower",
+    "Contact": "contact",
+    // These already match or are handled specially:
+    "Project Type": "project_type"
   };
 
-  // Extract Redev Tech options (Technology values from Tech column)
-  const extractRedevTechOptions = () => {
-    return technologyOptions; // Use the same as Tech
-  };
-
-  // Extract Redev Fuel options (Fuel values from Fuel column)
-  const extractRedevFuelOptions = () => {
-    const values = new Set();
-    allData.forEach(row => {
-      const value = row["Fuel"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  // Extract Redev Land Control options from Excel
-  const extractRedevLandControlOptions = () => {
-    const values = new Set(["Y", "N"]);
-    allData.forEach(row => {
-      const value = row["Redev Land Control"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  // Extract Redev Stage Gate options from Excel
-  const extractRedevStageGateOptions = () => {
-    const values = new Set(["0", "1", "2", "3", "P"]);
-    allData.forEach(row => {
-      const value = row["Redev Stage Gate"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  // Extract Redev Lead options from Excel
-  const extractRedevLeadOptions = () => {
-    const values = new Set();
-    allData.forEach(row => {
-      const value = row["Redev Lead"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  // Extract Redev Support options from Excel
-  const extractRedevSupportOptions = () => {
-    const values = new Set();
-    allData.forEach(row => {
-      const value = row["Redev Support"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  // Extract Redev Tier options from Excel
-  const extractRedevTierOptions = () => {
-    const values = new Set(["0", "1", "2", "3"]);
-    allData.forEach(row => {
-      const value = row["Redev Tier"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  // Get all the dropdown options
-  const redevTierOptions = extractRedevTierOptions();
-  const redevTechOptions = extractRedevTechOptions();
-  const redevFuelOptions = extractRedevFuelOptions();
-  const redevLandControlOptions = extractRedevLandControlOptions();
-  const redevStageGateOptions = extractRedevStageGateOptions();
-  const redevLeadOptions = extractRedevLeadOptions();
-  const redevSupportOptions = extractRedevSupportOptions();
-  
-  const existingPlantOwners = extractUniqueValues(allData, "Plant Owner");
-  const existingFuelTypes = extractUniqueValues(allData, "Fuel");
-  const redevelopmentBaseOptions = extractUniqueValues(allData, "Redevelopment Base Case");
-  const coLocateRepowerOptions = extractUniqueValues(allData, "Co-Locate/Repower");
-
-  // Initialize location input when modal opens
+  // Initialize form
   useEffect(() => {
     if (showAddSiteModal) {
-      const initialLocation = newSiteData["Location"] || "";
-      setLocationInput(initialLocation);
+      // Set location from existing data
+      setLocationInput(newSiteData["location"] || newSiteData["Location"] || "");
       
-      // Initialize project types from newSiteData
-      const projectTypeValue = newSiteData["Project Type"] || "";
+      // Parse project types - check both possible field names
+      const projectTypeValue = newSiteData["project_type"] || newSiteData["Project Type"] || "";
       if (projectTypeValue) {
-        // Parse comma-separated values from Excel
         const types = projectTypeValue.split(',').map(t => t.trim()).filter(t => t);
         setSelectedProjectTypes(types);
-      } else {
-        setSelectedProjectTypes([]);
       }
       
-      // Focus the location input after a small delay
-      setTimeout(() => {
-        if (locationInputRef.current) {
-          locationInputRef.current.focus();
-        }
-      }, 100);
+      // Parse redev fuels
+      const redevFuelValue = newSiteData["redev_fuel"] || newSiteData["Redev Fuel"] || "";
+      if (redevFuelValue) {
+        const fuels = redevFuelValue.split(',').map(f => f.trim()).filter(f => f);
+        setSelectedRedevFuels(fuels);
+      }
+      
+      // Parse redevelopment bases
+      const redevBaseValue = newSiteData["redevelopment_base_case"] || newSiteData["Redevelopment Base Case"] || "";
+      if (redevBaseValue) {
+        const bases = redevBaseValue.split(/[\n,]/).map(b => b.trim()).filter(b => b);
+        setSelectedRedevelopmentBases(bases);
+      }
+      
+      // Set status
+      const statusValue = newSiteData["status"] || newSiteData["Status"] || "";
+      setSelectedStatus(statusValue);
     }
   }, [showAddSiteModal, newSiteData]);
+
+  // Handle field changes
+  const handleFieldChange = (field, value) => {
+    console.log(`Changing ${field} to:`, value);
+    
+    // Map the field name to database column name
+    const dbFieldName = fieldNameMapping[field] || field;
+    
+    // Call the parent handler with the correct field name
+    handleInputChange(dbFieldName, value);
+  };
 
   // Location handlers
   const handleLocationInputChange = (value) => {
     setLocationInput(value);
-    handleInputChange("Location", value);
+    handleFieldChange("Location", value);
     
     if (value.length >= 2) {
       const filtered = US_CITIES.filter(city =>
@@ -196,26 +165,51 @@ const AddSiteModal = ({
 
   const selectCity = (city) => {
     setLocationInput(city);
-    handleInputChange("Location", city);
+    handleFieldChange("Location", city);
     setShowLocationSuggestions(false);
   };
 
   // Legacy COD handler
   const handleLegacyCODChange = (value) => {
     const digitsOnly = value.replace(/\D/g, '').slice(0, 4);
-    handleInputChange("Legacy COD", digitsOnly);
+    handleFieldChange("Legacy COD", digitsOnly);
+    
+    // Auto-update status
+    if (digitsOnly.length === 4) {
+      const redevCOD = newSiteData["redev_cod"] || newSiteData["Redev COD"] || "";
+      const calculatedStatus = calculateStatusFromCODs(digitsOnly, redevCOD);
+      if (calculatedStatus) {
+        setSelectedStatus(calculatedStatus);
+        handleFieldChange("Status", calculatedStatus);
+      }
+    }
   };
 
-  // Redevelopment bases handlers
+  // Redev COD handler
+  const handleRedevCODChange = (value) => {
+    handleFieldChange("Redev COD", value);
+    
+    // Auto-update status
+    if (value && value.toString().trim() !== "") {
+      const legacyCOD = newSiteData["legacy_cod"] || newSiteData["Legacy COD"] || "";
+      const calculatedStatus = calculateStatusFromCODs(legacyCOD, value);
+      if (calculatedStatus) {
+        setSelectedStatus(calculatedStatus);
+        handleFieldChange("Status", calculatedStatus);
+      }
+    }
+  };
+
+  // Redevelopment Base Case handler
   const handleRedevelopmentBaseChange = (base) => {
     if (selectedRedevelopmentBases.includes(base)) {
       const updated = selectedRedevelopmentBases.filter(b => b !== base);
       setSelectedRedevelopmentBases(updated);
-      handleInputChange("Redevelopment Base Case", updated.join("\n"));
+      handleFieldChange("Redevelopment Base Case", updated.join("\n"));
     } else {
       const updated = [...selectedRedevelopmentBases, base];
       setSelectedRedevelopmentBases(updated);
-      handleInputChange("Redevelopment Base Case", updated.join("\n"));
+      handleFieldChange("Redevelopment Base Case", updated.join("\n"));
     }
   };
 
@@ -223,42 +217,42 @@ const AddSiteModal = ({
     if (newRedevelopmentBase.trim() && !selectedRedevelopmentBases.includes(newRedevelopmentBase.trim())) {
       const updated = [...selectedRedevelopmentBases, newRedevelopmentBase.trim()];
       setSelectedRedevelopmentBases(updated);
-      handleInputChange("Redevelopment Base Case", updated.join("\n"));
+      handleFieldChange("Redevelopment Base Case", updated.join("\n"));
       setNewRedevelopmentBase("");
     }
   };
 
-  // Owner handlers
+  // Plant Owner handler
   const handlePlantOwnerChange = (value) => {
     if (value === "add_new") {
       setShowNewOwnerInput(true);
     } else {
       setShowNewOwnerInput(false);
-      handleInputChange("Plant Owner", value);
+      handleFieldChange("Plant Owner", value);
     }
   };
 
   const addNewPlantOwner = () => {
     if (newPlantOwner.trim()) {
-      handleInputChange("Plant Owner", newPlantOwner.trim());
+      handleFieldChange("Plant Owner", newPlantOwner.trim());
       setShowNewOwnerInput(false);
       setNewPlantOwner("");
     }
   };
 
-  // Co-locate/repower handlers
+  // Co-locate/repower handler
   const handleCoLocateRepowerChange = (value) => {
     if (value === "add_new") {
       setShowNewCoLocateRepowerInput(true);
     } else {
       setShowNewCoLocateRepowerInput(false);
-      handleInputChange("Co-Locate/Repower", value);
+      handleFieldChange("Co-Locate/Repower", value);
     }
   };
 
-  // Transactability handler - updated to handle select
+  // Transactability handler
   const handleTransactabilityChange = (value) => {
-    handleInputChange("Transactability", value);
+    handleFieldChange("Transactability", value);
   };
 
   // Project Type handler
@@ -271,22 +265,68 @@ const AddSiteModal = ({
     }
     
     setSelectedProjectTypes(updatedTypes);
-    
-    // Store as comma-separated string like in Excel
-    handleInputChange("Project Type", updatedTypes.join(", "));
+    handleFieldChange("Project Type", updatedTypes.join(", "));
   };
 
-  // Form validation
+  // Status handler
+  const handleStatusChange = (value) => {
+    setSelectedStatus(value);
+    handleFieldChange("Status", value);
+  };
+
+  // Redev Fuel handler
+  const handleRedevFuelChange = (fuel) => {
+    let updatedFuels;
+    if (selectedRedevFuels.includes(fuel)) {
+      updatedFuels = selectedRedevFuels.filter(f => f !== fuel);
+    } else {
+      updatedFuels = [...selectedRedevFuels, fuel];
+    }
+    
+    setSelectedRedevFuels(updatedFuels);
+    handleFieldChange("Redev Fuel", updatedFuels.join(", "));
+  };
+
+  const addNewRedevFuel = () => {
+    if (newRedevFuel.trim() && !selectedRedevFuels.includes(newRedevFuel.trim())) {
+      const updated = [...selectedRedevFuels, newRedevFuel.trim()];
+      setSelectedRedevFuels(updated);
+      handleFieldChange("Redev Fuel", updated.join(", "));
+      setNewRedevFuel("");
+    }
+  };
+
+  // Form validation and submission
   const handleFormSubmit = (e) => {
     e.preventDefault();
     
-    // Check if at least one project type is selected
-    if (selectedProjectTypes.length === 0) {
-      alert("Please select at least one Project Type");
+    // Required fields - use database field names
+    if (!newSiteData["project_name"] || newSiteData["project_name"].trim() === "") {
+      alert("Please enter a Project Name");
       return;
     }
     
-    // Submit the form
+    if (!newSiteData["plant_owner"] || newSiteData["plant_owner"].trim() === "") {
+      alert("Please select or enter a Plant Owner");
+      return;
+    }
+    
+    // Log for debugging
+    console.log("Submitting new project:", {
+      project_name: newSiteData["project_name"],
+      plant_owner: newSiteData["plant_owner"],
+      project_type: newSiteData["project_type"],
+      status: newSiteData["status"],
+      redev_fuel: newSiteData["redev_fuel"],
+      redevelopment_base_case: newSiteData["redevelopment_base_case"],
+      allData: newSiteData
+    });
+    
+    // Log each field individually for debugging
+    Object.entries(newSiteData).forEach(([key, value]) => {
+      console.log(`${key}:`, value, `(type: ${typeof value})`);
+    });
+    
     handleAddSiteSubmit(e);
   };
 
@@ -302,82 +342,65 @@ const AddSiteModal = ({
         
         <form onSubmit={handleFormSubmit}>
           <div className="modal-body">
+            {/* Basic Information Section */}
             <div className="form-section">
               <h3 className="form-section-title">Basic Information</h3>
               
-              {/* Project Type - Single line above Project Name and Codename */}
+              {/* Project Type - Multi-select */}
               <div className="form-group" style={{ marginBottom: '20px' }}>
-                <label className="form-label required">Project Type</label>
+                <label className="form-label">Project Type</label>
                 <div className="checkbox-group" style={{ width: '100%' }}>
-                  <div style={{ 
-                    display: 'flex', 
-                    gap: '12px',
-                    flexWrap: 'wrap',
-                    marginTop: '4px'
-                  }}>
-                    {projectTypeOptions.map(option => (
-                      <label 
-                        key={option.value}
-                        className="checkbox-label"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          cursor: 'pointer',
-                          padding: '10px 16px',
-                          borderRadius: '6px',
-                          backgroundColor: selectedProjectTypes.includes(option.value) ? '#334155' : '#1e293b',
-                          border: '1px solid',
-                          borderColor: selectedProjectTypes.includes(option.value) ? '#3b82f6' : '#374151',
-                          transition: 'all 0.2s',
-                          userSelect: 'none',
-                          minWidth: '80px',
-                          justifyContent: 'center'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2d3748'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedProjectTypes.includes(option.value) ? '#334155' : '#1e293b'}
-                      >
-                        <input
-                          type="checkbox"
-                          className="checkbox-input"
-                          checked={selectedProjectTypes.includes(option.value)}
-                          onChange={() => handleProjectTypeChange(option.value)}
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    {projectTypeOptions.map(option => {
+                      const optionName = option.type_name || option.name || option;
+                      return (
+                        <label key={optionName} className="checkbox-label"
                           style={{
-                            marginRight: '8px',
-                            width: '16px',
-                            height: '16px',
-                            cursor: 'pointer'
+                            display: 'flex',
+                            alignItems: 'center',
+                            cursor: 'pointer',
+                            padding: '10px 16px',
+                            borderRadius: '6px',
+                            backgroundColor: selectedProjectTypes.includes(optionName) ? '#334155' : '#1e293b',
+                            border: '1px solid',
+                            borderColor: selectedProjectTypes.includes(optionName) ? '#3b82f6' : '#374151',
+                            transition: 'all 0.2s',
+                            userSelect: 'none',
+                            minWidth: '80px',
+                            justifyContent: 'center'
                           }}
-                        />
-                        <span style={{ 
-                          color: '#e5e7eb',
-                          fontSize: '14px',
-                          fontWeight: selectedProjectTypes.includes(option.value) ? '500' : '400'
-                        }}>
-                          {option.label}
-                        </span>
-                      </label>
-                    ))}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2d3748'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedProjectTypes.includes(optionName) ? '#334155' : '#1e293b'}
+                        >
+                          <input
+                            type="checkbox"
+                            className="checkbox-input"
+                            checked={selectedProjectTypes.includes(optionName)}
+                            onChange={() => handleProjectTypeChange(optionName)}
+                            style={{ marginRight: '8px', width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          <span style={{ color: '#e5e7eb', fontSize: '14px', fontWeight: selectedProjectTypes.includes(optionName) ? '500' : '400' }}>
+                            {optionName}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
-                  <small className="form-hint" style={{ 
-                    display: 'block', 
-                    marginTop: '8px', 
-                    color: selectedProjectTypes.length === 0 ? '#ef4444' : '#94a3b8' 
-                  }}>
-                    {selectedProjectTypes.length === 0 
-                      ? "Please select at least one project type (required)"
-                      : "Select all applicable project types"}
+                  <small className="form-hint" style={{ display: 'block', marginTop: '8px', color: '#94a3b8' }}>
+                    Select all applicable project types
                   </small>
                 </div>
               </div>
               
+              {/* Basic Info Grid */}
               <div className="form-grid">
                 <div className="form-group">
                   <label className="form-label required">Project Name</label>
                   <input
                     type="text"
                     className="form-input"
-                    value={newSiteData["Project Name"]}
-                    onChange={(e) => handleInputChange("Project Name", e.target.value)}
+                    value={newSiteData["project_name"] || newSiteData["Project Name"] || ""}
+                    onChange={(e) => handleFieldChange("Project Name", e.target.value)}
                     placeholder="Enter project name"
                     required
                     style={{ width: '100%' }}
@@ -389,8 +412,8 @@ const AddSiteModal = ({
                   <input
                     type="text"
                     className="form-input"
-                    value={newSiteData["Project Codename"]}
-                    onChange={(e) => handleInputChange("Project Codename", e.target.value)}
+                    value={newSiteData["project_codename"] || newSiteData["Project Codename"] || ""}
+                    onChange={(e) => handleFieldChange("Project Codename", e.target.value)}
                     placeholder="Enter codename"
                     style={{ width: '100%' }}
                   />
@@ -401,14 +424,14 @@ const AddSiteModal = ({
                   <div className="select-with-add" style={{ width: '100%' }}>
                     <select
                       className="form-select"
-                      value={newSiteData["Plant Owner"]}
+                      value={newSiteData["plant_owner"] || newSiteData["Plant Owner"] || ""}
                       onChange={(e) => handlePlantOwnerChange(e.target.value)}
                       required
                       disabled={showNewOwnerInput}
                       style={{ width: '100%' }}
                     >
                       <option value="">Select Plant Owner</option>
-                      {existingPlantOwners.map(owner => (
+                      {plantOwners.map(owner => (
                         <option key={owner} value={owner}>{owner}</option>
                       ))}
                       <option value="add_new">+ Add New Owner</option>
@@ -426,18 +449,10 @@ const AddSiteModal = ({
                           style={{ width: '100%' }}
                         />
                         <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                          <button 
-                            type="button" 
-                            className="btn-add-small"
-                            onClick={addNewPlantOwner}
-                          >
+                          <button type="button" className="btn-add-small" onClick={addNewPlantOwner}>
                             Add
                           </button>
-                          <button 
-                            type="button" 
-                            className="btn-cancel-small"
-                            onClick={() => setShowNewOwnerInput(false)}
-                          >
+                          <button type="button" className="btn-cancel-small" onClick={() => setShowNewOwnerInput(false)}>
                             Cancel
                           </button>
                         </div>
@@ -447,69 +462,24 @@ const AddSiteModal = ({
                 </div>
                 
                 <div className="form-group">
-                  <label className="form-label required">Location</label>
+                  <label className="form-label">Location</label>
                   <div className="autocomplete-wrapper" style={{ position: 'relative', width: '100%' }}>
                     <input
-                      ref={locationInputRef}
                       type="text"
                       className="form-input"
                       value={locationInput}
                       onChange={(e) => handleLocationInputChange(e.target.value)}
-                      onFocus={() => {
-                        if (locationInput.length >= 2) {
-                          const filtered = US_CITIES.filter(city =>
-                            city.toLowerCase().includes(locationInput.toLowerCase())
-                          );
-                          setFilteredLocations(filtered.slice(0, 10));
-                          setShowLocationSuggestions(true);
-                        }
-                      }}
-                      onBlur={() => {
-                        setTimeout(() => setShowLocationSuggestions(false), 200);
-                      }}
                       placeholder="Start typing city, state (e.g., Clarksville, TN)"
-                      required
                       style={{ width: '100%' }}
                     />
                     {showLocationSuggestions && filteredLocations.length > 0 && (
-                      <div 
-                        className="autocomplete-dropdown" 
-                        style={{
-                          position: 'absolute',
-                          top: '100%',
-                          left: 0,
-                          right: 0,
-                          backgroundColor: '#1e293b',
-                          border: '1px solid #334155',
-                          borderRadius: '4px',
-                          zIndex: 1000,
-                          maxHeight: '200px',
-                          overflowY: 'auto',
-                          marginTop: '2px',
-                          width: '100%',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-                        }}
-                      >
+                      <div className="autocomplete-dropdown">
                         {filteredLocations.map((city, index) => (
-                          <div
-                            key={`${city}-${index}`}
-                            className="autocomplete-item"
-                            style={{
-                              padding: '8px 12px',
-                              cursor: 'pointer',
-                              borderBottom: '1px solid #334155',
-                              fontSize: '14px',
-                              color: '#e5e7eb',
-                              backgroundColor: '#1e293b',
-                              transition: 'background-color 0.2s'
-                            }}
+                          <div key={`${city}-${index}`} className="autocomplete-item"
                             onMouseDown={(e) => {
                               e.preventDefault();
                               selectCity(city);
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#334155'}
-                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1e293b'}
-                          >
+                            }}>
                             {city}
                           </div>
                         ))}
@@ -522,44 +492,56 @@ const AddSiteModal = ({
                 <div className="form-group">
                   <label className="form-label">Site Acreage</label>
                   <input
-                    type="number"
+                    type="text"
                     className="form-input"
-                    value={newSiteData["Site Acreage"]}
-                    onChange={(e) => handleInputChange("Site Acreage", e.target.value)}
+                    value={newSiteData["site_acreage"] || newSiteData["Site Acreage"] || ""}
+                    onChange={(e) => handleFieldChange("Site Acreage", e.target.value)}
                     placeholder="Enter acreage"
-                    min="0"
-                    step="0.1"
                     style={{ width: '100%' }}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Status</label>
+                  <select
+                    className="form-select"
+                    value={selectedStatus}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="">Select Status</option>
+                    {statusOptions.map(status => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
 
+            {/* Technical Details Section */}
             <div className="form-section">
               <h3 className="form-section-title">Technical Details</h3>
               <div className="form-grid">
                 <div className="form-group">
-                  <label className="form-label required">Capacity (MW)</label>
+                  <label className="form-label">Capacity (MW)</label>
                   <input
                     type="number"
                     className="form-input"
-                    value={newSiteData["Legacy Nameplate Capacity (MW)"]}
-                    onChange={(e) => handleInputChange("Legacy Nameplate Capacity (MW)", e.target.value)}
+                    value={newSiteData["legacy_nameplate_capacity_mw"] || newSiteData["Legacy Nameplate Capacity (MW)"] || ""}
+                    onChange={(e) => handleFieldChange("Legacy Nameplate Capacity (MW)", e.target.value)}
                     placeholder="Enter capacity in MW"
-                    required
-                    step="0.1"
+                    step="any"
                     min="0"
                     style={{ width: '100%' }}
                   />
                 </div>
                 
                 <div className="form-group">
-                  <label className="form-label required">Technology</label>
+                  <label className="form-label">Technology</label>
                   <select
                     className="form-select"
-                    value={newSiteData["Tech"]}
-                    onChange={(e) => handleInputChange("Tech", e.target.value)}
-                    required
+                    value={newSiteData["tech"] || newSiteData["Tech"] || ""}
+                    onChange={(e) => handleFieldChange("Tech", e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select Technology</option>
@@ -574,10 +556,10 @@ const AddSiteModal = ({
                   <input
                     type="number"
                     className="form-input"
-                    value={newSiteData["Heat Rate (Btu/kWh)"]}
-                    onChange={(e) => handleInputChange("Heat Rate (Btu/kWh)", e.target.value)}
+                    value={newSiteData["heat_rate_btu_kwh"] || newSiteData["Heat Rate (Btu/kWh)"] || ""}
+                    onChange={(e) => handleFieldChange("Heat Rate (Btu/kWh)", e.target.value)}
                     placeholder="Enter heat rate"
-                    step="100"
+                    step="any"
                     min="0"
                     style={{ width: '100%' }}
                   />
@@ -588,10 +570,10 @@ const AddSiteModal = ({
                   <input
                     type="number"
                     className="form-input"
-                    value={newSiteData["2024 Capacity Factor"]}
-                    onChange={(e) => handleInputChange("2024 Capacity Factor", e.target.value)}
+                    value={newSiteData["capacity_factor_2024"] || newSiteData["2024 Capacity Factor"] || ""}
+                    onChange={(e) => handleFieldChange("2024 Capacity Factor", e.target.value)}
                     placeholder="Enter capacity factor"
-                    step="0.1"
+                    step="any"
                     min="0"
                     max="100"
                     style={{ width: '100%' }}
@@ -603,27 +585,25 @@ const AddSiteModal = ({
                   <input
                     type="text"
                     className="form-input"
-                    value={newSiteData["Legacy COD"]}
+                    value={newSiteData["legacy_cod"] || newSiteData["Legacy COD"] || ""}
                     onChange={(e) => handleLegacyCODChange(e.target.value)}
                     placeholder="YYYY"
                     maxLength="4"
-                    pattern="\d{4}"
-                    title="Please enter a 4-digit year"
                     style={{ width: '100%' }}
                   />
-                  <small className="form-hint">4-digit year (e.g., 1994, 2004)</small>
+                  <small className="form-hint">Used for status calculation if no Redev COD</small>
                 </div>
                 
                 <div className="form-group">
                   <label className="form-label">Fuel</label>
                   <select
                     className="form-select"
-                    value={newSiteData["Fuel"]}
-                    onChange={(e) => handleInputChange("Fuel", e.target.value)}
+                    value={newSiteData["fuel"] || newSiteData["Fuel"] || ""}
+                    onChange={(e) => handleFieldChange("Fuel", e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select Fuel Type</option>
-                    {existingFuelTypes.map(fuel => (
+                    {fuelTypes.map(fuel => (
                       <option key={fuel} value={fuel}>{fuel}</option>
                     ))}
                   </select>
@@ -631,16 +611,16 @@ const AddSiteModal = ({
               </div>
             </div>
 
+            {/* Market Details Section */}
             <div className="form-section">
               <h3 className="form-section-title">Market Details</h3>
               <div className="form-grid">
                 <div className="form-group">
-                  <label className="form-label required">ISO/RTO</label>
+                  <label className="form-label">ISO/RTO</label>
                   <select
                     className="form-select"
-                    value={newSiteData["ISO"]}
-                    onChange={(e) => handleInputChange("ISO", e.target.value)}
-                    required
+                    value={newSiteData["iso"] || newSiteData["ISO"] || ""}
+                    onChange={(e) => handleFieldChange("ISO", e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select ISO/RTO</option>
@@ -655,8 +635,8 @@ const AddSiteModal = ({
                   <input
                     type="text"
                     className="form-input"
-                    value={newSiteData["Zone/Submarket"]}
-                    onChange={(e) => handleInputChange("Zone/Submarket", e.target.value)}
+                    value={newSiteData["zone_submarket"] || newSiteData["Zone/Submarket"] || ""}
+                    onChange={(e) => handleFieldChange("Zone/Submarket", e.target.value)}
                     placeholder="Enter zone/submarket"
                     style={{ width: '100%' }}
                   />
@@ -667,20 +647,19 @@ const AddSiteModal = ({
                   <input
                     type="text"
                     className="form-input"
-                    value={newSiteData["Markets"]}
-                    onChange={(e) => handleInputChange("Markets", e.target.value)}
+                    value={newSiteData["markets"] || newSiteData["Markets"] || ""}
+                    onChange={(e) => handleFieldChange("Markets", e.target.value)}
                     placeholder="Enter markets"
                     style={{ width: '100%' }}
                   />
                 </div>
                 
                 <div className="form-group">
-                  <label className="form-label required">Process Type</label>
+                  <label className="form-label">Process Type</label>
                   <select
                     className="form-select"
-                    value={newSiteData["Process (P) or Bilateral (B)"]}
-                    onChange={(e) => handleInputChange("Process (P) or Bilateral (B)", e.target.value)}
-                    required
+                    value={newSiteData["process_type"] || newSiteData["Process (P) or Bilateral (B)"] || ""}
+                    onChange={(e) => handleFieldChange("Process (P) or Bilateral (B)", e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select Process Type</option>
@@ -695,8 +674,8 @@ const AddSiteModal = ({
                   <input
                     type="text"
                     className="form-input"
-                    value={newSiteData["Gas Reference"]}
-                    onChange={(e) => handleInputChange("Gas Reference", e.target.value)}
+                    value={newSiteData["gas_reference"] || newSiteData["Gas Reference"] || ""}
+                    onChange={(e) => handleFieldChange("Gas Reference", e.target.value)}
                     placeholder="Enter gas reference"
                     style={{ width: '100%' }}
                   />
@@ -704,6 +683,7 @@ const AddSiteModal = ({
               </div>
             </div>
 
+            {/* Transactability Section */}
             <div className="form-section">
               <h3 className="form-section-title">Transactability</h3>
               <div className="form-grid">
@@ -711,7 +691,7 @@ const AddSiteModal = ({
                   <label className="form-label">Transactability</label>
                   <select
                     className="form-select"
-                    value={newSiteData["Transactability"] || ""}
+                    value={newSiteData["transactability"] || newSiteData["Transactability"] || ""}
                     onChange={(e) => handleTransactabilityChange(e.target.value)}
                     style={{ width: '100%' }}
                   >
@@ -726,6 +706,7 @@ const AddSiteModal = ({
               </div>
             </div>
 
+            {/* Redevelopment Section */}
             <div className="form-section">
               <h3 className="form-section-title">Redevelopment</h3>
               <div className="form-grid">
@@ -734,8 +715,8 @@ const AddSiteModal = ({
                   <label className="form-label">Redev Tier</label>
                   <select
                     className="form-select"
-                    value={newSiteData["Redev Tier"] || ""}
-                    onChange={(e) => handleInputChange("Redev Tier", e.target.value)}
+                    value={newSiteData["redev_tier"] || newSiteData["Redev Tier"] || ""}
+                    onChange={(e) => handleFieldChange("Redev Tier", e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select Redev Tier</option>
@@ -745,42 +726,15 @@ const AddSiteModal = ({
                   </select>
                 </div>
 
-                {/* Redevelopment Base Case */}
+                {/* Redevelopment Base Case - Multi-select */}
                 <div className="form-group">
                   <label className="form-label">Redevelopment Base Case</label>
                   <div className="multi-select-container" style={{ width: '100%' }}>
                     <div className="selected-bases">
                       {selectedRedevelopmentBases.map(base => (
-                        <span key={base} className="selected-base-tag" style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          backgroundColor: '#334155',
-                          color: '#e5e7eb',
-                          padding: '4px 8px',
-                          borderRadius: '16px',
-                          fontSize: '12px',
-                          margin: '2px',
-                          gap: '4px'
-                        }}>
+                        <span key={base} className="selected-base-tag">
                           {base}
-                          <button 
-                            type="button"
-                            className="remove-base"
-                            onClick={() => handleRedevelopmentBaseChange(base)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#94a3b8',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              padding: '0',
-                              width: '16px',
-                              height: '16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                          >
+                          <button type="button" className="remove-base" onClick={() => handleRedevelopmentBaseChange(base)}>
                             ×
                           </button>
                         </span>
@@ -800,11 +754,14 @@ const AddSiteModal = ({
                         style={{ marginBottom: '8px', width: '100%' }}
                       >
                         <option value="">Select redevelopment base case</option>
-                        {redevelopmentBaseOptions.map(base => (
-                          <option key={base} value={base} disabled={selectedRedevelopmentBases.includes(base)}>
-                            {base}
-                          </option>
-                        ))}
+                        {redevelopmentBaseOptions.map(base => {
+                          const baseName = base.base_case_name || base.name || base;
+                          return (
+                            <option key={baseName} value={baseName} disabled={selectedRedevelopmentBases.includes(baseName)}>
+                              {baseName}
+                            </option>
+                          );
+                        })}
                       </select>
                       
                       <div className="add-custom-base" style={{ display: 'flex', gap: '8px', width: '100%' }}>
@@ -814,9 +771,11 @@ const AddSiteModal = ({
                           value={newRedevelopmentBase}
                           onChange={(e) => setNewRedevelopmentBase(e.target.value)}
                           placeholder="Add custom base case"
-                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addNewRedevelopmentBase())}
                           style={{ flex: 1 }}
                         />
+                        <button type="button" className="btn-add-small" onClick={addNewRedevelopmentBase}>
+                          Add
+                        </button>
                       </div>
                     </div>
                     
@@ -826,16 +785,16 @@ const AddSiteModal = ({
                   </div>
                 </div>
 
-                {/* Redev Capacity (MW) */}
+                {/* Redev Capacity */}
                 <div className="form-group">
                   <label className="form-label">Redev Capacity (MW)</label>
                   <input
                     type="number"
                     className="form-input"
-                    value={newSiteData["Redev Capacity (MW)"] || ""}
-                    onChange={(e) => handleInputChange("Redev Capacity (MW)", e.target.value)}
+                    value={newSiteData["redev_capacity_mw"] || newSiteData["Redev Capacity (MW)"] || ""}
+                    onChange={(e) => handleFieldChange("Redev Capacity (MW)", e.target.value)}
                     placeholder="Enter redev capacity"
-                    step="0.1"
+                    step="any"
                     min="0"
                     style={{ width: '100%' }}
                   />
@@ -846,8 +805,8 @@ const AddSiteModal = ({
                   <label className="form-label">Redev Tech</label>
                   <select
                     className="form-select"
-                    value={newSiteData["Redev Tech"] || ""}
-                    onChange={(e) => handleInputChange("Redev Tech", e.target.value)}
+                    value={newSiteData["redev_tech"] || newSiteData["Redev Tech"] || ""}
+                    onChange={(e) => handleFieldChange("Redev Tech", e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select Redev Technology</option>
@@ -857,32 +816,75 @@ const AddSiteModal = ({
                   </select>
                 </div>
 
-                {/* Redev Fuel */}
+                {/* Redev Fuel - Multi-select */}
                 <div className="form-group">
                   <label className="form-label">Redev Fuel</label>
-                  <select
-                    className="form-select"
-                    value={newSiteData["Redev Fuel"] || ""}
-                    onChange={(e) => handleInputChange("Redev Fuel", e.target.value)}
-                    style={{ width: '100%' }}
-                  >
-                    <option value="">Select Redev Fuel</option>
-                    {redevFuelOptions.map(fuel => (
-                      <option key={fuel} value={fuel}>{fuel}</option>
-                    ))}
-                  </select>
+                  <div className="multi-select-container" style={{ width: '100%' }}>
+                    <div className="selected-fuels">
+                      {selectedRedevFuels.map(fuel => (
+                        <span key={fuel} className="selected-fuel-tag">
+                          {fuel}
+                          <button type="button" className="remove-fuel" onClick={() => handleRedevFuelChange(fuel)}>
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    
+                    <div className="fuels-dropdown" style={{ marginTop: '8px', width: '100%' }}>
+                      <select
+                        className="form-select"
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleRedevFuelChange(e.target.value);
+                            e.target.value = "";
+                          }
+                        }}
+                        style={{ marginBottom: '8px', width: '100%' }}
+                      >
+                        <option value="">Select Redev Fuel</option>
+                        {redevFuelOptions.map(fuel => {
+                          const fuelName = fuel.fuel_name || fuel.name || fuel;
+                          return (
+                            <option key={fuelName} value={fuelName} disabled={selectedRedevFuels.includes(fuelName)}>
+                              {fuelName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      
+                      <div className="add-custom-fuel" style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={newRedevFuel}
+                          onChange={(e) => setNewRedevFuel(e.target.value)}
+                          placeholder="Add custom fuel"
+                          style={{ flex: 1 }}
+                        />
+                        <button type="button" className="btn-add-small" onClick={addNewRedevFuel}>
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <small className="form-hint" style={{ display: 'block', marginTop: '8px', color: '#94a3b8', fontSize: '12px' }}>
+                      Select multiple fuels (e.g., Gas and Diesel)
+                    </small>
+                  </div>
                 </div>
 
-                {/* Redev Heatrate (Btu/kWh) */}
+                {/* Redev Heatrate */}
                 <div className="form-group">
                   <label className="form-label">Redev Heatrate (Btu/kWh)</label>
                   <input
                     type="number"
                     className="form-input"
-                    value={newSiteData["Redev Heatrate (Btu/kWh)"] || ""}
-                    onChange={(e) => handleInputChange("Redev Heatrate (Btu/kWh)", e.target.value)}
+                    value={newSiteData["redev_heatrate_btu_kwh"] || newSiteData["Redev Heatrate (Btu/kWh)"] || ""}
+                    onChange={(e) => handleFieldChange("Redev Heatrate (Btu/kWh)", e.target.value)}
                     placeholder="Enter redev heatrate"
-                    step="100"
+                    step="any"
                     min="0"
                     style={{ width: '100%' }}
                   />
@@ -894,11 +896,12 @@ const AddSiteModal = ({
                   <input
                     type="text"
                     className="form-input"
-                    value={newSiteData["Redev COD"] || ""}
-                    onChange={(e) => handleInputChange("Redev COD", e.target.value)}
+                    value={newSiteData["redev_cod"] || newSiteData["Redev COD"] || ""}
+                    onChange={(e) => handleRedevCODChange(e.target.value)}
                     placeholder="YYYY or description"
                     style={{ width: '100%' }}
                   />
+                  <small className="form-hint">Takes priority over Legacy COD for status calculation</small>
                 </div>
 
                 {/* Redev Land Control */}
@@ -906,8 +909,8 @@ const AddSiteModal = ({
                   <label className="form-label">Redev Land Control</label>
                   <select
                     className="form-select"
-                    value={newSiteData["Redev Land Control"] || ""}
-                    onChange={(e) => handleInputChange("Redev Land Control", e.target.value)}
+                    value={newSiteData["redev_land_control"] || newSiteData["Redev Land Control"] || ""}
+                    onChange={(e) => handleFieldChange("Redev Land Control", e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select Land Control</option>
@@ -922,8 +925,8 @@ const AddSiteModal = ({
                   <label className="form-label">Redev Stage Gate</label>
                   <select
                     className="form-select"
-                    value={newSiteData["Redev Stage Gate"] || ""}
-                    onChange={(e) => handleInputChange("Redev Stage Gate", e.target.value)}
+                    value={newSiteData["redev_stage_gate"] || newSiteData["Redev Stage Gate"] || ""}
+                    onChange={(e) => handleFieldChange("Redev Stage Gate", e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select Stage Gate</option>
@@ -938,14 +941,17 @@ const AddSiteModal = ({
                   <label className="form-label">Redev Lead</label>
                   <select
                     className="form-select"
-                    value={newSiteData["Redev Lead"] || ""}
-                    onChange={(e) => handleInputChange("Redev Lead", e.target.value)}
+                    value={newSiteData["redev_lead"] || newSiteData["Redev Lead"] || ""}
+                    onChange={(e) => handleFieldChange("Redev Lead", e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select Redev Lead</option>
-                    {redevLeadOptions.map(option => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
+                    {redevLeadOptions.map(lead => {
+                      const leadName = lead.lead_name || lead.name || lead;
+                      return (
+                        <option key={leadName} value={leadName}>{leadName}</option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -954,14 +960,17 @@ const AddSiteModal = ({
                   <label className="form-label">Redev Support</label>
                   <select
                     className="form-select"
-                    value={newSiteData["Redev Support"] || ""}
-                    onChange={(e) => handleInputChange("Redev Support", e.target.value)}
+                    value={newSiteData["redev_support"] || newSiteData["Redev Support"] || ""}
+                    onChange={(e) => handleFieldChange("Redev Support", e.target.value)}
                     style={{ width: '100%' }}
                   >
                     <option value="">Select Redev Support</option>
-                    {redevSupportOptions.map(option => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
+                    {redevSupportOptions.map(support => {
+                      const supportName = support.support_name || support.name || support;
+                      return (
+                        <option key={supportName} value={supportName}>{supportName}</option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -973,14 +982,18 @@ const AddSiteModal = ({
                       <>
                         <select
                           className="form-select"
-                          value={newSiteData["Co-Locate/Repower"]}
+                          value={newSiteData["co_locate_repower"] || newSiteData["Co-Locate/Repower"] || ""}
                           onChange={(e) => handleCoLocateRepowerChange(e.target.value)}
                           style={{ width: '100%' }}
                         >
                           <option value="">Select Option</option>
-                          {coLocateRepowerOptions.map(option => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
+                          {coLocateRepowerOptions.map(option => {
+                            const optionName = option.option_name || option.name || option;
+                            return (
+                              <option key={optionName} value={optionName}>{optionName}</option>
+                            );
+                          })}
+                          <option value="add_new">+ Add New Option</option>
                         </select>
                       </>
                     ) : (
@@ -995,27 +1008,19 @@ const AddSiteModal = ({
                           style={{ width: '100%', marginBottom: '8px' }}
                         />
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          <button 
-                            type="button" 
-                            className="btn-add-small"
-                            onClick={() => {
-                              if (newCoLocateRepower.trim()) {
-                                handleInputChange("Co-Locate/Repower", newCoLocateRepower.trim());
-                                setShowNewCoLocateRepowerInput(false);
-                                setNewCoLocateRepower("");
-                              }
-                            }}
-                          >
-                            Add
-                          </button>
-                          <button 
-                            type="button" 
-                            className="btn-cancel-small"
-                            onClick={() => {
+                          <button type="button" className="btn-add-small" onClick={() => {
+                            if (newCoLocateRepower.trim()) {
+                              handleFieldChange("Co-Locate/Repower", newCoLocateRepower.trim());
                               setShowNewCoLocateRepowerInput(false);
                               setNewCoLocateRepower("");
-                            }}
-                          >
+                            }
+                          }}>
+                            Add
+                          </button>
+                          <button type="button" className="btn-cancel-small" onClick={() => {
+                            setShowNewCoLocateRepowerInput(false);
+                            setNewCoLocateRepower("");
+                          }}>
                             Cancel
                           </button>
                         </div>
@@ -1026,6 +1031,7 @@ const AddSiteModal = ({
               </div>
             </div>
 
+            {/* Additional Information */}
             <div className="form-section">
               <h3 className="form-section-title">Additional Information</h3>
               <div className="form-grid">
@@ -1034,8 +1040,8 @@ const AddSiteModal = ({
                   <input
                     type="text"
                     className="form-input"
-                    value={newSiteData["Contact"]}
-                    onChange={(e) => handleInputChange("Contact", e.target.value)}
+                    value={newSiteData["contact"] || newSiteData["Contact"] || ""}
+                    onChange={(e) => handleFieldChange("Contact", e.target.value)}
                     placeholder="Enter contact person"
                     style={{ width: '100%' }}
                   />
@@ -1044,18 +1050,12 @@ const AddSiteModal = ({
             </div>
           </div>
           
+          {/* Modal Footer */}
           <div className="modal-footer">
-            <button 
-              type="button" 
-              className="btn btn-secondary" 
-              onClick={closeAddSiteModal}
-            >
+            <button type="button" className="btn btn-secondary" onClick={closeAddSiteModal}>
               Cancel
             </button>
-            <button 
-              type="submit" 
-              className="btn btn-primary"
-            >
+            <button type="submit" className="btn btn-primary">
               Save
             </button>
           </div>

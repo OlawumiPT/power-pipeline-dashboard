@@ -6,379 +6,153 @@ const EditSiteModal = ({
   handleUpdateProject,
   projectData,
   allData,
-  technologyOptions,
-  isoOptions,
-  processOptions,
-  US_CITIES
+  dropdownOptions, // ALL FROM DATABASE TABLES
+  US_CITIES,
+  calculateStatusFromCODs
 }) => {
   const [formData, setFormData] = useState({});
   const [locationInput, setLocationInput] = useState("");
   const [filteredLocations, setFilteredLocations] = useState([]);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
   
-  // Project Type state (NEW - matching AddSiteModal)
+  // Multi-select states
   const [selectedProjectTypes, setSelectedProjectTypes] = useState([]);
-  
-  // Redevelopment bases state for Edit modal
+  const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedRedevelopmentBases, setSelectedRedevelopmentBases] = useState([]);
   const [newRedevelopmentBase, setNewRedevelopmentBase] = useState("");
+  const [selectedRedevFuels, setSelectedRedevFuels] = useState([]);
+  const [newRedevFuel, setNewRedevFuel] = useState("");
   
-  // Co-locate/Repower state (NEW - matching AddSiteModal)
+  // Add new options states
   const [showNewCoLocateRepowerInput, setShowNewCoLocateRepowerInput] = useState(false);
   const [newCoLocateRepower, setNewCoLocateRepower] = useState("");
   
-  // Project type options (NEW - matching AddSiteModal)
-  const projectTypeOptions = [
-    { value: "All", label: "All" },
-    { value: "Redev", label: "Redev" },
-    { value: "M&A", label: "M&A" },
-    { value: "Owned", label: "Owned" }
-  ];
+  // ALL DROPDOWN OPTIONS FROM DATABASE
+  const {
+    // From lookup tables:
+    projectTypeOptions = [],
+    redevFuelOptions = [],
+    redevelopmentBaseOptions = [],
+    redevLeadOptions = [],
+    redevSupportOptions = [],
+    coLocateRepowerOptions = [],
+    
+    // From distinct values:
+    plantOwners = [],
+    technologyOptions = [],
+    fuelTypes = [],
+    isoOptions = [],
+    
+    // Fixed options:
+    processOptions = ["P", "B"],
+    redevTechOptions = ["ST", "GT", "CCGT", "Hydro", "Wind", "Solar", "BESS", "Other"],
+    redevTierOptions = ["0", "1", "2", "3"],
+    redevLandControlOptions = ["Y", "N"],
+    redevStageGateOptions = ["0", "1", "2", "3", "P"]
+  } = dropdownOptions || {};
   
-  // Define transactability score options with descriptive labels
+  // Transactability options
   const transactabilityScoreOptions = [
     { value: 1, label: "1 - Bilateral w/ developed relationship" },
     { value: 2, label: "2 - Bilateral w/new relationship or Process w/less than 10 bidders" },
     { value: 3, label: "3 - Highly Competitive Process - More than 10 Bidders" }
   ];
   
-  // Helper function to extract unique values for dropdowns
-  const extractUniqueValues = (data, columnName) => {
-    const values = new Set();
-    data.forEach(row => {
-      const value = row[columnName];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  // Extract redevelopment dropdown options from Excel data
-  const extractRedevTierOptions = () => {
-    const values = new Set(["0", "1", "2", "3"]);
-    allData.forEach(row => {
-      const value = row["Redev Tier"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  const extractRedevTechOptions = () => {
-    return technologyOptions; // Use the same as Tech
-  };
-
-  const extractRedevFuelOptions = () => {
-    const values = new Set();
-    allData.forEach(row => {
-      const value = row["Fuel"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  const extractRedevLandControlOptions = () => {
-    const values = new Set(["Y", "N"]);
-    allData.forEach(row => {
-      const value = row["Redev Land Control"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  const extractRedevStageGateOptions = () => {
-    const values = new Set(["0", "1", "2", "3", "P"]);
-    allData.forEach(row => {
-      const value = row["Redev Stage Gate"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  const extractRedevLeadOptions = () => {
-    const values = new Set();
-    allData.forEach(row => {
-      const value = row["Redev Lead"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  const extractRedevSupportOptions = () => {
-    const values = new Set();
-    allData.forEach(row => {
-      const value = row["Redev Support"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  // Extract Plant Owner options (NEW - matching AddSiteModal)
-  const extractPlantOwnerOptions = () => {
-    const values = new Set();
-    allData.forEach(row => {
-      const value = row["Plant Owner"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  // Extract Co-Locate/Repower options (NEW - matching AddSiteModal)
-  const extractCoLocateRepowerOptions = () => {
-    const values = new Set();
-    allData.forEach(row => {
-      const value = row["Co-Locate/Repower"];
-      if (value && value.toString().trim() !== "") {
-        values.add(value.toString().trim());
-      }
-    });
-    return Array.from(values).sort();
-  };
-
-  // Get all dropdown options
-  const redevTierOptions = extractRedevTierOptions();
-  const redevTechOptions = extractRedevTechOptions();
-  const redevFuelOptions = extractRedevFuelOptions();
-  const redevLandControlOptions = extractRedevLandControlOptions();
-  const redevStageGateOptions = extractRedevStageGateOptions();
-  const redevLeadOptions = extractRedevLeadOptions();
-  const redevSupportOptions = extractRedevSupportOptions();
-  const plantOwnerOptions = extractPlantOwnerOptions(); // NEW
-  const coLocateRepowerOptions = extractCoLocateRepowerOptions(); // NEW
+  // Status options
+  const statusOptions = ["Operating", "Retired", "Future", "N/A", "Unknown"];
   
-  const existingFuelTypes = extractUniqueValues(allData, "Fuel");
-  
-  // Extract transactability options from Excel data
-  const extractTransactabilityOptions = () => {
-    const options = new Set();
-    allData.forEach(row => {
-      const transactabilityStr = row["Transactability"];
-      if (transactabilityStr && transactabilityStr.toString().trim() !== "") {
-        options.add(transactabilityStr.toString().trim());
-      }
-    });
-    return Array.from(options).sort();
-  };
-
-  const rawTransactabilityOptions = extractTransactabilityOptions();
-  
-  // Format transactability options for dropdown
-  const transactabilityOptions = rawTransactabilityOptions.map(option => {
-    return { value: option, label: option };
-  });
-
-  // Extract redevelopment base case options
-  const extractRedevelopmentBaseOptions = () => {
-    const options = new Set();
-    allData.forEach(row => {
-      const baseCaseStr = row["Redevelopment Base Case"];
-      if (baseCaseStr && baseCaseStr.toString().trim() !== "") {
-        // Split by newlines and slashes to get individual options
-        const bases = baseCaseStr.toString().split(/[\n\/]/).map(b => b.trim()).filter(b => b);
-        bases.forEach(base => options.add(base));
-      }
-    });
-    return Array.from(options).sort();
-  };
-
-  const redevelopmentBaseOptions = extractRedevelopmentBaseOptions();
-  
-  // Helper function to clean numeric values from Excel
-  const cleanNumericValue = (value) => {
-    if (!value && value !== 0) return "";
-    
-    const stringValue = value.toString();
-    
-    // Handle #N/A values
-    if (stringValue.includes('#N/A') || stringValue.includes('N/A')) return "";
-    
-    // Remove commas, spaces, and any non-numeric characters except decimal point
-    const cleaned = stringValue
-      .replace(/[,\s]/g, '') // Remove commas and spaces
-      .replace(/[^\d.-]/g, ''); // Remove any non-numeric except . and -
-    
-    // If it's empty after cleaning, return empty string
-    if (cleaned === '' || cleaned === '-') return "";
-    
-    // Convert to number and check if it's valid
-    const numericValue = parseFloat(cleaned);
-    return isNaN(numericValue) ? "" : numericValue;
-  };
-  
-  // Helper function to clean capacity factor percentage
-  const cleanCapacityFactor = (value) => {
-    if (!value && value !== 0) return "";
-    
-    const stringValue = value.toString();
-    
-    // Handle #N/A values
-    if (stringValue.includes('#N/A') || stringValue.includes('N/A')) return "";
-    
-    // Remove percentage signs and clean
-    const cleaned = stringValue
-      .replace(/%/g, '') // Remove percentage signs
-      .replace(/[,\s]/g, '') // Remove commas and spaces
-      .replace(/[^\d.-]/g, ''); // Remove any non-numeric except . and -
-    
-    if (cleaned === '' || cleaned === '-') return "";
-    
-    const numericValue = parseFloat(cleaned);
-    return isNaN(numericValue) ? "" : numericValue;
-  };
-  
-  // CRITICAL FIX: Enhanced function to handle Transactability Score with #N/A values
-  const cleanTransactabilityScore = (value) => {
-    if (!value && value !== 0) return "";
-    
-    const stringValue = value.toString().trim();
-    
-    // Handle #N/A values
-    if (stringValue === '#N/A' || stringValue === 'N/A' || stringValue === '#VALUE!') {
-      return "";
-    }
-    
-    // Try to convert to number
-    const numericValue = parseFloat(stringValue);
-    
-    // Only return if it's one of our valid options (1, 2, or 3)
-    if ([1, 2, 3].includes(numericValue)) {
-      return numericValue;
-    }
-    
-    return "";
-  };
-  
-  // Initialize form data when modal opens - FIXED PROJECT TYPE INITIALIZATION
+  // Initialize form with project data
   useEffect(() => {
     if (showEditModal && projectData) {
-      console.log("=== EDIT MODAL: Project Data received ===");
-      console.log("Full projectData:", projectData);
-      console.log("Available keys:", Object.keys(projectData));
+      console.log("=== EDIT MODAL: Loading project data ===");
+      console.log("Project data received:", projectData);
       
-      // Extract capacity value and clean it
-      const rawCapacity = projectData["Legacy Nameplate Capacity (MW)"] || projectData.mw || projectData.capacity || "";
-      const cleanedCapacity = cleanNumericValue(rawCapacity);
-      
-      // Extract capacity factor and clean it
-      const rawCapacityFactor = projectData["2024 Capacity Factor"] || projectData.cf || "";
-      const cleanedCapacityFactor = cleanCapacityFactor(rawCapacityFactor);
-      
-      // Extract heat rate and clean it
-      const rawHeatRate = projectData["Heat Rate (Btu/kWh)"] || projectData.hr || "";
-      const cleanedHeatRate = cleanNumericValue(rawHeatRate);
-      
-      // Extract redevelopment capacity and clean it
-      const rawRedevCapacity = projectData["Redev Capacity (MW)"] || "";
-      const cleanedRedevCapacity = cleanNumericValue(rawRedevCapacity);
-      
-      // Extract redevelopment heatrate and clean it
-      const rawRedevHeatrate = projectData["Redev Heatrate (Btu/kWh)"] || "";
-      const cleanedRedevHeatrate = cleanNumericValue(rawRedevHeatrate);
-      
-      // CRITICAL FIX: Extract Transactability Score from Column AH
-      const rawTransactabilityScore = projectData["Transactability Scores"] || 
-                                projectData["Transactability Score"] || 
-                                projectData.transactabilityScore || 
-                                projectData["Transactibility"] || ""; // Handle misspelling
-      const cleanedTransactabilityScore = cleanTransactabilityScore(rawTransactabilityScore);
-      
-      // Parse redevelopment base case (can be multiple values separated by newline or slash)
-      let redevBaseCaseArray = [];
-      const rawRedevBaseCase = projectData["Redevelopment Base Case"] || "";
-      if (rawRedevBaseCase && rawRedevBaseCase.toString().trim() !== "") {
-        redevBaseCaseArray = rawRedevBaseCase.toString().split(/[\n\/]/).map(b => b.trim()).filter(b => b);
-      }
-      
-      // ========== CRITICAL FIX: Parse Project Type from existing data ==========
-      let projectTypeArray = [];
-      const rawProjectType = projectData["Project Type"] || projectData.projectType || "";
-      console.log("Raw Project Type from data:", rawProjectType);
-      
-      if (rawProjectType && rawProjectType.toString().trim() !== "") {
-        // Parse comma-separated values from Excel like "Redev, M&A, Owned"
-        projectTypeArray = rawProjectType.toString()
-          .split(',')
-          .map(t => t.trim())
-          .filter(t => t && t !== "All"); // Filter out empty and "All" if present
-        
-        console.log("Parsed Project Types:", projectTypeArray);
-      }
-      // ========== END CRITICAL FIX ==========
-      
-      // Create a comprehensive form data object that maps from all possible sources
+      // Extract all values with proper field names - FIXED to handle all possible data structures
       const formattedData = {
-        // Try to get from Excel column names first
-        "Legacy Nameplate Capacity (MW)": cleanedCapacity,
-        "Project Name": projectData["Project Name"] || projectData.asset || "",
-        "Project Codename": projectData["Project Codename"] || projectData.codename || "",
-        "Plant Owner": projectData["Plant Owner"] || projectData.owner || "",
+        // Basic Information
+        id: projectData.id || projectData.project_id || projectData.detailData?.id,
+        project_id: projectData.project_id || projectData.id,
+        "Project Name": projectData["Project Name"] || projectData.project_name || projectData.asset || "",
+        "Project Codename": projectData["Project Codename"] || projectData.project_codename || projectData.codename || "",
+        "Plant Owner": projectData["Plant Owner"] || projectData.plant_owner || projectData.owner || "",
         "Location": projectData["Location"] || projectData.location || "",
-        "Site Acreage": projectData["Site Acreage"] || projectData.acreage || "",
-        "Tech": projectData["Tech"] || projectData.tech || "",
-        "Heat Rate (Btu/kWh)": cleanedHeatRate,
-        "2024 Capacity Factor": cleanedCapacityFactor,
-        "Legacy COD": projectData["Legacy COD"] || projectData.cod || "",
-        "Fuel": projectData["Fuel"] || projectData.fuel || "",
-        "ISO": projectData["ISO"] || projectData.mkt || "",
-        "Zone/Submarket": projectData["Zone/Submarket"] || projectData.zone || "",
-        "Markets": projectData["Markets"] || projectData.markets || "",
-        "Process (P) or Bilateral (B)": projectData["Process (P) or Bilateral (B)"] || projectData.process || "",
-        "Gas Reference": projectData["Gas Reference"] || projectData.gasReference || "",
-        // CRITICAL: Use "Transactability Scores" (Column AH)
-        "Transactability Scores": cleanedTransactabilityScore,
-        // "Transactability" is the text description (Column AI)
-        "Transactability": projectData["Transactability"] || projectData.transactability || "",
-        "Co-Locate/Repower": projectData["Co-Locate/Repower"] || projectData.colocateRepower || "",
-        "Contact": projectData["Contact"] || projectData.contact || "",
-        "Project Type": rawProjectType || "", // CRITICAL: Include in form data
+        "Site Acreage": projectData["Site Acreage"] || projectData.site_acreage || projectData.acreage || "",
+        "Status": projectData["Status"] || projectData.status || "",
         
-        // NEW: Redevelopment fields
-        "Redev Tier": projectData["Redev Tier"] || "",
-        "Redevelopment Base Case": rawRedevBaseCase || "",
-        "Redev Capacity (MW)": cleanedRedevCapacity,
-        "Redev Tech": projectData["Redev Tech"] || "",
-        "Redev Fuel": projectData["Redev Fuel"] || "",
-        "Redev Heatrate (Btu/kWh)": cleanedRedevHeatrate,
-        "Redev COD": projectData["Redev COD"] || "",
-        "Redev Land Control": projectData["Redev Land Control"] || "",
-        "Redev Stage Gate": projectData["Redev Stage Gate"] || "",
-        "Redev Lead": projectData["Redev Lead"] || "",
-        "Redev Support": projectData["Redev Support"] || "",
+        // Technical Details
+        "Legacy Nameplate Capacity (MW)": projectData["Legacy Nameplate Capacity (MW)"] || projectData.legacy_capacity_mw || projectData.mw || "",
+        "Tech": projectData["Tech"] || projectData.technology || projectData.tech || "",
+        "Heat Rate (Btu/kWh)": projectData["Heat Rate (Btu/kWh)"] || projectData.heat_rate_btu_kwh || projectData.hr || "",
+        "2024 Capacity Factor": projectData["2024 Capacity Factor"] || projectData.capacity_factor_percent || projectData.cf || "",
+        "Legacy COD": projectData["Legacy COD"] || projectData.legacy_cod || projectData.cod || "",
+        "Fuel": projectData["Fuel"] || projectData.fuel_type || projectData.fuel || "",
+        
+        // Market Details
+        "ISO": projectData["ISO"] || projectData.iso_rto || projectData.mkt || "",
+        "Zone/Submarket": projectData["Zone/Submarket"] || projectData.zone_submarket || projectData.zone || "",
+        "Markets": projectData["Markets"] || projectData.markets || "",
+        "Process (P) or Bilateral (B)": projectData["Process (P) or Bilateral (B)"] || projectData.process_type || projectData.process || "",
+        "Gas Reference": projectData["Gas Reference"] || projectData.gas_reference || projectData.gasReference || "",
+        "Transactability": projectData["Transactability"] || projectData.transactability_score || "",
+        
+        // Redevelopment Details
+        "Redev Tier": projectData["Redev Tier"] || projectData.redev_tier || "",
+        "Redevelopment Base Case": projectData["Redevelopment Base Case"] || projectData.redev_base_case || "",
+        "Redev Capacity (MW)": projectData["Redev Capacity (MW)"] || projectData.redev_capacity_mw || "",
+        "Redev Tech": projectData["Redev Tech"] || projectData.redev_tech || "",
+        "Redev Fuel": projectData["Redev Fuel"] || projectData.redev_fuel || "",
+        "Redev Heatrate (Btu/kWh)": projectData["Redev Heatrate (Btu/kWh)"] || projectData.redev_heatrate_btu_kwh || "",
+        "Redev COD": projectData["Redev COD"] || projectData.redev_cod || "",
+        "Redev Land Control": projectData["Redev Land Control"] || projectData.redev_land_control || "",
+        "Redev Stage Gate": projectData["Redev Stage Gate"] || projectData.redev_stage_gate || "",
+        "Redev Lead": projectData["Redev Lead"] || projectData.redev_lead || "",
+        "Redev Support": projectData["Redev Support"] || projectData.redev_support || "",
+        "Co-Locate/Repower": projectData["Co-Locate/Repower"] || projectData.co_locate_repower || projectData.colocateRepower || "",
+        
+        // Additional Information
+        "Contact": projectData["Contact"] || projectData.contact_name || projectData.contact || "",
+        "Project Type": projectData["Project Type"] || projectData.project_type || "",
       };
       
-      // ========== CRITICAL: Set selected project types ==========
-      setSelectedProjectTypes(projectTypeArray);
+      console.log("Formatted data for edit:", formattedData);
       
-      // Set selected redevelopment bases
-      setSelectedRedevelopmentBases(redevBaseCaseArray);
-      
-      // Log the values specifically for debugging
-      console.log("Raw Transactability Score:", rawTransactabilityScore);
-      console.log("Cleaned Transactability Score:", cleanedTransactabilityScore);
-      console.log("Redevelopment Base Cases:", redevBaseCaseArray);
-      console.log("Project Types:", projectTypeArray);
-      console.log("Formatted data:", formattedData);
-      
+      // Set form data
       setFormData(formattedData);
       setLocationInput(formattedData["Location"] || "");
+      
+      // Parse multi-select fields
+      // Project Types
+      const projectTypeValue = formattedData["Project Type"] || "";
+      if (projectTypeValue) {
+        const types = projectTypeValue.split(',').map(t => t.trim()).filter(t => t);
+        setSelectedProjectTypes(types);
+        console.log("Parsed project types:", types);
+      }
+      
+      // Redev Fuels
+      const redevFuelValue = formattedData["Redev Fuel"] || "";
+      if (redevFuelValue) {
+        const fuels = redevFuelValue.split(',').map(f => f.trim()).filter(f => f);
+        setSelectedRedevFuels(fuels);
+        console.log("Parsed redev fuels:", fuels);
+      }
+      
+      // Redevelopment Bases
+      const redevBaseValue = formattedData["Redevelopment Base Case"] || "";
+      if (redevBaseValue) {
+        const bases = redevBaseValue.split(/[\n,]/).map(b => b.trim()).filter(b => b);
+        setSelectedRedevelopmentBases(bases);
+        console.log("Parsed redev bases:", bases);
+      }
+      
+      // Status
+      setSelectedStatus(formattedData["Status"] || "");
     }
   }, [showEditModal, projectData]);
 
+  // Handle field changes
   const handleInputChange = (field, value) => {
+    console.log(`Changing ${field} to:`, value);
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -389,6 +163,7 @@ const EditSiteModal = ({
     }
   };
 
+  // Location handlers
   const handleLocationInputChange = (value) => {
     setLocationInput(value);
     handleInputChange("Location", value);
@@ -415,20 +190,38 @@ const EditSiteModal = ({
   const handleLegacyCODChange = (value) => {
     const digitsOnly = value.replace(/\D/g, '').slice(0, 4);
     handleInputChange("Legacy COD", digitsOnly);
+    
+    // Auto-update status
+    if (digitsOnly.length === 4) {
+      const calculatedStatus = calculateStatusFromCODs(digitsOnly, formData["Redev COD"] || "");
+      if (calculatedStatus) {
+        setSelectedStatus(calculatedStatus);
+        handleInputChange("Status", calculatedStatus);
+      }
+    }
   };
 
-  // Transactability handler (text description from Column AI)
+  // Redev COD handler
+  const handleRedevCODChange = (value) => {
+    handleInputChange("Redev COD", value);
+    
+    // Auto-update status
+    if (value && value.toString().trim() !== "") {
+      const calculatedStatus = calculateStatusFromCODs(formData["Legacy COD"] || "", value);
+      if (calculatedStatus) {
+        setSelectedStatus(calculatedStatus);
+        handleInputChange("Status", calculatedStatus);
+      }
+    }
+  };
+
+  // Transactability handler
   const handleTransactabilityChange = (value) => {
-    handleInputChange("Transactability", value);
-  };
-
-  // Transactability Score handler (numeric from Column AH) - updated for dropdown
-  const handleTransactabilityScoreChange = (value) => {
     const numericValue = parseInt(value, 10);
-    handleInputChange("Transactability Scores", isNaN(numericValue) ? "" : numericValue);
+    handleInputChange("Transactability", isNaN(numericValue) ? "" : numericValue);
   };
 
-  // Project Type handler (NEW - matching AddSiteModal)
+  // Project Type handler
   const handleProjectTypeChange = (typeValue) => {
     let updatedTypes;
     if (selectedProjectTypes.includes(typeValue)) {
@@ -438,12 +231,16 @@ const EditSiteModal = ({
     }
     
     setSelectedProjectTypes(updatedTypes);
-    
-    // Store as comma-separated string like in Excel
     handleInputChange("Project Type", updatedTypes.join(", "));
   };
 
-  // Redevelopment Base Case handler for Edit modal
+  // Status handler
+  const handleStatusChange = (value) => {
+    setSelectedStatus(value);
+    handleInputChange("Status", value);
+  };
+
+  // Redevelopment Base Case handler
   const handleRedevelopmentBaseChange = (base) => {
     if (selectedRedevelopmentBases.includes(base)) {
       const updated = selectedRedevelopmentBases.filter(b => b !== base);
@@ -465,7 +262,7 @@ const EditSiteModal = ({
     }
   };
 
-  // Co-locate/repower handlers (NEW - matching AddSiteModal)
+  // Co-locate/repower handler
   const handleCoLocateRepowerChange = (value) => {
     if (value === "add_new") {
       setShowNewCoLocateRepowerInput(true);
@@ -475,19 +272,49 @@ const EditSiteModal = ({
     }
   };
 
-  // Form validation
+  // Redev Fuel handler
+  const handleRedevFuelChange = (fuel) => {
+    let updatedFuels;
+    if (selectedRedevFuels.includes(fuel)) {
+      updatedFuels = selectedRedevFuels.filter(f => f !== fuel);
+    } else {
+      updatedFuels = [...selectedRedevFuels, fuel];
+    }
+    
+    setSelectedRedevFuels(updatedFuels);
+    handleInputChange("Redev Fuel", updatedFuels.join(", "));
+  };
+
+  const addNewRedevFuel = () => {
+    if (newRedevFuel.trim() && !selectedRedevFuels.includes(newRedevFuel.trim())) {
+      const updated = [...selectedRedevFuels, newRedevFuel.trim()];
+      setSelectedRedevFuels(updated);
+      handleInputChange("Redev Fuel", updated.join(", "));
+      setNewRedevFuel("");
+    }
+  };
+
+  // Form validation and submission
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Check if at least one project type is selected (NEW - matching AddSiteModal)
-    if (selectedProjectTypes.length === 0) {
-      alert("Please select at least one Project Type");
+    // Required fields
+    if (!formData["Project Name"] || formData["Project Name"].trim() === "") {
+      alert("Please enter a Project Name");
       return;
     }
     
-    console.log("Submitting form data:", formData);
-    console.log("Transactability Score being submitted:", formData["Transactability Scores"]);
-    console.log("Project Type being submitted:", formData["Project Type"]);
+    if (!formData["Plant Owner"] || formData["Plant Owner"].trim() === "") {
+      alert("Please select or enter a Plant Owner");
+      return;
+    }
+    
+    console.log("Submitting updated project:", formData);
+    console.log("Project ID:", formData.id);
+    console.log("Project Type:", formData["Project Type"]);
+    console.log("Redev Fuel:", formData["Redev Fuel"]);
+    console.log("Redev Base Case:", formData["Redevelopment Base Case"]);
+    
     handleUpdateProject(formData);
   };
 
@@ -503,74 +330,57 @@ const EditSiteModal = ({
         
         <form onSubmit={handleSubmit}>
           <div className="modal-body">
+            {/* Basic Information Section */}
             <div className="form-section">
               <h3 className="form-section-title">Basic Information</h3>
               
-              {/* Project Type - NEW: Added to match AddSiteModal */}
+              {/* Project Type - Multi-select */}
               <div className="form-group" style={{ marginBottom: '20px' }}>
-                <label className="form-label required">Project Type</label>
+                <label className="form-label">Project Type</label>
                 <div className="checkbox-group" style={{ width: '100%' }}>
-                  <div style={{ 
-                    display: 'flex', 
-                    gap: '12px',
-                    flexWrap: 'wrap',
-                    marginTop: '4px'
-                  }}>
-                    {projectTypeOptions.map(option => (
-                      <label 
-                        key={option.value}
-                        className="checkbox-label"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          cursor: 'pointer',
-                          padding: '10px 16px',
-                          borderRadius: '6px',
-                          backgroundColor: selectedProjectTypes.includes(option.value) ? '#334155' : '#1e293b',
-                          border: '1px solid',
-                          borderColor: selectedProjectTypes.includes(option.value) ? '#3b82f6' : '#374151',
-                          transition: 'all 0.2s',
-                          userSelect: 'none',
-                          minWidth: '80px',
-                          justifyContent: 'center'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2d3748'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedProjectTypes.includes(option.value) ? '#334155' : '#1e293b'}
-                      >
-                        <input
-                          type="checkbox"
-                          className="checkbox-input"
-                          checked={selectedProjectTypes.includes(option.value)}
-                          onChange={() => handleProjectTypeChange(option.value)}
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '4px' }}>
+                    {projectTypeOptions.map(option => {
+                      const optionName = option.type_name || option.name || option;
+                      return (
+                        <label key={optionName} className="checkbox-label"
                           style={{
-                            marginRight: '8px',
-                            width: '16px',
-                            height: '16px',
-                            cursor: 'pointer'
+                            display: 'flex',
+                            alignItems: 'center',
+                            cursor: 'pointer',
+                            padding: '10px 16px',
+                            borderRadius: '6px',
+                            backgroundColor: selectedProjectTypes.includes(optionName) ? '#334155' : '#1e293b',
+                            border: '1px solid',
+                            borderColor: selectedProjectTypes.includes(optionName) ? '#3b82f6' : '#374151',
+                            transition: 'all 0.2s',
+                            userSelect: 'none',
+                            minWidth: '80px',
+                            justifyContent: 'center'
                           }}
-                        />
-                        <span style={{ 
-                          color: '#e5e7eb',
-                          fontSize: '14px',
-                          fontWeight: selectedProjectTypes.includes(option.value) ? '500' : '400'
-                        }}>
-                          {option.label}
-                        </span>
-                      </label>
-                    ))}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#2d3748'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = selectedProjectTypes.includes(optionName) ? '#334155' : '#1e293b'}
+                        >
+                          <input
+                            type="checkbox"
+                            className="checkbox-input"
+                            checked={selectedProjectTypes.includes(optionName)}
+                            onChange={() => handleProjectTypeChange(optionName)}
+                            style={{ marginRight: '8px', width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          <span style={{ color: '#e5e7eb', fontSize: '14px', fontWeight: selectedProjectTypes.includes(optionName) ? '500' : '400' }}>
+                            {optionName}
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
-                  <small className="form-hint" style={{ 
-                    display: 'block', 
-                    marginTop: '8px', 
-                    color: selectedProjectTypes.length === 0 ? '#ef4444' : '#94a3b8' 
-                  }}>
-                    {selectedProjectTypes.length === 0 
-                      ? "Please select at least one project type (required)"
-                      : "Select all applicable project types"}
+                  <small className="form-hint" style={{ display: 'block', marginTop: '8px', color: '#94a3b8' }}>
+                    Select all applicable project types
                   </small>
                 </div>
               </div>
               
+              {/* Basic Info Grid */}
               <div className="form-grid">
                 <div className="form-group">
                   <label className="form-label required">Project Name</label>
@@ -595,7 +405,6 @@ const EditSiteModal = ({
                   />
                 </div>
                 
-                {/* Plant Owner - UPDATED: Changed to dropdown to match AddSiteModal */}
                 <div className="form-group">
                   <label className="form-label required">Plant Owner</label>
                   <select
@@ -605,14 +414,14 @@ const EditSiteModal = ({
                     required
                   >
                     <option value="">Select Plant Owner</option>
-                    {plantOwnerOptions.map(owner => (
+                    {plantOwners.map(owner => (
                       <option key={owner} value={owner}>{owner}</option>
                     ))}
                   </select>
                 </div>
                 
                 <div className="form-group">
-                  <label className="form-label required">Location</label>
+                  <label className="form-label">Location</label>
                   <div className="autocomplete-wrapper">
                     <input
                       type="text"
@@ -620,19 +429,15 @@ const EditSiteModal = ({
                       value={locationInput}
                       onChange={(e) => handleLocationInputChange(e.target.value)}
                       placeholder="City, State"
-                      required
                     />
                     {showLocationSuggestions && filteredLocations.length > 0 && (
                       <div className="autocomplete-dropdown">
                         {filteredLocations.map((city, index) => (
-                          <div
-                            key={`${city}-${index}`}
-                            className="autocomplete-item"
+                          <div key={`${city}-${index}`} className="autocomplete-item"
                             onMouseDown={(e) => {
                               e.preventDefault();
                               selectCity(city);
-                            }}
-                          >
+                            }}>
                             {city}
                           </div>
                         ))}
@@ -651,33 +456,46 @@ const EditSiteModal = ({
                     placeholder="Enter acreage"
                   />
                 </div>
+
+                <div className="form-group">
+                  <label className="form-label">Status</label>
+                  <select
+                    className="form-select"
+                    value={selectedStatus}
+                    onChange={(e) => handleStatusChange(e.target.value)}
+                  >
+                    <option value="">Select Status</option>
+                    {statusOptions.map(status => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
+            {/* Technical Details Section */}
             <div className="form-section">
               <h3 className="form-section-title">Technical Details</h3>
               <div className="form-grid">
                 <div className="form-group">
-                  <label className="form-label required">Capacity (MW)</label>
+                  <label className="form-label">Capacity (MW)</label>
                   <input
                     type="number"
                     className="form-input"
                     value={formData["Legacy Nameplate Capacity (MW)"] || ""}
                     onChange={(e) => handleInputChange("Legacy Nameplate Capacity (MW)", e.target.value)}
                     placeholder="Enter capacity in MW"
-                    required
-                    step="0.1"
+                    step="any"
                     min="0"
                   />
                 </div>
                 
                 <div className="form-group">
-                  <label className="form-label required">Technology</label>
+                  <label className="form-label">Technology</label>
                   <select
                     className="form-select"
                     value={formData["Tech"] || ""}
                     onChange={(e) => handleInputChange("Tech", e.target.value)}
-                    required
                   >
                     <option value="">Select Technology</option>
                     {technologyOptions.map(tech => (
@@ -694,7 +512,7 @@ const EditSiteModal = ({
                     value={formData["Heat Rate (Btu/kWh)"] || ""}
                     onChange={(e) => handleInputChange("Heat Rate (Btu/kWh)", e.target.value)}
                     placeholder="Enter heat rate"
-                    step="100"
+                    step="any"
                     min="0"
                   />
                 </div>
@@ -707,7 +525,7 @@ const EditSiteModal = ({
                     value={formData["2024 Capacity Factor"] || ""}
                     onChange={(e) => handleInputChange("2024 Capacity Factor", e.target.value)}
                     placeholder="Enter capacity factor"
-                    step="0.1"
+                    step="any"
                     min="0"
                     max="100"
                   />
@@ -723,6 +541,7 @@ const EditSiteModal = ({
                     placeholder="YYYY"
                     maxLength="4"
                   />
+                  <small className="form-hint">Used to calculate status if no Redev COD</small>
                 </div>
                 
                 <div className="form-group">
@@ -733,19 +552,18 @@ const EditSiteModal = ({
                     onChange={(e) => handleInputChange("Fuel", e.target.value)}
                   >
                     <option value="">Select Fuel Type</option>
-                    {existingFuelTypes.map(fuel => (
+                    {fuelTypes.map(fuel => (
                       <option key={fuel} value={fuel}>{fuel}</option>
                     ))}
                   </select>
                 </div>
                 
-                {/* UPDATED: Transactability Score field as dropdown with labels */}
                 <div className="form-group">
                   <label className="form-label">Transactability Score</label>
                   <select
                     className="form-select"
-                    value={formData["Transactability Scores"] || ""}
-                    onChange={(e) => handleTransactabilityScoreChange(e.target.value)}
+                    value={formData["Transactability"] || ""}
+                    onChange={(e) => handleTransactabilityChange(e.target.value)}
                   >
                     <option value="">Select Transactability Score</option>
                     {transactabilityScoreOptions.map(option => (
@@ -758,16 +576,16 @@ const EditSiteModal = ({
               </div>
             </div>
 
+            {/* Market Details Section */}
             <div className="form-section">
               <h3 className="form-section-title">Market Details</h3>
               <div className="form-grid">
                 <div className="form-group">
-                  <label className="form-label required">ISO/RTO</label>
+                  <label className="form-label">ISO/RTO</label>
                   <select
                     className="form-select"
                     value={formData["ISO"] || ""}
                     onChange={(e) => handleInputChange("ISO", e.target.value)}
-                    required
                   >
                     <option value="">Select ISO/RTO</option>
                     {isoOptions.map(iso => (
@@ -799,12 +617,11 @@ const EditSiteModal = ({
                 </div>
                 
                 <div className="form-group">
-                  <label className="form-label required">Process Type</label>
+                  <label className="form-label">Process Type</label>
                   <select
                     className="form-select"
                     value={formData["Process (P) or Bilateral (B)"] || ""}
                     onChange={(e) => handleInputChange("Process (P) or Bilateral (B)", e.target.value)}
-                    required
                   >
                     <option value="">Select Process Type</option>
                     {processOptions.map(proc => (
@@ -826,31 +643,7 @@ const EditSiteModal = ({
               </div>
             </div>
 
-            {/* Transactability Section - Text description from Column AI */}
-            <div className="form-section">
-              <h3 className="form-section-title">Transactability Description</h3>
-              <div className="form-grid">
-                <div className="form-group">
-                  <label className="form-label">Transactability Description</label>
-                  <select
-                    className="form-select"
-                    value={formData["Transactability"] || ""}
-                    onChange={(e) => handleTransactabilityChange(e.target.value)}
-                  >
-                    <option value="">Select Transactability Description</option>
-                    {transactabilityOptions.map(option => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <small className="form-hint">
-                    Text description from Excel column "Transactability" (Column AI)
-                  </small>
-                </div>
-              </div>
-            </div>
-
+            {/* Redevelopment Section */}
             <div className="form-section">
               <h3 className="form-section-title">Redevelopment</h3>
               <div className="form-grid">
@@ -869,42 +662,15 @@ const EditSiteModal = ({
                   </select>
                 </div>
 
-                {/* Redevelopment Base Case - Added to Edit modal */}
+                {/* Redevelopment Base Case - Multi-select */}
                 <div className="form-group">
                   <label className="form-label">Redevelopment Base Case</label>
                   <div className="multi-select-container" style={{ width: '100%' }}>
                     <div className="selected-bases">
                       {selectedRedevelopmentBases.map(base => (
-                        <span key={base} className="selected-base-tag" style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          backgroundColor: '#334155',
-                          color: '#e5e7eb',
-                          padding: '4px 8px',
-                          borderRadius: '16px',
-                          fontSize: '12px',
-                          margin: '2px',
-                          gap: '4px'
-                        }}>
+                        <span key={base} className="selected-base-tag">
                           {base}
-                          <button 
-                            type="button"
-                            className="remove-base"
-                            onClick={() => handleRedevelopmentBaseChange(base)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#94a3b8',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              padding: '0',
-                              width: '16px',
-                              height: '16px',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center'
-                            }}
-                          >
+                          <button type="button" className="remove-base" onClick={() => handleRedevelopmentBaseChange(base)}>
                             ×
                           </button>
                         </span>
@@ -924,11 +690,14 @@ const EditSiteModal = ({
                         style={{ marginBottom: '8px', width: '100%' }}
                       >
                         <option value="">Select redevelopment base case</option>
-                        {redevelopmentBaseOptions.map(base => (
-                          <option key={base} value={base} disabled={selectedRedevelopmentBases.includes(base)}>
-                            {base}
-                          </option>
-                        ))}
+                        {redevelopmentBaseOptions.map(base => {
+                          const baseName = base.base_case_name || base.name || base;
+                          return (
+                            <option key={baseName} value={baseName} disabled={selectedRedevelopmentBases.includes(baseName)}>
+                              {baseName}
+                            </option>
+                          );
+                        })}
                       </select>
                       
                       <div className="add-custom-base" style={{ display: 'flex', gap: '8px', width: '100%' }}>
@@ -938,14 +707,9 @@ const EditSiteModal = ({
                           value={newRedevelopmentBase}
                           onChange={(e) => setNewRedevelopmentBase(e.target.value)}
                           placeholder="Add custom base case"
-                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addNewRedevelopmentBase())}
                           style={{ flex: 1 }}
                         />
-                        <button 
-                          type="button" 
-                          className="btn-add-small"
-                          onClick={addNewRedevelopmentBase}
-                        >
+                        <button type="button" className="btn-add-small" onClick={addNewRedevelopmentBase}>
                           Add
                         </button>
                       </div>
@@ -957,7 +721,7 @@ const EditSiteModal = ({
                   </div>
                 </div>
 
-                {/* Redev Capacity (MW) */}
+                {/* Redev Capacity */}
                 <div className="form-group">
                   <label className="form-label">Redev Capacity (MW)</label>
                   <input
@@ -966,7 +730,7 @@ const EditSiteModal = ({
                     value={formData["Redev Capacity (MW)"] || ""}
                     onChange={(e) => handleInputChange("Redev Capacity (MW)", e.target.value)}
                     placeholder="Enter redev capacity"
-                    step="0.1"
+                    step="any"
                     min="0"
                   />
                 </div>
@@ -986,22 +750,66 @@ const EditSiteModal = ({
                   </select>
                 </div>
 
-                {/* Redev Fuel */}
+                {/* Redev Fuel - Multi-select */}
                 <div className="form-group">
                   <label className="form-label">Redev Fuel</label>
-                  <select
-                    className="form-select"
-                    value={formData["Redev Fuel"] || ""}
-                    onChange={(e) => handleInputChange("Redev Fuel", e.target.value)}
-                  >
-                    <option value="">Select Redev Fuel</option>
-                    {redevFuelOptions.map(fuel => (
-                      <option key={fuel} value={fuel}>{fuel}</option>
-                    ))}
-                  </select>
+                  <div className="multi-select-container" style={{ width: '100%' }}>
+                    <div className="selected-fuels">
+                      {selectedRedevFuels.map(fuel => (
+                        <span key={fuel} className="selected-fuel-tag">
+                          {fuel}
+                          <button type="button" className="remove-fuel" onClick={() => handleRedevFuelChange(fuel)}>
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                    
+                    <div className="fuels-dropdown" style={{ marginTop: '8px', width: '100%' }}>
+                      <select
+                        className="form-select"
+                        value=""
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            handleRedevFuelChange(e.target.value);
+                            e.target.value = "";
+                          }
+                        }}
+                        style={{ marginBottom: '8px', width: '100%' }}
+                      >
+                        <option value="">Select Redev Fuel</option>
+                        {redevFuelOptions.map(fuel => {
+                          const fuelName = fuel.fuel_name || fuel.name || fuel;
+                          return (
+                            <option key={fuelName} value={fuelName} disabled={selectedRedevFuels.includes(fuelName)}>
+                              {fuelName}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      
+                      <div className="add-custom-fuel" style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={newRedevFuel}
+                          onChange={(e) => setNewRedevFuel(e.target.value)}
+                          placeholder="Add custom fuel"
+                          style={{ flex: 1 }}
+                        />
+                        <button type="button" className="btn-add-small" onClick={addNewRedevFuel}>
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <small className="form-hint" style={{ display: 'block', marginTop: '8px', color: '#94a3b8', fontSize: '12px' }}>
+                      Select multiple fuels (e.g., Gas and Diesel)
+                    </small>
+                  </div>
                 </div>
 
-                {/* Redev Heatrate (Btu/kWh) */}
+                {/* Redev Heatrate */}
                 <div className="form-group">
                   <label className="form-label">Redev Heatrate (Btu/kWh)</label>
                   <input
@@ -1010,7 +818,7 @@ const EditSiteModal = ({
                     value={formData["Redev Heatrate (Btu/kWh)"] || ""}
                     onChange={(e) => handleInputChange("Redev Heatrate (Btu/kWh)", e.target.value)}
                     placeholder="Enter redev heatrate"
-                    step="100"
+                    step="any"
                     min="0"
                   />
                 </div>
@@ -1022,9 +830,10 @@ const EditSiteModal = ({
                     type="text"
                     className="form-input"
                     value={formData["Redev COD"] || ""}
-                    onChange={(e) => handleInputChange("Redev COD", e.target.value)}
+                    onChange={(e) => handleRedevCODChange(e.target.value)}
                     placeholder="YYYY or description"
                   />
+                  <small className="form-hint">Takes priority over Legacy COD for status calculation</small>
                 </div>
 
                 {/* Redev Land Control */}
@@ -1066,9 +875,12 @@ const EditSiteModal = ({
                     onChange={(e) => handleInputChange("Redev Lead", e.target.value)}
                   >
                     <option value="">Select Redev Lead</option>
-                    {redevLeadOptions.map(option => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
+                    {redevLeadOptions.map(lead => {
+                      const leadName = lead.lead_name || lead.name || lead;
+                      return (
+                        <option key={leadName} value={leadName}>{leadName}</option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -1081,13 +893,16 @@ const EditSiteModal = ({
                     onChange={(e) => handleInputChange("Redev Support", e.target.value)}
                   >
                     <option value="">Select Redev Support</option>
-                    {redevSupportOptions.map(option => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
+                    {redevSupportOptions.map(support => {
+                      const supportName = support.support_name || support.name || support;
+                      return (
+                        <option key={supportName} value={supportName}>{supportName}</option>
+                      );
+                    })}
                   </select>
                 </div>
 
-                {/* Co-Locate/Repower - UPDATED: Changed to dropdown to match AddSiteModal */}
+                {/* Co-Locate/Repower */}
                 <div className="form-group">
                   <label className="form-label">Co-Locate/Repower</label>
                   <div className="select-with-add" style={{ width: '100%' }}>
@@ -1100,9 +915,12 @@ const EditSiteModal = ({
                           style={{ width: '100%' }}
                         >
                           <option value="">Select Option</option>
-                          {coLocateRepowerOptions.map(option => (
-                            <option key={option} value={option}>{option}</option>
-                          ))}
+                          {coLocateRepowerOptions.map(option => {
+                            const optionName = option.option_name || option.name || option;
+                            return (
+                              <option key={optionName} value={optionName}>{optionName}</option>
+                            );
+                          })}
                         </select>
                       </>
                     ) : (
@@ -1117,27 +935,19 @@ const EditSiteModal = ({
                           style={{ width: '100%', marginBottom: '8px' }}
                         />
                         <div style={{ display: 'flex', gap: '8px' }}>
-                          <button 
-                            type="button" 
-                            className="btn-add-small"
-                            onClick={() => {
-                              if (newCoLocateRepower.trim()) {
-                                handleInputChange("Co-Locate/Repower", newCoLocateRepower.trim());
-                                setShowNewCoLocateRepowerInput(false);
-                                setNewCoLocateRepower("");
-                              }
-                            }}
-                          >
-                            Add
-                          </button>
-                          <button 
-                            type="button" 
-                            className="btn-cancel-small"
-                            onClick={() => {
+                          <button type="button" className="btn-add-small" onClick={() => {
+                            if (newCoLocateRepower.trim()) {
+                              handleInputChange("Co-Locate/Repower", newCoLocateRepower.trim());
                               setShowNewCoLocateRepowerInput(false);
                               setNewCoLocateRepower("");
-                            }}
-                          >
+                            }
+                          }}>
+                            Add
+                          </button>
+                          <button type="button" className="btn-cancel-small" onClick={() => {
+                            setShowNewCoLocateRepowerInput(false);
+                            setNewCoLocateRepower("");
+                          }}>
                             Cancel
                           </button>
                         </div>
@@ -1148,6 +958,7 @@ const EditSiteModal = ({
               </div>
             </div>
 
+            {/* Additional Information */}
             <div className="form-section">
               <h3 className="form-section-title">Additional Information</h3>
               <div className="form-grid">
@@ -1165,18 +976,12 @@ const EditSiteModal = ({
             </div>
           </div>
           
+          {/* Modal Footer */}
           <div className="modal-footer">
-            <button 
-              type="button" 
-              className="btn btn-secondary" 
-              onClick={closeEditModal}
-            >
+            <button type="button" className="btn btn-secondary" onClick={closeEditModal}>
               Cancel
             </button>
-            <button 
-              type="submit" 
-              className="btn btn-primary"
-            >
+            <button type="submit" className="btn btn-primary">
               Update Project
             </button>
           </div>

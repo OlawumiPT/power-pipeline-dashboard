@@ -25,6 +25,95 @@ export const parseTransmissionData = (transmissionStr) => {
   }
 };
 
+// Helper function to extract year from string
+const extractYearFromString = (str) => {
+  if (!str || str.toString().trim() === "") return null;
+  const stringValue = str.toString().trim();
+  
+  // Handle special cases
+  if (stringValue.includes('#N/A') || stringValue.includes('N/A') || stringValue.includes('#VALUE!')) {
+    return null;
+  }
+  
+  // Try to extract 4-digit year
+  const yearMatch = stringValue.match(/\b(\d{4})\b/);
+  if (yearMatch) {
+    const year = parseInt(yearMatch[1]);
+    // Validate year is reasonable (between 1900 and 2100)
+    if (!isNaN(year) && year >= 1900 && year <= 2100) {
+      return year;
+    }
+  }
+  
+  return null;
+};
+
+// Enhanced status calculation function
+export const calculateStatus = (legacyCOD, redevCOD) => {
+  const currentYear = new Date().getFullYear();
+  
+  // Debug logging
+  console.log('Status calculation inputs:', { legacyCOD, redevCOD, currentYear });
+  
+  // First check Legacy COD for existing plants
+  if (legacyCOD && legacyCOD.toString().trim() !== "") {
+    const legacyYear = extractYearFromString(legacyCOD);
+    console.log('Legacy year extracted:', legacyYear);
+    
+    if (legacyYear !== null && !isNaN(legacyYear)) {
+      if (legacyYear < currentYear) {
+        console.log('Status: Operating (Legacy COD in past)');
+        return "Operating";
+      }
+      if (legacyYear > currentYear) {
+        console.log('Status: Future (Legacy COD in future)');
+        return "Future";
+      }
+      console.log('Status: Operating (Legacy COD current year)');
+      return "Operating"; // Current year
+    }
+  }
+  
+  // If no valid Legacy COD, check Redev COD for new projects
+  if (redevCOD && redevCOD.toString().trim() !== "") {
+    const redevYear = extractYearFromString(redevCOD);
+    console.log('Redev year extracted:', redevYear);
+    
+    if (redevYear !== null && !isNaN(redevYear)) {
+      if (redevYear < currentYear) {
+        console.log('Status: Operating (Redev COD in past)');
+        return "Operating";
+      }
+      if (redevYear > currentYear) {
+        console.log('Status: Future (Redev COD in future)');
+        return "Future";
+      }
+      console.log('Status: Operating (Redev COD current year)');
+      return "Operating"; // Current year
+    }
+  }
+  
+  // If we have COD but couldn't parse it, check for keywords
+  if (legacyCOD && legacyCOD.toString().trim() !== "") {
+    const codStr = legacyCOD.toString().toLowerCase();
+    if (codStr.includes('future') || codStr.includes('planned') || codStr.includes('tbd')) {
+      console.log('Status: Future (keyword in Legacy COD)');
+      return "Future";
+    }
+  }
+  
+  if (redevCOD && redevCOD.toString().trim() !== "") {
+    const codStr = redevCOD.toString().toLowerCase();
+    if (codStr.includes('future') || codStr.includes('planned') || codStr.includes('tbd')) {
+      console.log('Status: Future (keyword in Redev COD)');
+      return "Future";
+    }
+  }
+  
+  console.log('Status: Unknown (no valid COD found)');
+  return "Unknown";
+};
+
 export const findColumnName = (row, patterns) => {
   const keys = Object.keys(row);
   for (const pattern of patterns) {
@@ -113,6 +202,7 @@ export const calculateKPIs = (jsonData, columns, setKpiRow1, setKpiRow2) => {
     if (capacityStr && capacityStr !== "" && 
         capacityStr.toUpperCase() !== "N/A" && 
         !capacityStr.includes("#")) {
+      
       const capacity = parseFloat(capacityStr);
       if (!isNaN(capacity)) {
         totalCapacityMW += capacity;
@@ -144,7 +234,7 @@ export const calculateKPIs = (jsonData, columns, setKpiRow1, setKpiRow2) => {
   const avgHeatRate = heatRateCount > 0 ? totalHeatRate / heatRateCount : 0;
   
   // DEBUG LOGGING for Average Age calculation
-  console.log('=== DEBUG AVG AGE CALCULATION ===');
+  console.log('=== CALCULATIONS DEBUG ===');
   console.log('codCol being used:', codCol);
   
   // FIXED: Use actual current year instead of hardcoded 2025
@@ -450,14 +540,26 @@ export const calculateCounterpartyData = (jsonData, ownerCol, overallCol, capaci
 export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => {
   const {
     projectNameCol, ownerCol, overallCol, thermalCol, redevCol,
-    isoCol, zoneCol, capacityCol, techCol, heatRateCol, cfCol, codCol,
+    isoCol, zoneCol, capacityCol, techCol, heatRateCol, cfCol,
     locationCol, projectCodenameCol, redevLoadCol, icScoreCol, numberOfSitesCol,
     gasReferenceCol, contactCol, siteAcreageCol, fuelCol, redevCodCol, marketsCol,
     thermalOptimizationCol, environmentalScoreCol, marketScoreCol, infraCol, ixCol,
     coLocateRepowerCol, transactibilityCol, plantCodCol, legacyCodCol,
-    transmissionCol,  // ADD THIS
-    transactabilityScoresCol, // ADD THIS - Column AH
-    transactabilityCol  // ADD THIS - Column AI
+    transmissionCol,
+    transactabilityScoresCol,
+    transactabilityCol,
+    // ADD ALL REDEVELOPMENT COLUMNS
+    redevTierCol,
+    redevCapacityCol,
+    redevTechCol,
+    redevFuelCol,
+    redevHeatrateCol,
+    redevLandControlCol,
+    redevStageGateCol,
+    redevLeadCol,
+    redevSupportCol,
+    redevBaseCaseCol,
+    projectTypeCol
   } = allColumns;
 
   const pipelineData = jsonData.map((row, index) => {
@@ -482,7 +584,28 @@ export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => 
     const transactabilityScore = row[transactabilityScoresCol] || ""; // Column AH (numeric: 2, 3, #N/A)
     const transactability = row[transactabilityCol] || ""; // Column AI (text description)
     
-    let codStr = row[legacyCodCol] || ""; // Use legacy COD instead of plant COD
+    // CRITICAL: Extract all redevelopment fields
+    const redevTier = row[redevTierCol] || "";
+    const redevCapacity = row[redevCapacityCol] || "";
+    const redevTech = row[redevTechCol] || "";
+    const redevFuel = row[redevFuelCol] || "";
+    const redevHeatrate = row[redevHeatrateCol] || "";
+    const redevCOD = row[redevCodCol] || "";
+    const redevLandControl = row[redevLandControlCol] || "";
+    const redevStageGate = row[redevStageGateCol] || "";
+    const redevLead = row[redevLeadCol] || "";
+    const redevSupport = row[redevSupportCol] || "";
+    const redevBaseCase = row[redevBaseCaseCol] || "";
+    const projectType = row[projectTypeCol] || "";
+    
+    // Get Legacy COD and Redev COD for status calculation
+    const legacyCOD = row[legacyCodCol] || "";
+    const redevCODValue = redevCOD || "";
+    
+    // Calculate status using enhanced function
+    const status = calculateStatus(legacyCOD, redevCODValue);
+    
+    let codStr = legacyCOD || "";
     let cod = 0;
     if (codStr && codStr.toString().trim() !== "") {
       const codMatch = codStr.toString().match(/\d{4}/);
@@ -513,7 +636,7 @@ export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => 
       "Tech": row[techCol] || "",
       "Heat Rate (Btu/kWh)": row[heatRateCol] || "",
       "2024 Capacity Factor": cf,
-      "Legacy COD": row[legacyCodCol] || "",
+      "Legacy COD": legacyCOD || "",
       "Plant COD": row[plantCodCol] || "",
       "Fuel": row[fuelCol] || "",
       "ISO": row[isoCol] || "",
@@ -522,8 +645,8 @@ export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => 
       "Gas Reference": row[gasReferenceCol] || "",
       "Process (P) or Bilateral (B)": row[allColumns.processCol] || "",
       "Number of Sites": row[numberOfSitesCol] || "",
-      "Redevelopment Base Case": row[allColumns.redevBaseCaseCol] || "",
-      "Redev COD": row[redevCodCol] || "",
+      "Redevelopment Base Case": redevBaseCase || "",
+      "Redev COD": redevCODValue || "",
       "Thermal Optimization": row[thermalOptimizationCol] || "",
       "Co-Locate/Repower": row[coLocateRepowerCol] || "",
       "Environmental Score": row[environmentalScoreCol] || "",
@@ -537,6 +660,18 @@ export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => 
       "Transmission Data": row[transmissionCol] || "",  // ADD THIS
       "Contact": row[contactCol] || "",
       "Site Acreage": row[siteAcreageCol] || "",
+      // CRITICAL: ADD ALL REDEVELOPMENT FIELDS TO DETAIL DATA
+      "Redev Tier": redevTier || "",
+      "Redev Capacity (MW)": redevCapacity || "",
+      "Redev Tech": redevTech || "",
+      "Redev Fuel": redevFuel || "",
+      "Redev Heatrate (Btu/kWh)": redevHeatrate || "",
+      "Redev Land Control": redevLandControl || "",
+      "Redev Stage Gate": redevStageGate || "",
+      "Redev Lead": redevLead || "",
+      "Redev Support": redevSupport || "",
+      "Project Type": projectType || "",
+      "Status": status || "", // Add status to detail data
       "Calculated Overall": overall.toFixed(2),
       "Calculated Thermal": thermal.toFixed(2),
       "Calculated Redevelopment": redev.toFixed(2),
@@ -544,14 +679,15 @@ export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => 
     };
 
     return {
-      id: index + 1,
+      // FIXED: Use database ID if available, otherwise use index
+      id: row.id || row.project_id || index + 1,
+      displayId: index + 1, // Add sequential display ID
       asset: row[projectNameCol] || "",
       location: row[locationCol] || "",
       owner: row[ownerCol] || "",
       overall: overall,
       thermal: thermal,
       redev: redev,
-      // CRITICAL: Add Transactability fields to pipeline row
       transactabilityScore: transactabilityScore,
       transactability: transactability,
       mkt: row[isoCol] || "",
@@ -561,6 +697,21 @@ export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => 
       hr: hr,
       cf: cf,
       cod: cod,
+      // CRITICAL: ADD ALL REDEVELOPMENT FIELDS TO PIPELINE ROW
+      redevTier: redevTier,
+      redevCapacity: redevCapacity,
+      redevTech: redevTech,
+      redevFuel: redevFuel,
+      redevHeatrate: redevHeatrate,
+      redevCOD: redevCODValue,
+      redevLandControl: redevLandControl,
+      redevStageGate: redevStageGate,
+      redevLead: redevLead,
+      redevSupport: redevSupport,
+      redevBaseCase: redevBaseCase,
+      projectType: projectType,
+      // Add calculated status
+      status: status,
       detailData: detailData,
       transmissionData: transmissionData
     };
@@ -651,6 +802,18 @@ export const calculateAllData = (jsonData, headers, setters) => {
   const coLocateRepowerCol = findColumnIndex(["co-locate/repower", "co-locate", "repower"]) !== -1 ? headers[findColumnIndex(["co-locate/repower", "co-locate", "repower"])] : "Co-Locate/Repower";
   const transactibilityCol = findColumnIndex(["transactibility"]) !== -1 ? headers[findColumnIndex(["transactibility"])] : "Transactibility";
   
+  // CRITICAL: Add all redevelopment column mappings
+  const redevTierCol = findColumnIndex(["redev tier", "tier"]) !== -1 ? headers[findColumnIndex(["redev tier", "tier"])] : "Redev Tier";
+  const redevCapacityCol = findColumnIndex(["redev capacity", "capacity (mw)"]) !== -1 ? headers[findColumnIndex(["redev capacity", "capacity (mw)"])] : "Redev Capacity (MW)";
+  const redevTechCol = findColumnIndex(["redev tech"]) !== -1 ? headers[findColumnIndex(["redev tech"])] : "Redev Tech";
+  const redevFuelCol = findColumnIndex(["redev fuel"]) !== -1 ? headers[findColumnIndex(["redev fuel"])] : "Redev Fuel";
+  const redevHeatrateCol = findColumnIndex(["redev heatrate"]) !== -1 ? headers[findColumnIndex(["redev heatrate"])] : "Redev Heatrate (Btu/kWh)";
+  const redevLandControlCol = findColumnIndex(["redev land control"]) !== -1 ? headers[findColumnIndex(["redev land control"])] : "Redev Land Control";
+  const redevStageGateCol = findColumnIndex(["redev stage gate"]) !== -1 ? headers[findColumnIndex(["redev stage gate"])] : "Redev Stage Gate";
+  const redevLeadCol = findColumnIndex(["redev lead"]) !== -1 ? headers[findColumnIndex(["redev lead"])] : "Redev Lead";
+  const redevSupportCol = findColumnIndex(["redev support"]) !== -1 ? headers[findColumnIndex(["redev support"])] : "Redev Support";
+  const projectTypeCol = findColumnIndex(["project type"]) !== -1 ? headers[findColumnIndex(["project type"])] : "Project Type";
+  
   const allColumns = {
     projectNameCol, capacityCol, overallCol, thermalCol, redevCol,
     heatRateCol, legacyCodCol, plantCodCol, processCol, isoCol, techCol, redevBaseCaseCol,
@@ -661,14 +824,25 @@ export const calculateAllData = (jsonData, headers, setters) => {
     transmissionCol, // Add this line to include transmission data column
     // CRITICAL: Add Transactability columns
     transactabilityScoresCol,
-    transactabilityCol
+    transactabilityCol,
+    // CRITICAL: Add all redevelopment columns
+    redevTierCol,
+    redevCapacityCol,
+    redevTechCol,
+    redevFuelCol,
+    redevHeatrateCol,
+    redevLandControlCol,
+    redevStageGateCol,
+    redevLeadCol,
+    redevSupportCol,
+    projectTypeCol
   };
 
-  // FIXED: Pass legacyCodCol (not plantCodCol) to calculateKPIs for age calculations
+  
   calculateKPIs(jsonData, {
     projectNameCol, capacityCol, overallCol, thermalCol, redevCol,
     heatRateCol, 
-    codCol: legacyCodCol, // Use Legacy COD for age calculations
+    codCol: legacyCodCol, 
     processCol
   }, setKpiRow1, setKpiRow2);
 

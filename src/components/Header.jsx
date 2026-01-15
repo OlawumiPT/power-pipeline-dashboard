@@ -1,5 +1,6 @@
 import React from 'react';
 import logo from '../assets/powerTransitionLogo.png';
+import { useAuth } from '../contexts/AuthContext';
 
 const Header = ({ 
   selectedIso, 
@@ -7,7 +8,7 @@ const Header = ({
   selectedOwner, 
   selectedTransmissionVoltage,
   selectedHasExcessCapacity,
-  selectedProjectType, // ADD THIS - new prop
+  selectedProjectType,
   allOwners,
   allVoltages,
   excessCapacityOptions,
@@ -16,491 +17,457 @@ const Header = ({
   handleOwnerFilter,
   handleTransmissionVoltageFilter,
   handleHasExcessCapacityFilter,
-  handleProjectTypeFilter, // ADD THIS - new handler
+  handleProjectTypeFilter,
   resetFilters,
   setShowScoringPanel,
   openAddSiteModal,
   setShowExpertScores,
-  // ADDED: Upload/Download props
   setShowExportModal,
   setShowUploadModal,
-  // ADDED: Activity Log prop
   setShowActivityLog
   
 }) => {
+  const { user, logout } = useAuth();
+
   return (
-    <header className="header">
-      <div className="header-left" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-        <img
-          src={logo}
-          alt="Power Transitions Logo"
-          style={{ height: "40px", objectFit: "contain" }}
-        />
-        <div>
-          <h1 className="title">Pipeline Dashboard</h1>
-          <p className="subtitle">Active Projects and Opportunities.</p>
-        </div>
-      </div>
-
-      <div className="header-right">
-        {/* UPLOAD BUTTON */}
-        <button 
-          className="upload-btn"
-          onClick={() => setShowUploadModal(true)}
-          style={{
-            background: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
-            border: "none",
-            borderRadius: "999px",
-            color: "white",
-            fontSize: "12px",
-            fontWeight: "600",
-            padding: "8px 20px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "all 0.2s ease",
-            boxShadow: "0 4px 12px rgba(139, 92, 246, 0.3)",
-            marginLeft: "8px"
-          }}
-          title="Upload Excel file"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: "16px", height: "16px" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-          </svg>
-          Upload
-        </button>
-        
-        {/* EXPORT BUTTON */}
-        <button 
-          className="export-btn"
-          onClick={() => setShowExportModal(true)}
-          style={{
-            background: "linear-gradient(135deg, #10b981, #059669)",
-            border: "none",
-            borderRadius: "999px",
-            color: "white",
-            fontSize: "12px",
-            fontWeight: "600",
-            padding: "8px 20px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "all 0.2s ease",
-            boxShadow: "0 4px 12px rgba(16, 185, 129, 0.3)",
-            marginLeft: "8px"
-          }}
-          title="Export data to Excel"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: "16px", height: "16px" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Export
-        </button>
-        
-        {/* ACTIVITY LOG BUTTON */}
-        <button 
-          className="activity-log-btn"
-          onClick={() => setShowActivityLog(true)}
-          style={{
-            background: "linear-gradient(135deg, #ec4899, #db2777)",
-            border: "none",
-            borderRadius: "999px",
-            color: "white",
-            fontSize: "12px",
-            fontWeight: "600",
-            padding: "8px 20px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "all 0.2s ease",
-            boxShadow: "0 4px 12px rgba(236, 72, 153, 0.3)",
-            marginLeft: "8px"
-          }}
-          title="View Activity Log"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: "16px", height: "16px" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          Activity Log
-        </button>
-        
-        <button 
-          className="scoring-panel-btn"
-          onClick={() => setShowExpertScores(true)}
-          style={{
-            background: "linear-gradient(135deg, #0ea5e9, #0284c7)",
-            border: "none",
-            borderRadius: "999px",
-            color: "white",
-            fontSize: "12px",
-            fontWeight: "600",
-            padding: "8px 20px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "all 0.2s ease",
-            boxShadow: "0 4px 12px rgba(14, 165, 233, 0.3)",
-            marginLeft: "8px"
-          }}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: "16px", height: "16px" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-          </svg>
-          Expert Analysis
-        </button>
-        
-        <button className="add-site-btn" onClick={openAddSiteModal} style={{
-          background: "linear-gradient(135deg, #f59e0b, #d97706)",
-          border: "none",
-          borderRadius: "999px",
-          color: "white",
-          fontSize: "12px",
-          fontWeight: "600",
-          padding: "8px 20px",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          transition: "all 0.2s ease",
-          boxShadow: "0 4px 12px rgba(245, 158, 11, 0.3)",
-          marginLeft: "8px"
+    <header className="header" style={{ 
+      position: "relative", 
+      minHeight: "140px",
+      padding: "0 20px",
+      backgroundColor: "#1a1a2e", // Dark blue-gray background
+      background: "linear-gradient(135deg, #16213e 0%, #1a1a2e 100%)", // Gradient
+      boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+      marginBottom: "15px",
+      borderBottom: "1px solid rgba(255,255,255,0.1)"
+    }}>
+      {/* MAIN HEADER ROW */}
+      <div style={{ 
+        display: "flex", 
+        justifyContent: "space-between", 
+        alignItems: "center",
+        height: "70px",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+      }}>
+        {/* Left: Logo and Title - Dark Theme */}
+        <div className="header-left" style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "12px",
+          minWidth: "220px",
+          flexShrink: 0
         }}>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: "16px", height: "16px" }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Project
-        </button>
-
-        {/* GROUP 1: PROJECT TYPE FILTER - BLUE CIRCLE */}
-        <div className="filter-group-circle" style={{
-          display: "inline-flex",
-          alignItems: "center",
-          padding: "10px 16px",
-          borderRadius: "50px",
-          border: "2px solid #3b82f6",
-          backgroundColor: "rgba(59, 130, 246, 0.1)",
-          marginRight: "12px",
-          position: "relative"
-        }}>
-          <span className="group-label" style={{
-            position: "absolute",
-            top: "-10px",
-            left: "16px",
-            fontSize: "10px",
-            fontWeight: "700",
-            color: "#3b82f6",
-            backgroundColor: "white",
-            padding: "0 6px"
-          }}>
-            Project Type
-          </span>
-          <div className="pill-group" style={{ display: "flex", gap: "6px" }}>
-            <button 
-              className={`pill ${selectedProjectType === "All" ? "pill-active" : ""}`}
-              onClick={() => handleProjectTypeFilter("All")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #3b82f6",
-                backgroundColor: selectedProjectType === "All" ? "#3b82f6" : "transparent",
-                color: selectedProjectType === "All" ? "white" : "#3b82f6",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              All
-            </button>
-            <button 
-              className={`pill ${selectedProjectType === "Redev" ? "pill-active" : ""}`}
-              onClick={() => handleProjectTypeFilter("Redev")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #3b82f6",
-                backgroundColor: selectedProjectType === "Redev" ? "#3b82f6" : "transparent",
-                color: selectedProjectType === "Redev" ? "white" : "#3b82f6",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              Redev
-            </button>
-            <button 
-              className={`pill ${selectedProjectType === "M&A" ? "pill-active" : ""}`}
-              onClick={() => handleProjectTypeFilter("M&A")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #3b82f6",
-                backgroundColor: selectedProjectType === "M&A" ? "#3b82f6" : "transparent",
-                color: selectedProjectType === "M&A" ? "white" : "#3b82f6",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              M&A
-            </button>
-            <button 
-              className={`pill ${selectedProjectType === "Owned" ? "pill-active" : ""}`}
-              onClick={() => handleProjectTypeFilter("Owned")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #3b82f6",
-                backgroundColor: selectedProjectType === "Owned" ? "#3b82f6" : "transparent",
-                color: selectedProjectType === "Owned" ? "white" : "#3b82f6",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              Owned
-            </button>
-          </div>
-        </div>
-
-        {/* GROUP 2: ISO FILTER - GREEN CIRCLE */}
-        <div className="filter-group-circle" style={{
-          display: "inline-flex",
-          alignItems: "center",
-          padding: "10px 16px",
-          borderRadius: "50px",
-          border: "2px solid #10b981",
-          backgroundColor: "rgba(16, 185, 129, 0.1)",
-          marginRight: "12px",
-          position: "relative"
-        }}>
-          <span className="group-label" style={{
-            position: "absolute",
-            top: "-10px",
-            left: "16px",
-            fontSize: "10px",
-            fontWeight: "700",
-            color: "#10b981",
-            backgroundColor: "white",
-            padding: "0 6px"
-          }}>
-            ISO Region
-          </span>
-          <div className="pill-group" style={{ display: "flex", gap: "6px" }}>
-            <button 
-              className={`pill ${selectedIso === "All" ? "pill-active" : ""}`}
-              onClick={() => handleIsoFilter("All")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #10b981",
-                backgroundColor: selectedIso === "All" ? "#10b981" : "transparent",
-                color: selectedIso === "All" ? "white" : "#10b981",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              All
-            </button>
-            <button 
-              className={`pill ${selectedIso === "PJM" ? "pill-active" : ""}`}
-              onClick={() => handleIsoFilter("PJM")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #10b981",
-                backgroundColor: selectedIso === "PJM" ? "#10b981" : "transparent",
-                color: selectedIso === "PJM" ? "white" : "#10b981",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              PJM
-            </button>
-            <button 
-              className={`pill ${selectedIso === "NYISO" ? "pill-active" : ""}`}
-              onClick={() => handleIsoFilter("NYISO")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #10b981",
-                backgroundColor: selectedIso === "NYISO" ? "#10b981" : "transparent",
-                color: selectedIso === "NYISO" ? "white" : "#10b981",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              NYISO
-            </button>
-            <button 
-              className={`pill ${selectedIso === "ISONE" ? "pill-active" : ""}`}
-              onClick={() => handleIsoFilter("ISONE")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #10b981",
-                backgroundColor: selectedIso === "ISONE" ? "#10b981" : "transparent",
-                color: selectedIso === "ISONE" ? "white" : "#10b981",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              ISONE
-            </button>
-            <button 
-              className={`pill ${selectedIso === "MISO" ? "pill-active" : ""}`}
-              onClick={() => handleIsoFilter("MISO")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #10b981",
-                backgroundColor: selectedIso === "MISO" ? "#10b981" : "transparent",
-                color: selectedIso === "MISO" ? "white" : "#10b981",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              MISO
-            </button>
-          </div>
-        </div>
-
-        {/* GROUP 3: PROCESS FILTER - PURPLE CIRCLE */}
-        <div className="filter-group-circle" style={{
-          display: "inline-flex",
-          alignItems: "center",
-          padding: "10px 16px",
-          borderRadius: "50px",
-          border: "2px solid #8b5cf6",
-          backgroundColor: "rgba(139, 92, 246, 0.1)",
-          marginRight: "12px",
-          position: "relative"
-        }}>
-          <span className="group-label" style={{
-            position: "absolute",
-            top: "-10px",
-            left: "16px",
-            fontSize: "10px",
-            fontWeight: "700",
-            color: "#8b5cf6",
-            backgroundColor: "white",
-            padding: "0 6px"
-          }}>
-            Process Type
-          </span>
-          <div className="pill-group" style={{ display: "flex", gap: "6px" }}>
-            <button 
-              className={`pill ${selectedProcess === "All" ? "pill-active" : ""}`}
-              onClick={() => handleProcessFilter("All")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #8b5cf6",
-                backgroundColor: selectedProcess === "All" ? "#8b5cf6" : "transparent",
-                color: selectedProcess === "All" ? "white" : "#8b5cf6",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              All
-            </button>
-            <button 
-              className={`pill ${selectedProcess === "Process" ? "pill-active" : ""}`}
-              onClick={() => handleProcessFilter("Process")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #8b5cf6",
-                backgroundColor: selectedProcess === "Process" ? "#8b5cf6" : "transparent",
-                color: selectedProcess === "Process" ? "white" : "#8b5cf6",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              Process
-            </button>
-            <button 
-              className={`pill ${selectedProcess === "Bilateral" ? "pill-active" : ""}`}
-              onClick={() => handleProcessFilter("Bilateral")}
-              style={{
-                padding: "6px 12px",
-                borderRadius: "999px",
-                border: "1px solid #8b5cf6",
-                backgroundColor: selectedProcess === "Bilateral" ? "#8b5cf6" : "transparent",
-                color: selectedProcess === "Bilateral" ? "white" : "#8b5cf6",
-                fontSize: "11px",
-                fontWeight: "600",
-                cursor: "pointer",
-                transition: "all 0.2s"
-              }}
-            >
-              Bilateral
-            </button>
-          </div>
-        </div>
-
-        {/* OWNER SELECT AND RESET BUTTONS */}
-        <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-          <select 
-            className="owners-select"
-            value={selectedOwner}
-            onChange={(e) => handleOwnerFilter(e.target.value)}
-            style={{
-              padding: "8px 12px",
-              borderRadius: "6px",
-              border: "1px solid #cbd5e1",
-              backgroundColor: "white",
-              fontSize: "12px",
-              color: "#334155",
-              minWidth: "150px"
+          <img
+            src={logo}
+            alt="Power Transitions Logo"
+            style={{ 
+              height: "36px", 
+              objectFit: "contain",
+              filter: "brightness(1.2)" // Make logo brighter on dark background
             }}
-          >
-            {allOwners.map(owner => (
-              <option key={owner} value={owner}>
-                {owner}
-              </option>
-            ))}
-          </select>
-          
-          <button 
-            className="pill"
-            onClick={resetFilters}
-            style={{
-              background: "linear-gradient(135deg, #64748b, #475569)",
-              color: "#fff",
-              padding: "8px 16px",
-              border: "none",
-              borderRadius: "6px",
-              fontSize: "12px",
+          />
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <h1 className="title" style={{ 
+              fontSize: "18px", // Slightly larger
+              margin: 0, 
+              fontWeight: 700,
+              color: "#ffffff", // White text
+              letterSpacing: "0.5px"
+            }}>
+              Pipeline Dashboard
+            </h1>
+            <p className="subtitle" style={{ 
+              fontSize: "11px",
+              margin: 0, 
+              color: "#94a3b8", // Light gray for subtitle
+              marginTop: "2px"
+            }}>
+              Active Projects and Opportunities
+            </p>
+          </div>
+        </div>
+
+        {/* CENTER: Filter Groups - Dark Theme */}
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "15px",
+          flex: 1,
+          justifyContent: "center",
+          padding: "0 20px"
+        }}>
+          {/* PROJECT TYPE FILTER - Dark */}
+          <div className="filter-group-compact" style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "6px 12px",
+            borderRadius: "20px",
+            border: "1px solid rgba(59, 130, 246, 0.5)",
+            backgroundColor: "rgba(59, 130, 246, 0.15)",
+            position: "relative",
+            height: "36px",
+            backdropFilter: "blur(10px)"
+          }}>
+            <span className="filter-label" style={{
+              fontSize: "11px",
               fontWeight: "600",
-              cursor: "pointer",
-              boxShadow: "0 4px 12px rgba(71, 85, 105, 0.3)",
-              transition: "all 0.2s ease"
-            }}
-          >
-            Reset Filters
-          </button>
+              color: "#93c5fd", // Light blue
+              whiteSpace: "nowrap"
+            }}>
+              Project Type:
+            </span>
+            <div className="pill-group" style={{ display: "flex", gap: "4px" }}>
+              {["All", "Redev", "M&A", "Owned"].map(type => (
+                <button 
+                  key={type}
+                  className={`pill ${selectedProjectType === type ? "pill-active" : ""}`}
+                  onClick={() => handleProjectTypeFilter(type)}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: "12px",
+                    border: `1px solid ${selectedProjectType === type ? "#3b82f6" : "rgba(59, 130, 246, 0.4)"}`,
+                    backgroundColor: selectedProjectType === type ? "#3b82f6" : "rgba(59, 130, 246, 0.1)",
+                    color: selectedProjectType === type ? "white" : "#93c5fd",
+                    fontSize: "10px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                    minWidth: "45px"
+                  }}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* PROCESS FILTER - Dark */}
+          <div className="filter-group-compact" style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "6px 12px",
+            borderRadius: "20px",
+            border: "1px solid rgba(139, 92, 246, 0.5)",
+            backgroundColor: "rgba(139, 92, 246, 0.15)",
+            position: "relative",
+            height: "36px",
+            backdropFilter: "blur(10px)"
+          }}>
+            <span className="filter-label" style={{
+              fontSize: "11px",
+              fontWeight: "600",
+              color: "#c4b5fd", // Light purple
+              whiteSpace: "nowrap"
+            }}>
+              Process:
+            </span>
+            <div className="pill-group" style={{ display: "flex", gap: "4px" }}>
+              {["All", "Process", "Bilateral"].map(process => (
+                <button 
+                  key={process}
+                  className={`pill ${selectedProcess === process ? "pill-active" : ""}`}
+                  onClick={() => handleProcessFilter(process)}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: "12px",
+                    border: `1px solid ${selectedProcess === process ? "#8b5cf6" : "rgba(139, 92, 246, 0.4)"}`,
+                    backgroundColor: selectedProcess === process ? "#8b5cf6" : "rgba(139, 92, 246, 0.1)",
+                    color: selectedProcess === process ? "white" : "#c4b5fd",
+                    fontSize: "10px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                    minWidth: "60px"
+                  }}
+                >
+                  {process}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Owner Select - Dark */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <select 
+              className="owners-select"
+              value={selectedOwner}
+              onChange={(e) => handleOwnerFilter(e.target.value)}
+              style={{
+                padding: "6px 10px",
+                borderRadius: "6px",
+                border: "1px solid rgba(203, 213, 225, 0.3)",
+                backgroundColor: "rgba(15, 23, 42, 0.7)",
+                fontSize: "11px",
+                color: "#f1f5f9",
+                minWidth: "130px",
+                height: "34px",
+                backdropFilter: "blur(10px)"
+              }}
+            >
+              {allOwners.map(owner => (
+                <option key={owner} value={owner} style={{ backgroundColor: "#1a1a2e" }}>
+                  {owner}
+                </option>
+              ))}
+            </select>
+            
+            <button 
+              className="reset-btn"
+              onClick={resetFilters}
+              style={{
+                background: "rgba(148, 163, 184, 0.15)",
+                color: "#cbd5e1",
+                padding: "6px 12px",
+                border: "1px solid rgba(203, 213, 225, 0.3)",
+                borderRadius: "6px",
+                fontSize: "11px",
+                fontWeight: "600",
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+                height: "34px",
+                whiteSpace: "nowrap",
+                backdropFilter: "blur(10px)"
+              }}
+            >
+              Reset
+            </button>
+          </div>
+        </div>
+
+        {/* RIGHT: User Info and Action Buttons - Dark Theme */}
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "15px",
+          minWidth: "fit-content",
+          marginLeft: "auto"
+        }}>
+          {/* Action Buttons - Dark */}
+          <div style={{ 
+            display: "flex", 
+            gap: "6px",
+            flexShrink: 0
+          }}>
+            <button 
+              className="upload-btn"
+              onClick={() => setShowUploadModal(true)}
+              style={{
+                background: "rgba(139, 92, 246, 0.2)",
+                border: "1px solid rgba(139, 92, 246, 0.5)",
+                borderRadius: "6px",
+                color: "#c4b5fd",
+                fontSize: "11px",
+                fontWeight: "600",
+                padding: "6px 12px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 0.2s ease",
+                minWidth: "70px",
+                justifyContent: "center",
+                backdropFilter: "blur(10px)"
+              }}
+              title="Upload Excel file"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: "12px", height: "12px" }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+              </svg>
+              Upload
+            </button>
+            
+            <button 
+              className="export-btn"
+              onClick={() => setShowExportModal(true)}
+              style={{
+                background: "rgba(16, 185, 129, 0.2)",
+                border: "1px solid rgba(16, 185, 129, 0.5)",
+                borderRadius: "6px",
+                color: "#86efac",
+                fontSize: "11px",
+                fontWeight: "600",
+                padding: "6px 12px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 0.2s ease",
+                minWidth: "70px",
+                justifyContent: "center",
+                backdropFilter: "blur(10px)"
+              }}
+              title="Export data to Excel"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: "12px", height: "12px" }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Export
+            </button>
+            
+            <button 
+              className="activity-log-btn"
+              onClick={() => setShowActivityLog(true)}
+              style={{
+                background: "rgba(236, 72, 153, 0.2)",
+                border: "1px solid rgba(236, 72, 153, 0.5)",
+                borderRadius: "6px",
+                color: "#f9a8d4",
+                fontSize: "11px",
+                fontWeight: "600",
+                padding: "6px 12px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 0.2s ease",
+                minWidth: "90px",
+                justifyContent: "center",
+                backdropFilter: "blur(10px)"
+              }}
+              title="View Activity Log"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: "12px", height: "12px" }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Activity Log
+            </button>
+          </div>
+
+          {/* User Info - Dark */}
+          <div className="user-info-compact" style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            background: "rgba(59, 130, 246, 0.15)",
+            padding: "4px 8px 4px 12px",
+            borderRadius: "20px",
+            border: "1px solid rgba(59, 130, 246, 0.4)",
+            minWidth: "fit-content",
+            backdropFilter: "blur(10px)"
+          }}>
+            <div className="user-avatar" style={{
+              width: "28px",
+              height: "28px",
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, #3b82f6, #10b981)",
+              color: "white",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontWeight: "bold",
+              fontSize: "12px",
+              flexShrink: 0
+            }}>
+              {user?.username?.charAt(0).toUpperCase() || 'U'}
+            </div>
+            <div className="user-details" style={{ 
+              display: "flex", 
+              flexDirection: "column",
+              minWidth: "fit-content"
+            }}>
+              <span className="user-name" style={{
+                fontSize: "12px",
+                fontWeight: "600",
+                color: "#ffffff",
+                whiteSpace: "nowrap"
+              }}>
+                {user?.full_name || user?.username || 'User'}
+              </span>
+              <span className="user-role" style={{
+                fontSize: "10px",
+                color: "#94a3b8",
+                textTransform: "capitalize",
+                whiteSpace: "nowrap"
+              }}>
+                {user?.role || 'Operator'}
+              </span>
+            </div>
+            <button 
+              onClick={logout}
+              className="logout-button-compact"
+              style={{
+                background: "rgba(239, 68, 68, 0.2)",
+                border: "1px solid rgba(239, 68, 68, 0.5)",
+                color: "#fca5a5",
+                padding: "4px 8px",
+                borderRadius: "12px",
+                fontSize: "10px",
+                fontWeight: "600",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 0.2s",
+                marginLeft: "6px",
+                flexShrink: 0,
+                whiteSpace: "nowrap",
+                backdropFilter: "blur(10px)"
+              }}
+              title="Logout"
+            >
+              <span style={{ fontSize: "10px" }}>🚪</span>
+              Logout
+            </button>
+          </div>
+
+          {/* Main Action Buttons - Dark */}
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button 
+              className="expert-analysis-btn"
+              onClick={() => setShowExpertScores(true)}
+              style={{
+                background: "rgba(14, 165, 233, 0.2)",
+                border: "1px solid rgba(14, 165, 233, 0.5)",
+                borderRadius: "6px",
+                color: "#7dd3fc",
+                fontSize: "11px",
+                fontWeight: "600",
+                padding: "6px 12px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 0.2s ease",
+                minWidth: "85px",
+                justifyContent: "center",
+                backdropFilter: "blur(10px)"
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: "12px", height: "12px" }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+              </svg>
+              Expert Analysis
+            </button>
+            
+            {/* ADD PROJECT BUTTON - Stands out in dark theme */}
+            <button 
+              className="add-project-btn"
+              onClick={openAddSiteModal}
+              style={{
+                background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                border: "none",
+                borderRadius: "6px",
+                color: "white",
+                fontSize: "11px",
+                fontWeight: "600",
+                padding: "6px 16px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 0.2s ease",
+                minWidth: "100px",
+                justifyContent: "center",
+                boxShadow: "0 4px 15px rgba(245, 158, 11, 0.4)"
+              }}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ width: "12px", height: "12px" }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Project
+            </button>
+          </div>
         </div>
       </div>
     </header>

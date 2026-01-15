@@ -15,8 +15,6 @@ const ExpertAnalysisModal = ({
   const [saveStatus, setSaveStatus] = useState(null);
   const [editedTransmissionData, setEditedTransmissionData] = useState([]);
   
-  // ===== TRANSMISSION INTERCONNECTION DATA =====
-  // This data would ideally come from props or an API, but for now we'll hardcode it
   const transmissionInterconnectionData = [
     {
       site: "Shoemaker",
@@ -771,39 +769,130 @@ const ExpertAnalysisModal = ({
   const hasEdits = !!getSavedEdits(selectedExpertProject.id);
   const savedEditData = getSavedEdits(selectedExpertProject.id);
 
+   // ... keep all the existing code before the return statement ...
+
   return (
     <div className="modal-overlay dark-overlay" onClick={() => !isEditing && setSelectedExpertProject(null)}>
       <div className="modal-content expert-analysis-modal dark-theme" onClick={(e) => e.stopPropagation()}>
         
-        {/* HEADER SECTION */}
-        <div className="modal-header expert-header dark-header">
-          <div className="header-main">
-            <div className="project-title-section">
-              <h2 className="modal-title">{analysis.projectName} - Expert Details</h2>
-              <p className="expert-scores-subtitle">
+        {/* HEADER SECTION - REDUCED SIZE */}
+        <div className="modal-header expert-header dark-header" style={{
+          padding: "16px 20px 12px 20px",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.15)",
+          background: "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+          borderRadius: "12px 12px 0 0",
+          position: "relative"
+        }}>
+          <div className="header-main" style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            width: "100%",
+            marginBottom: "8px"
+          }}>
+            <div className="project-title-section" style={{ flex: 1 }}>
+              <h2 className="modal-title" style={{
+                fontSize: "18px",
+                fontWeight: "700",
+                margin: "0 0 2px 0",
+                color: "#ffffff",
+                letterSpacing: "0.3px"
+              }}>
+                {analysis.projectName} - Expert Details
+              </h2>
+              <p className="expert-scores-subtitle" style={{
+                fontSize: "12px",
+                margin: "0",
+                color: "#94a3b8",
+                fontWeight: "400"
+              }}>
                 AI-powered assessment of all pipeline projects
               </p>
+            </div>    
             </div>
-            
-            <button className="modal-close dark-close" onClick={() => setSelectedExpertProject(null)}></button>
-          </div>
           
-          {/* Edit Toggle Button */}
-          <div className="edit-toggle-section dark-edit-section">
+          {/* Edit Toggle Button - More Compact */}
+          <div className="edit-toggle-section dark-edit-section" style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "flex-start",
+            width: "100%"
+          }}>
             {!isEditing ? (
               <button 
                 className="enable-edit-btn dark-edit-btn"
                 onClick={() => setIsEditing(true)}
+                style={{
+                  background: "rgba(59, 130, 246, 0.15)",
+                  border: "1px solid rgba(59, 130, 246, 0.3)",
+                  color: "#93c5fd",
+                  padding: "4px 12px",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  display: "flex",
+                  alignItems: "right",
+                  gap: "4px"
+                }}
+                onMouseOver={(e) => {
+                  e.target.style.background = "rgba(59, 130, 246, 0.25)";
+                  e.target.style.borderColor = "rgba(59, 130, 246, 0.5)";
+                }}
+                onMouseOut={(e) => {
+                  e.target.style.background = "rgba(59, 130, 246, 0.15)";
+                  e.target.style.borderColor = "rgba(59, 130, 246, 0.3)";
+                }}
               >
                 ✏️ Enable Editing
               </button>
             ) : (
-              <div className="edit-mode-indicator dark-edit-indicator">
-                <span className="edit-mode-badge dark-edit-badge">EDIT MODE</span>
+              <div className="edit-mode-indicator dark-edit-indicator" style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px"
+              }}>
+                <span className="edit-mode-badge dark-edit-badge" style={{
+                  background: "rgba(245, 158, 11, 0.15)",
+                  border: "1px solid rgba(245, 158, 11, 0.3)",
+                  color: "#fbbf24",
+                  padding: "4px 8px",
+                  borderRadius: "4px",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  letterSpacing: "0.5px"
+                }}>
+                  EDIT MODE
+                </span>
                 <button 
                   className="cancel-edit-btn dark-cancel-btn"
                   onClick={() => handleSave('cancel')}
                   disabled={saveStatus === 'saving'}
+                  style={{
+                    background: "rgba(239, 68, 68, 0.15)",
+                    border: "1px solid rgba(239, 68, 68, 0.3)",
+                    color: "#fca5a5",
+                    padding: "4px 12px",
+                    borderRadius: "6px",
+                    fontSize: "11px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                    opacity: saveStatus === 'saving' ? "0.5" : "1"
+                  }}
+                  onMouseOver={(e) => {
+                    if (!e.target.disabled) {
+                      e.target.style.background = "rgba(239, 68, 68, 0.25)";
+                      e.target.style.borderColor = "rgba(239, 68, 68, 0.5)";
+                    }
+                  }}
+                  onMouseOut={(e) => {
+                    if (!e.target.disabled) {
+                      e.target.style.background = "rgba(239, 68, 68, 0.15)";
+                      e.target.style.borderColor = "rgba(239, 68, 68, 0.3)";
+                    }
+                  }}
                 >
                   Cancel Edit
                 </button>
@@ -812,6 +901,7 @@ const ExpertAnalysisModal = ({
           </div>
         </div>
         
+        {/* REST OF YOUR MODAL BODY - keep as is */}
         <div className="modal-body expert-body dark-body">
           {/* Save Status Indicator */}
           {saveStatus && (

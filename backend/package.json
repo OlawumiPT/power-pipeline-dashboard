@@ -1,0 +1,39 @@
+{
+  "name": "power-pipeline-backend",
+  "version": "1.0.0",
+  "description": "Power Pipeline Dashboard Authentication API",
+  "main": "server.cjs",
+  "scripts": {
+    "start": "node server.cjs",
+    "dev": "nodemon server.cjs",
+    "migrate": "psql -U dashboard_admin -d pipeline_dashboard -f migrations/001_create_users_table.sql"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.0",
+    "nodemailer": "^6.10.1",
+    "pg": "^8.16.3",
+    "xlsx": "^0.18.5"
+  },
+  "keywords": [
+    "dashboard",
+    "api",
+    "power",
+    "pipeline"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

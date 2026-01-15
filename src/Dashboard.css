@@ -4601,3 +4601,143 @@ html, body, #root {
 .close-activity-log:hover {
   background: #dc2626;
 }
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.status-operating {
+  background-color: #dcfce7;
+  color: #065f46;
+  border: 1px solid #86efac;
+}
+
+.status-retired {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+}
+
+.status-future {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #93c5fd;
+}
+
+.status-unknown {
+  background-color: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+/* Clickable legend items */
+.legend-item.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.legend-item.clickable:hover {
+  background-color: #f3f4f6;
+  transform: translateX(2px);
+}
+
+.legend-item.clickable:active {
+  transform: translateX(0);
+}
+
+/* Filter tags styling */
+.filter-tag {
+  display: inline-flex;
+  align-items: center;
+  background: #e5e7eb;
+  color: #374151;
+  padding: 4px 8px 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  margin-right: 8px;
+  margin-bottom: 4px;
+}
+
+.filter-tag button {
+  background: none;
+  border: none;
+  color: #6b7280;
+  margin-left: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-tag button:hover {
+  color: #ef4444;
+  background: #fef2f2;
+  border-radius: 50%;
+}
+
+/* Specific filter tag colors */
+.tech-filter-tag {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.iso-filter-tag {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.redev-filter-tag {
+  background: #dcfce7;
+  color: #065f46;
+}
+
+.counterparty-filter-tag {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+/* Clickable items in charts */
+.clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+/* Filter status bar */
+.filter-status {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 16px 24px;
+}
+
+.filter-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.filtered-count {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  color: #6b7280;
+}

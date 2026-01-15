@@ -13,7 +13,19 @@ const BottomGridSection = ({
   kpiRow1,
   // Add these new props
   handleEditProject,
-  handleDeleteProject 
+  handleDeleteProject,
+  // Tech filter props
+  activeTechFilter,
+  clearTechFilter,
+  // NEW: Counterparty filter props
+  handleFilterByCounterparty,
+  activeCounterpartyFilter,
+  clearCounterpartyFilter,
+  // NEW: Other filter props for status display and clearing
+  activeIsoFilter,
+  activeRedevFilter,
+  clearIsoFilter,
+  clearRedevFilter
 }) => {
 
     // Debug: Check what props we're receiving
@@ -22,6 +34,10 @@ const BottomGridSection = ({
     typeOfHandleEditProject: typeof handleEditProject,
     hasHandleDeleteProject: !!handleDeleteProject,
     typeOfHandleDeleteProject: typeof handleDeleteProject,
+    hasActiveTechFilter: !!activeTechFilter,
+    hasClearTechFilter: !!clearTechFilter,
+    hasHandleFilterByCounterparty: !!handleFilterByCounterparty,
+    hasActiveCounterpartyFilter: !!activeCounterpartyFilter,
   });
 
   return (
@@ -50,7 +66,13 @@ const BottomGridSection = ({
               const barColor = barColors[index % barColors.length];
               
               return (
-                <div key={cp.name} className="counterparty-chart-row">
+                <div 
+                  key={cp.name} 
+                  className="counterparty-chart-row clickable"
+                  onClick={() => handleFilterByCounterparty && handleFilterByCounterparty(cp.name)}
+                  style={{ cursor: handleFilterByCounterparty ? 'pointer' : 'default' }}
+                  title={handleFilterByCounterparty ? `Click to filter by ${cp.name}` : ''}
+                >
                   <div className="counterparty-name-bar">
                     <div className="counterparty-name-truncated">
                       {cp.name && cp.name.length > 25 ? cp.name.substring(0, 22) + '...' : cp.name || 'Unknown'}
@@ -60,7 +82,8 @@ const BottomGridSection = ({
                         className="counterparty-bar-fill"
                         style={{
                           width: `${barWidth}%`,
-                          backgroundColor: barColor
+                          backgroundColor: barColor,
+                          opacity: activeCounterpartyFilter === cp.name ? 1 : 0.8
                         }}
                         data-tooltip={`${cp.gw || '0'} GW (${barWidth}% of total)`}
                       ></div>
@@ -107,7 +130,13 @@ const BottomGridSection = ({
                   const barColor = barColors[index % barColors.length];
                   
                   return (
-                    <div key={cp.name} className="legend-item">
+                    <div 
+                      key={cp.name} 
+                      className="legend-item clickable"
+                      onClick={() => handleFilterByCounterparty && handleFilterByCounterparty(cp.name)}
+                      style={{ cursor: handleFilterByCounterparty ? 'pointer' : 'default' }}
+                      title={handleFilterByCounterparty ? `Click to filter by ${cp.name}` : ''}
+                    >
                       <div className="legend-color" style={{ backgroundColor: barColor }}></div>
                       <div className="legend-label">
                         {cp.name && cp.name.length > 15 ? cp.name.substring(0, 13) + '...' : cp.name || 'Unknown'}
@@ -135,25 +164,190 @@ const BottomGridSection = ({
           </div>
         </div>
         
-        {(sortConfig.column && sortConfig.direction !== 'none') && (
-          <div className="sort-controls" style={{ padding: '8px 18px 0' }}>
+        {/* UPDATED: Show sort controls when any filter is active */}
+        {(sortConfig.column && sortConfig.direction !== 'none' || activeTechFilter || activeIsoFilter || activeRedevFilter || activeCounterpartyFilter) && (
+          <div className="sort-controls" style={{ 
+            padding: '8px 18px 0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
             <div className="sort-status">
-              <span>Sorted by:</span>
-              <strong>
-                {/* Make sure sortableColumns is defined or imported */}
-                {sortableColumns?.find(col => col.key === sortConfig.column)?.label || sortConfig.column}
-              </strong>
-              <span>({sortConfig.direction === 'asc' ? 'Ascending' : 'Descending'})</span>
+              {sortConfig.column && sortConfig.direction !== 'none' && (
+                <>
+                  <span>Sorted by:</span>
+                  <strong>
+                    {sortConfig.column}
+                  </strong>
+                  <span>({sortConfig.direction === 'asc' ? 'Ascending' : 'Descending'})</span>
+                </>
+              )}
+              {/* Display active filters */}
+              {(activeTechFilter || activeIsoFilter || activeRedevFilter || activeCounterpartyFilter) && (
+                <div style={{ marginTop: sortConfig.column ? '4px' : '0' }}>
+                  <span>Filtered by:</span>
+                  {activeTechFilter && (
+                    <strong style={{ marginLeft: '4px', color: '#f59e0b' }}>
+                      Tech: {activeTechFilter}
+                    </strong>
+                  )}
+                  {activeIsoFilter && (
+                    <strong style={{ marginLeft: '4px', color: '#3b82f6' }}>
+                      ISO: {activeIsoFilter}
+                    </strong>
+                  )}
+                  {activeRedevFilter && (
+                    <strong style={{ marginLeft: '4px', color: '#10b981' }}>
+                      Redev: {activeRedevFilter}
+                    </strong>
+                  )}
+                  {activeCounterpartyFilter && (
+                    <strong style={{ marginLeft: '4px', color: '#8b5cf6' }}>
+                      Counterparty: {activeCounterpartyFilter}
+                    </strong>
+                  )}
+                </div>
+              )}
             </div>
-            <button 
-              className="reset-sort-btn"
-              onClick={resetSort}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Reset Sort
-            </button>
+
+                       <div style={{ display: 'flex', gap: '8px' }}>
+              {/* Clear tech filter button */}
+              {activeTechFilter && clearTechFilter && (
+                <button 
+                  className="reset-tech-filter-btn"
+                  onClick={clearTechFilter}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#f59e0b',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#d97706'}
+                  onMouseLeave={(e) => e.target.style.background = '#f59e0b'}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Clear Tech Filter
+                </button>
+              )}
+              {/* Clear ISO filter button */}
+              {activeIsoFilter && clearIsoFilter && (
+                <button 
+                  className="reset-iso-filter-btn"
+                  onClick={clearIsoFilter}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#3b82f6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#2563eb'}
+                  onMouseLeave={(e) => e.target.style.background = '#3b82f6'}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Clear ISO Filter
+                </button>
+              )}
+              {/* Clear Redev filter button */}
+              {activeRedevFilter && clearRedevFilter && (
+                <button 
+                  className="reset-redev-filter-btn"
+                  onClick={clearRedevFilter}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#10b981',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#059669'}
+                  onMouseLeave={(e) => e.target.style.background = '#10b981'}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Clear Redev Filter
+                </button>
+              )}
+              {/* Clear counterparty filter button */}
+              {activeCounterpartyFilter && clearCounterpartyFilter && (
+                <button 
+                  className="reset-counterparty-filter-btn"
+                  onClick={clearCounterpartyFilter}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#8b5cf6',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#7c3aed'}
+                  onMouseLeave={(e) => e.target.style.background = '#8b5cf6'}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Clear Counterparty Filter
+                </button>
+              )}
+              {/* Reset sort button */}
+              {sortConfig.column && sortConfig.direction !== 'none' && (
+                <button 
+                  className="reset-sort-btn"
+                  onClick={resetSort}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#ef4444',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => e.target.style.background = '#dc2626'}
+                  onMouseLeave={(e) => e.target.style.background = '#ef4444'}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                  Reset Sort
+                </button>
+              )}
+            </div>
+
           </div>
         )}
         
@@ -168,6 +362,11 @@ const BottomGridSection = ({
           // Pass the new handlers
           handleEditProject={handleEditProject}
           handleDeleteProject={handleDeleteProject}
+          // Pass tech filter props
+          activeTechFilter={activeTechFilter}
+          clearTechFilter={clearTechFilter}
+          // Pass counterparty filter props
+          activeCounterpartyFilter={activeCounterpartyFilter}
         />
       </div>
     </section>
@@ -177,7 +376,12 @@ const BottomGridSection = ({
 // Add default props for safety
 BottomGridSection.defaultProps = {
   handleEditProject: () => console.warn('BottomGridSection: handleEditProject not provided'),
-  handleDeleteProject: () => console.warn('BottomGridSection: handleDeleteProject not provided')
+  handleDeleteProject: () => console.warn('BottomGridSection: handleDeleteProject not provided'),
+  clearTechFilter: () => console.warn('BottomGridSection: clearTechFilter not provided'),
+  handleFilterByCounterparty: () => console.warn('BottomGridSection: handleFilterByCounterparty not provided'),
+  clearCounterpartyFilter: () => console.warn('BottomGridSection: clearCounterpartyFilter not provided'),
+  clearIsoFilter: () => console.warn('BottomGridSection: clearIsoFilter not provided'),
+  clearRedevFilter: () => console.warn('BottomGridSection: clearRedevFilter not provided')
 };
 
 export default BottomGridSection;
