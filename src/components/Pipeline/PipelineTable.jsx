@@ -29,13 +29,15 @@ const PipelineTable = ({
   const [filteredRows, setFilteredRows] = useState(pipelineRows);
   const [showFieldDropdown, setShowFieldDropdown] = useState(false);
   
-  // Searchable fields
+  // Searchable fields - ADDED: poiVoltage
   const searchableFields = [
     { value: 'all', label: 'All Fields' },
     { value: 'asset', label: 'Project Name' },
     { value: 'location', label: 'Location' },
     { value: 'owner', label: 'Owner' },
     { value: 'status', label: 'Status' },
+    { value: 'maTier', label: 'M&A Tier' },
+    { value: 'redevTier', label: 'Redevelopment Tier' },
     { value: 'mkt', label: 'Market (ISO)' },
     { value: 'zone', label: 'Zone' },
     { value: 'tech', label: 'Technology' },
@@ -44,12 +46,12 @@ const PipelineTable = ({
     { value: 'contact', label: 'Contact' },
     { value: 'redevBaseCase', label: 'Redevelopment Base Case' },
     { value: 'redevCapacity', label: 'Redevelopment Capacity' },
-    { value: 'redevTier', label: 'Redevelopment Tier' },
     { value: 'redevTech', label: 'Redevelopment Tech' },
     { value: 'redevFuel', label: 'Redevelopment Fuel' },
     { value: 'redevLead', label: 'Redevelopment Lead' },
     { value: 'redevStageGate', label: 'Redevelopment Stage Gate' },
     { value: 'projectType', label: 'Project Type' },
+    { value: 'poiVoltage', label: 'POI Voltage' }, // ADDED: POI Voltage
   ];
 
   // Load saved search preferences
@@ -109,6 +111,8 @@ const PipelineTable = ({
             row.location || '',
             row.owner || '',
             row.status || '',
+            row.maTier || '',
+            row.redevTier || '',
             row.mkt || '',
             row.zone || '',
             row.tech || '',
@@ -117,7 +121,6 @@ const PipelineTable = ({
             row.contact || '',
             row.redevBaseCase || '',
             row.redevCapacity?.toString() || '',
-            row.redevTier?.toString() || '',
             row.redevTech || '',
             row.redevFuel || '',
             row.redevLead || '',
@@ -130,6 +133,7 @@ const PipelineTable = ({
             row.mw?.toString() || '',
             row.hr?.toString() || '',
             row.cf?.toString() || '',
+            row.poiVoltage?.toString() || '', // ADDED: POI Voltage
           ];
           
           const rowText = searchableValues.join(' ').toLowerCase();
@@ -142,6 +146,8 @@ const PipelineTable = ({
             row.location || '',
             row.owner || '',
             row.status || '',
+            row.maTier || '',
+            row.redevTier || '',
             row.mkt || '',
             row.zone || '',
             row.tech || '',
@@ -150,7 +156,6 @@ const PipelineTable = ({
             row.contact || '',
             row.redevBaseCase || '',
             row.redevCapacity?.toString() || '',
-            row.redevTier?.toString() || '',
             row.redevTech || '',
             row.redevFuel || '',
             row.redevLead || '',
@@ -160,6 +165,7 @@ const PipelineTable = ({
             row.thermal?.toString() || '',
             row.redev?.toString() || '',
             row.transactabilityScore?.toString() || '',
+            row.poiVoltage?.toString() || '', // ADDED: POI Voltage
           ];
           
           const rowText = searchableValues.join(' ').toLowerCase();
@@ -177,13 +183,95 @@ const PipelineTable = ({
 
   // Get sorted rows from filtered results
   const getSortedFilteredRows = () => {
-    const sorted = getSortedPipelineRows();
-    // Since getSortedPipelineRows sorts the original pipelineRows,
-    // we need to maintain the same order for filtered rows
-    const rowMap = new Map(pipelineRows.map(row => [row.id, row]));
-    return filteredRows
-      .map(row => rowMap.get(row.id))
-      .filter(Boolean); // Remove any undefined entries
+    const rowsToSort = [...filteredRows];
+    
+    // If manual sorting is active, apply it
+    if (!sortConfig.column || sortConfig.direction === 'none') {
+      return rowsToSort;
+    }
+    
+    const column = sortableColumns.find(col => col.key === sortConfig.column);
+    if (!column) return rowsToSort;
+    
+    return rowsToSort.sort((a, b) => {
+      let aValue = a[sortConfig.column];
+      let bValue = b[sortConfig.column];
+      
+      if (aValue == null) aValue = column.type === 'string' ? '' : 0;
+      if (bValue == null) bValue = column.type === 'string' ? '' : 0;
+      
+      // Special handling for Redev Tier when manually sorting
+      if (sortConfig.column === 'redevTier') {
+        const tierOrder = {
+          '0': 0, 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5,
+          '1': 1, '2': 2, '3': 3, '4': 4, '5': 5,
+          'i': 1, 'ii': 2, 'iii': 3, 'iv': 4, 'v': 5
+        };
+        
+        const getTierValue = (tier) => {
+          if (tier === undefined || tier === null || tier === '') return 999;
+          const tierStr = String(tier).trim();
+          return tierOrder[tierStr] !== undefined ? tierOrder[tierStr] : 999;
+        };
+        
+        const aTierValue = getTierValue(aValue);
+        const bTierValue = getTierValue(bValue);
+        
+        return sortConfig.direction === 'asc' ? aTierValue - bTierValue : bTierValue - aTierValue;
+      }
+      
+      // Special handling for M&A Tier
+      if (sortConfig.column === 'maTier') {
+        const maTierOrder = {
+          'owned': 0,
+          'exclusivity': 1,
+          'second round': 2,
+          'first round': 3,
+          'pipeline': 4,
+          'passed': 5
+        };
+        
+        const getMaTierValue = (tier) => {
+          if (!tier) return 999;
+          const tierStr = String(tier).trim().toLowerCase();
+          return maTierOrder[tierStr] !== undefined ? maTierOrder[tierStr] : 999;
+        };
+        
+        const aTierValue = getMaTierValue(aValue);
+        const bTierValue = getMaTierValue(bValue);
+        
+        return sortConfig.direction === 'asc' ? aTierValue - bTierValue : bTierValue - aTierValue;
+      }
+      
+      if (sortConfig.column === 'cf') {
+        aValue = parseFloat(aValue) || 0;
+        bValue = parseFloat(bValue) || 0;
+      }
+      
+      if (column.type === 'string') {
+        aValue = String(aValue).toLowerCase();
+        bValue = String(bValue).toLowerCase();
+        
+        if (sortConfig.direction === 'asc') {
+          return aValue.localeCompare(bValue);
+        } else {
+          return bValue.localeCompare(aValue);
+        }
+      }
+      
+      if (column.type === 'number') {
+        aValue = parseFloat(aValue) || 0;
+        bValue = parseFloat(bValue) || 0;
+        
+        if (sortConfig.direction === 'asc') {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
+      }
+      
+      return 0;
+    });
   };
 
   // Handle search input change
@@ -223,13 +311,6 @@ const PipelineTable = ({
     return value;
   };
 
-  // Format redev tier
-  const formatRedevTier = (value) => {
-    if (value === undefined || value === null || value === '') return '';
-    if (typeof value === 'number') return value.toLocaleString();
-    return value;
-  };
-
   // Format project type
   const formatProjectType = (value) => {
     if (!value) return '';
@@ -237,6 +318,49 @@ const PipelineTable = ({
       return value.split(',').map(type => type.trim()).filter(type => type);
     }
     return [value];
+  };
+
+  // Format M&A Tier badge
+  const formatMaTier = (value) => {
+    if (!value) return '';
+    const tier = value.toString().trim().toLowerCase();
+    
+    // Define colors for each M&A tier
+    const tierColors = {
+      'owned': '#8b5cf6', // purple
+      'exclusivity': '#10b981', // green
+      'second round': '#3b82f6', // blue
+      'first round': '#f59e0b', // amber
+      'pipeline': '#6b7280', // gray
+      'passed': '#ef4444' // red
+    };
+    
+    return {
+      text: value,
+      color: tierColors[tier] || '#6b7280'
+    };
+  };
+
+  // Format Status badge
+  const formatStatus = (value) => {
+    if (!value) return '';
+    const status = value.toString().trim().toLowerCase();
+    
+    // Define colors for each status
+    const statusColors = {
+      'operating': '#10b981', // green
+      'future': '#3b82f6', // blue
+      'development': '#f59e0b', // amber
+      'proposed': '#8b5cf6', // purple
+      'retired': '#ef4444', // red
+      'cancelled': '#6b7280', // gray
+      'unknown': '#9ca3af' // light gray
+    };
+    
+    return {
+      text: value,
+      color: statusColors[status] || '#9ca3af'
+    };
   };
 
   // Handle delete click
@@ -248,7 +372,7 @@ const PipelineTable = ({
     }
   };
 
-  // Safe wrapper functions for edit - UPDATED: Added all redevelopment fields
+  // Safe wrapper functions for edit - UPDATED: Added poiVoltage field
  const handleEditClick = (e, row) => {
   e.preventDefault();
   e.stopPropagation();
@@ -265,6 +389,9 @@ const PipelineTable = ({
   console.log('   redevFuel:', row.redevFuel);
   console.log('   redevLead:', row.redevLead);
   console.log('   redevStageGate:', row.redevStageGate);
+  console.log('   maTier:', row.maTier);
+  console.log('   status:', row.status);
+  console.log('   poiVoltage:', row.poiVoltage); // ADDED
   
   // Check for Project Type specifically
   console.log('🎯 LOOKING FOR PROJECT TYPE:');
@@ -328,12 +455,10 @@ const PipelineTable = ({
     console.log('🎉 FINAL Project Type found:', foundProjectType);
   }
   
-  // Create comprehensive data object with ALL fields mapped from simplified row
-  const originalData = {
-    // First, include all the simplified row data
+   const originalData = {
+  
     ...row,
-    
-    // Map ALL simplified fields to Excel column names
+  
     "Legacy Nameplate Capacity (MW)": row.mw || "",
     "Project Name": row.asset || "",
     "Plant Owner": row.owner || "",
@@ -349,19 +474,18 @@ const PipelineTable = ({
     "Redevelopment Score": row.redev || "",
     "Redevelopment Base Case": row.redevBaseCase || "",
     "Redev Capacity (MW)": row.redevCapacity || "",
-    
-    // CRITICAL: Map all redevelopment fields
-  "Redev Tier": row.redevTier || "",
-  "Redev Tech": row.redevTech || "",
-  "Redev Fuel": row.redevFuel || "",
-  "Redev Heatrate (Btu/kWh)": row.redevHeatrate || "",
-  "Redev COD": row.redevCOD || "",
-  "Redev Land Control": row.redevLandControl || "",
-  "Redev Stage Gate": row.redevStageGate || "",
-  "Redev Lead": row.redevLead || "",
-  "Redev Support": row.redevSupport || "",
-    
-    // CRITICAL FIX: Map Transactability Score from Column AH
+    "Redev Tier": row.redevTier || "",
+    "Redev Tech": row.redevTech || "",
+    "Redev Fuel": row.redevFuel || "",
+    "Redev Heatrate (Btu/kWh)": row.redevHeatrate || "",
+    "Redev COD": row.redevCOD || "",
+    "Redev Land Control": row.redevLandControl || "",
+    "Redev Stage Gate": row.redevStageGate || "",
+    "Redev Lead": row.redevLead || "",
+    "Redev Support": row.redevSupport || "",
+    "M&A Tier": row.maTier || "",
+    "Status": row.status || "",
+    "POI Voltage (KV)": row.poiVoltage || "",
     "Transactability Scores": row.transactabilityScore || "",
     "Transactability": row.transactability || "",
     "Project Codename": row.codename || "",
@@ -372,17 +496,16 @@ const PipelineTable = ({
     "Gas Reference": row.gasReference || "",
     "Co-Locate/Repower": row.colocateRepower || "",
     "Contact": row.contact || "",
-    
-    // CRITICAL: Use the found Project Type or empty string
     "Project Type": foundProjectType || "",
   };
   
   console.log('📤 FINAL DATA BEING SENT TO EDIT MODAL:');
   console.log('   Project Type:', originalData["Project Type"]);
+  console.log('   M&A Tier:', originalData["M&A Tier"]);
+  console.log('   Status:', originalData["Status"]);
+  console.log('   POI Voltage:', originalData["POI Voltage (KV)"]);
   console.log('   Redev Tier:', originalData["Redev Tier"]);
   console.log('   Redev Tech:', originalData["Redev Tech"]);
-  console.log('   Redev Fuel:', originalData["Redev Fuel"]);
-  console.log('   Redev Lead:', originalData["Redev Lead"]);
   console.log('   All keys in originalData:', Object.keys(originalData));
   
   if (handleEditProject && typeof handleEditProject === 'function') {
@@ -429,7 +552,7 @@ const PipelineTable = ({
           )}
           {selectedProjectType === 'M&A' && (
             <span style={{ marginLeft: '12px', fontSize: '12px', color: '#f59e0b', backgroundColor: '#fef3c7', padding: '2px 8px', borderRadius: '12px', fontWeight: 'bold' }}>
-              ⬇ Sorted by: Overall Score (descending)
+              ⬆ Sorted by: M&A Tier (Owned → Exclusivity → Second round → First round → Pipeline → Passed)
             </span>
           )}
         </div>
@@ -533,6 +656,18 @@ const PipelineTable = ({
               <th className={`sortable-header ${getSortDirectionClass('projectType')}`} onClick={() => handleSort('projectType')}>
                 Project Type
               </th>
+              {/* NEW: M&A Tier column */}
+              <th className={`sortable-header ${getSortDirectionClass('maTier')}`} onClick={() => handleSort('maTier')}>
+                M&A Tier
+              </th>
+              {/* MOVED: Redev Tier column - Now directly after M&A Tier */}
+              <th className={`sortable-header ${getSortDirectionClass('redevTier')}`} onClick={() => handleSort('redevTier')}>
+                Redev Tier
+              </th>
+              {/* NEW: Status column - Moved after Redev Tier */}
+              <th className={`sortable-header ${getSortDirectionClass('status')}`} onClick={() => handleSort('status')}>
+                Status
+              </th>
               <th className={`sortable-header ${getSortDirectionClass('overall')}`} onClick={() => handleSort('overall')}>
                 Overall
               </th>
@@ -542,30 +677,6 @@ const PipelineTable = ({
               <th className={`sortable-header ${getSortDirectionClass('redev')}`} onClick={() => handleSort('redev')}>
                 Redev
               </th>
-              {/* Redevelopment Base Case column */}
-              <th className={`sortable-header ${getSortDirectionClass('redevBaseCase')}`} onClick={() => handleSort('redevBaseCase')}>
-                Redev Case
-              </th>
-              {/* Redevelopment Capacity column */}
-              <th className={`sortable-header ${getSortDirectionClass('redevCapacity')}`} onClick={() => handleSort('redevCapacity')}>
-                Redev MW
-              </th>
-              {/* Redevelopment Tier column - NEW */}
-              <th className={`sortable-header ${getSortDirectionClass('redevTier')}`} onClick={() => handleSort('redevTier')}>
-                Redev Tier
-              </th>
-              {/* Redevelopment Tech column - NEW */}
-              <th className={`sortable-header ${getSortDirectionClass('redevTech')}`} onClick={() => handleSort('redevTech')}>
-                Redev Tech
-              </th>
-              {/* Redevelopment Stage Gate column - NEW */}
-              <th className={`sortable-header ${getSortDirectionClass('redevStageGate')}`} onClick={() => handleSort('redevStageGate')}>
-                Stage Gate
-              </th>
-              {/* Transactability Score column - using correct field name */}
-              <th className={`sortable-header ${getSortDirectionClass('transactabilityScore')}`} onClick={() => handleSort('transactabilityScore')}>
-                Transact Score
-              </th>
               <th className={`sortable-header ${getSortDirectionClass('mkt')}`} onClick={() => handleSort('mkt')}>
                 Mkt
               </th>
@@ -574,6 +685,10 @@ const PipelineTable = ({
               </th>
               <th className={`sortable-header ${getSortDirectionClass('mw')}`} onClick={() => handleSort('mw')}>
                 MW
+              </th>
+              {/* NEW: POI Voltage column - Added after MW */}
+              <th className={`sortable-header ${getSortDirectionClass('poiVoltage')}`} onClick={() => handleSort('poiVoltage')}>
+                POI Voltage (KV)
               </th>
               <th className={`sortable-header ${getSortDirectionClass('tech')}`} onClick={() => handleSort('tech')}>
                 Tech
@@ -587,6 +702,27 @@ const PipelineTable = ({
               <th className={`sortable-header ${getSortDirectionClass('cod')}`} onClick={() => handleSort('cod')}>
                 COD
               </th>
+              {/* MOVED: Redevelopment columns to come after COD */}
+              {/* Redevelopment Base Case column */}
+              <th className={`sortable-header ${getSortDirectionClass('redevBaseCase')}`} onClick={() => handleSort('redevBaseCase')}>
+                Redev Case
+              </th>
+              {/* Redevelopment Capacity column */}
+              <th className={`sortable-header ${getSortDirectionClass('redevCapacity')}`} onClick={() => handleSort('redevCapacity')}>
+                Redev MW
+              </th>
+              {/* Redevelopment Tech column */}
+              <th className={`sortable-header ${getSortDirectionClass('redevTech')}`} onClick={() => handleSort('redevTech')}>
+                Redev Tech
+              </th>
+              {/* Redevelopment Stage Gate column */}
+              <th className={`sortable-header ${getSortDirectionClass('redevStageGate')}`} onClick={() => handleSort('redevStageGate')}>
+                Stage Gate
+              </th>
+              {/* Transactability Score column */}
+              <th className={`sortable-header ${getSortDirectionClass('transactabilityScore')}`} onClick={() => handleSort('transactabilityScore')}>
+                Transact Score
+              </th>
               {/* Actions column - not sortable */}
               <th className="actions-header">
                 Actions
@@ -595,19 +731,20 @@ const PipelineTable = ({
           </thead>
           <tbody>
             {getSortedFilteredRows().length > 0 ? (
-              getSortedFilteredRows().map((row) => (
+              getSortedFilteredRows().map((row, index) => (
                 <tr 
                   key={row.id} 
                   className={`pipeline-row ${sortConfig.column && row[sortConfig.column] !== undefined ? 'active-sort' : ''}`}
                   onClick={() => handleProjectClick(row)}
                 >
-                  <td className="col-rank">{row.id}</td>
+                  {/* FIXED: Use sequential index + 1 for display instead of row.id */}
+                  <td className="col-rank">{index + 1}</td>
                   <td className="col-asset">
                     <div className="asset-name">{row.asset}</div>
                     <div className="asset-location">{row.location}</div>
                   </td>
                   <td>{row.owner}</td>
-                  {/* NEW: Project Type cell */}
+                  {/* Project Type cell */}
                   <td>
                     {row.projectType ? (
                       <div style={{ 
@@ -616,9 +753,9 @@ const PipelineTable = ({
                         gap: '4px',
                         maxWidth: '150px'
                       }}>
-                        {formatProjectType(row.projectType).map((type, index) => (
+                        {formatProjectType(row.projectType).map((type, typeIndex) => (
                           <span 
-                            key={index}
+                            key={typeIndex}
                             className="tag tag-blue" 
                             style={{ 
                               fontSize: '10px',
@@ -642,6 +779,50 @@ const PipelineTable = ({
                       <span style={{ color: '#9ca3af', fontSize: '12px' }}>-</span>
                     )}
                   </td>
+                  {/* NEW: M&A Tier cell */}
+                  <td>
+                    {row.maTier ? (
+                      <span className="badge" style={{ 
+                        backgroundColor: formatMaTier(row.maTier).color,
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: 'bold'
+                      }}>
+                        {formatMaTier(row.maTier).text}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontSize: '12px' }}>-</span>
+                    )}
+                  </td>
+                  {/* MOVED: Redev Tier cell - Now directly after M&A Tier */}
+                  <td>
+                    {row.redevTier ? (
+                      <span className="badge badge-purple">
+                        {row.redevTier}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontSize: '12px' }}>-</span>
+                    )}
+                  </td>
+                  {/* NEW: Status cell - Moved after Redev Tier */}
+                  <td>
+                    {row.status ? (
+                      <span className="badge" style={{ 
+                        backgroundColor: formatStatus(row.status).color,
+                        color: 'white',
+                        padding: '2px 8px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: 'bold'
+                      }}>
+                        {formatStatus(row.status).text}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontSize: '12px' }}>-</span>
+                    )}
+                  </td>
                   <td>
                     <span className="badge badge-green">
                       {row.overall.toFixed(2)}
@@ -657,6 +838,28 @@ const PipelineTable = ({
                       {row.redev.toFixed(2)}
                     </span>
                   </td>
+                  <td>
+                    <span className="tag tag-dark">{row.mkt}</span>
+                  </td>
+                  <td>{row.zone}</td>
+                  <td>{row.mw.toLocaleString()}</td>
+                  {/* NEW: POI Voltage cell */}
+                  <td>
+                    {row.poiVoltage ? (
+                      <span className="badge badge-blue">
+                        {row.poiVoltage}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontSize: '12px' }}>-</span>
+                    )}
+                  </td>
+                  <td>
+                    <span className="tag tag-yellow">{row.tech}</span>
+                  </td>
+                  <td>{row.hr.toLocaleString()}</td>
+                  <td>{row.cf}</td>
+                  <td>{row.cod}</td>
+                  {/* MOVED: Redevelopment cells to come after COD */}
                   {/* Redevelopment Base Case cell */}
                   <td>
                     {row.redevBaseCase ? (
@@ -683,18 +886,7 @@ const PipelineTable = ({
                       <span style={{ color: '#9ca3af', fontSize: '12px' }}>-</span>
                     )}
                   </td>
-                  {/* Redevelopment Tier cell - NEW */}
-                  <td>
-                    {row.redevTier ? (
-                      <span className="badge badge-purple">
-                        {formatRedevTier(row.redevTier)}
-                        {/*row.redevTier*/}
-                      </span>
-                    ) : (
-                      <span style={{ color: '#9ca3af', fontSize: '12px' }}>-</span>
-                    )}
-                  </td>
-                  {/* Redevelopment Tech cell - NEW */}
+                  {/* Redevelopment Tech cell */}
                   <td>
                     {row.redevTech ? (
                       <span className="tag tag-yellow">
@@ -704,7 +896,7 @@ const PipelineTable = ({
                       <span style={{ color: '#9ca3af', fontSize: '12px' }}>-</span>
                     )}
                   </td>
-                  {/* Redevelopment Stage Gate cell - NEW */}
+                  {/* Redevelopment Stage Gate cell */}
                   <td>
                     {row.redevStageGate ? (
                       <span className="badge badge-blue">
@@ -714,7 +906,7 @@ const PipelineTable = ({
                       <span style={{ color: '#9ca3af', fontSize: '12px' }}>-</span>
                     )}
                   </td>
-                  {/* Transactability Score cell - handle #N/A values */}
+                  {/* Transactability Score cell */}
                   <td>
                     <span className="badge badge-purple">
                       {row.transactabilityScore !== undefined && row.transactabilityScore !== "" && row.transactabilityScore !== "#N/A" && row.transactabilityScore !== "N/A"
@@ -722,17 +914,6 @@ const PipelineTable = ({
                         : "N/A"}
                     </span>
                   </td>
-                  <td>
-                    <span className="tag tag-dark">{row.mkt}</span>
-                  </td>
-                  <td>{row.zone}</td>
-                  <td>{row.mw.toLocaleString()}</td>
-                  <td>
-                    <span className="tag tag-yellow">{row.tech}</span>
-                  </td>
-                  <td>{row.hr.toLocaleString()}</td>
-                  <td>{row.cf}</td>
-                  <td>{row.cod}</td>
                   <td className="actions-cell">
                     <div className="action-buttons">
                       <button 
@@ -766,9 +947,9 @@ const PipelineTable = ({
                 </tr>
               ))
             ) : (
-              // No results message - UPDATED column count to 21
+              // No results message - UPDATED column count to 24 (added POI Voltage)
               <tr>
-                <td colSpan="21" style={{
+                <td colSpan="24" style={{
                   textAlign: 'center',
                   padding: '40px 20px',
                   color: '#6b7280',
@@ -802,14 +983,15 @@ const PipelineTable = ({
           <span style={{ marginRight: '12px' }}><span style={{ color: '#3b82f6', fontWeight: 'bold' }}>↑↓</span> Click headers to sort</span>
           <span><span style={{ color: '#ef4444', fontWeight: 'bold' }}>×</span> Reset to clear sort</span>
           <span style={{ marginLeft: '12px' }}><span style={{ color: '#10b981', fontWeight: 'bold' }}>⚡</span> Click chart items to filter</span>
-          {/* NEW: Automatic sorting indicator */}
+        
+         {/* NEW: Automatic sorting indicator */}
           {selectedProjectType === 'Redev' && (
             <span style={{ marginLeft: '12px' }}><span style={{ color: '#10b981', fontWeight: 'bold' }}>⬆</span> Auto-sorted: Redev Tier (ascending)</span>
           )}
           {selectedProjectType === 'M&A' && (
-            <span style={{ marginLeft: '12px' }}><span style={{ color: '#f59e0b', fontWeight: 'bold' }}>⬇</span> Auto-sorted: Overall Score (descending)</span>
+            <span style={{ marginLeft: '12px' }}><span style={{ color: '#f59e0b', fontWeight: 'bold' }}>⬆</span> Auto-sorted: M&A Tier (custom order)</span>
           )}
-        </div>
+                  </div>
         <div>
           Showing {getSortedFilteredRows().length} of {pipelineRows.length} projects
           {(searchTerm || activeTechFilter || activeCounterpartyFilter) && filteredRows.length < pipelineRows.length && (

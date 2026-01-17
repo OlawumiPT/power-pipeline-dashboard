@@ -559,7 +559,11 @@ export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => 
     redevLeadCol,
     redevSupportCol,
     redevBaseCaseCol,
-    projectTypeCol
+    projectTypeCol,
+    // ADD M&A Tier column
+    maTierCol,
+    // ADD POI Voltage column
+    poiVoltageCol
   } = allColumns;
 
   const pipelineData = jsonData.map((row, index) => {
@@ -583,6 +587,12 @@ export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => 
     // CRITICAL: Extract Transactability data
     const transactabilityScore = row[transactabilityScoresCol] || ""; // Column AH (numeric: 2, 3, #N/A)
     const transactability = row[transactabilityCol] || ""; // Column AI (text description)
+    
+    // CRITICAL: Extract M&A Tier data
+    const maTier = row[maTierCol] || "";
+    
+    // CRITICAL: Extract POI Voltage data
+    const poiVoltage = row[poiVoltageCol] || "";
     
     // CRITICAL: Extract all redevelopment fields
     const redevTier = row[redevTierCol] || "";
@@ -660,6 +670,10 @@ export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => 
       "Transmission Data": row[transmissionCol] || "",  // ADD THIS
       "Contact": row[contactCol] || "",
       "Site Acreage": row[siteAcreageCol] || "",
+      // CRITICAL: ADD M&A TIER FIELD
+      "M&A Tier": maTier || "",
+      // CRITICAL: ADD POI VOLTAGE FIELD
+      "POI Voltage (KV)": poiVoltage || "",
       // CRITICAL: ADD ALL REDEVELOPMENT FIELDS TO DETAIL DATA
       "Redev Tier": redevTier || "",
       "Redev Capacity (MW)": redevCapacity || "",
@@ -693,10 +707,14 @@ export const calculatePipelineData = (jsonData, allColumns, setPipelineRows) => 
       mkt: row[isoCol] || "",
       zone: row[zoneCol] || "",
       mw: mw,
+      // ADD POI VOLTAGE TO PIPELINE ROW
+      poiVoltage: poiVoltage,
       tech: row[techCol] || "",
       hr: hr,
       cf: cf,
       cod: cod,
+      // CRITICAL: ADD M&A TIER TO PIPELINE ROW
+      maTier: maTier,
       // CRITICAL: ADD ALL REDEVELOPMENT FIELDS TO PIPELINE ROW
       redevTier: redevTier,
       redevCapacity: redevCapacity,
@@ -763,6 +781,9 @@ export const calculateAllData = (jsonData, headers, setters) => {
   const transactabilityScoresCol = findColumnIndex(["transactability scores", "transactability score"]) !== -1 ? headers[findColumnIndex(["transactability scores", "transactability score"])] : "Transactability Scores";
   const transactabilityCol = findColumnIndex(["transactability", "transactionality"]) !== -1 ? headers[findColumnIndex(["transactability", "transactionality"])] : "Transactability";
   
+  // CRITICAL: ADD POI VOLTAGE COLUMN MAPPING
+  const poiVoltageCol = findColumnIndex(["poi voltage", "poi_voltage", "voltage", "kv"]) !== -1 ? headers[findColumnIndex(["poi voltage", "poi_voltage", "voltage", "kv"])] : "POI Voltage (KV)";
+  
   const projectNameCol = findColumnIndex(["project name"]) !== -1 ? headers[findColumnIndex(["project name"])] : "Project Name";
   const capacityCol = findColumnIndex(["legacy nameplate capacity", "capacity", "mw"]) !== -1 ? headers[findColumnIndex(["legacy nameplate capacity", "capacity", "mw"])] : "Legacy Nameplate Capacity (MW)";
   const overallCol = findColumnIndex(["overall project score", "overall"]) !== -1 ? headers[findColumnIndex(["overall project score", "overall"])] : "Overall Project Score";
@@ -814,6 +835,9 @@ export const calculateAllData = (jsonData, headers, setters) => {
   const redevSupportCol = findColumnIndex(["redev support"]) !== -1 ? headers[findColumnIndex(["redev support"])] : "Redev Support";
   const projectTypeCol = findColumnIndex(["project type"]) !== -1 ? headers[findColumnIndex(["project type"])] : "Project Type";
   
+  // CRITICAL: ADD M&A Tier column mapping
+  const maTierCol = findColumnIndex(["m&a tier", "ma tier", "ma_tier", "maTier"]) !== -1 ? headers[findColumnIndex(["m&a tier", "ma tier", "ma_tier", "maTier"])] : "M&A Tier";
+  
   const allColumns = {
     projectNameCol, capacityCol, overallCol, thermalCol, redevCol,
     heatRateCol, legacyCodCol, plantCodCol, processCol, isoCol, techCol, redevBaseCaseCol,
@@ -825,6 +849,8 @@ export const calculateAllData = (jsonData, headers, setters) => {
     // CRITICAL: Add Transactability columns
     transactabilityScoresCol,
     transactabilityCol,
+    // CRITICAL: ADD POI VOLTAGE COLUMN
+    poiVoltageCol,
     // CRITICAL: Add all redevelopment columns
     redevTierCol,
     redevCapacityCol,
@@ -835,7 +861,9 @@ export const calculateAllData = (jsonData, headers, setters) => {
     redevStageGateCol,
     redevLeadCol,
     redevSupportCol,
-    projectTypeCol
+    projectTypeCol,
+    // CRITICAL: ADD M&A Tier column
+    maTierCol: maTierCol
   };
 
   

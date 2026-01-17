@@ -21,6 +21,7 @@ const AddSiteModal = ({
     redevLeadOptions = [], // FROM redev_lead_options
     redevSupportOptions = [], // FROM redev_support_options
     coLocateRepowerOptions = [], // FROM co_locate_repower_options
+    maTierOptions = [], // NEW: M&A Tier options from lookup table
     
     // From distinct values in main tables:
     plantOwners = [], // DISTINCT plant_owner FROM projects
@@ -99,7 +100,11 @@ const AddSiteModal = ({
     "Co-Locate/Repower": "co_locate_repower",
     "Contact": "contact",
     // These already match or are handled specially:
-    "Project Type": "project_type"
+    "Project Type": "project_type",
+    // NEW: M&A Tier field mapping
+    "M&A Tier": "ma_tier",
+    // NEW: POI Voltage field mapping
+    "POI Voltage (KV)": "poi_voltage_kv"
   };
 
   // Initialize form
@@ -200,26 +205,14 @@ const AddSiteModal = ({
     }
   };
 
-  // Redevelopment Base Case handler
-  const handleRedevelopmentBaseChange = (base) => {
-    if (selectedRedevelopmentBases.includes(base)) {
-      const updated = selectedRedevelopmentBases.filter(b => b !== base);
-      setSelectedRedevelopmentBases(updated);
-      handleFieldChange("Redevelopment Base Case", updated.join("\n"));
-    } else {
-      const updated = [...selectedRedevelopmentBases, base];
-      setSelectedRedevelopmentBases(updated);
-      handleFieldChange("Redevelopment Base Case", updated.join("\n"));
-    }
+  // M&A Tier handler
+  const handleMaTierChange = (value) => {
+    handleFieldChange("M&A Tier", value);
   };
 
-  const addNewRedevelopmentBase = () => {
-    if (newRedevelopmentBase.trim() && !selectedRedevelopmentBases.includes(newRedevelopmentBase.trim())) {
-      const updated = [...selectedRedevelopmentBases, newRedevelopmentBase.trim()];
-      setSelectedRedevelopmentBases(updated);
-      handleFieldChange("Redevelopment Base Case", updated.join("\n"));
-      setNewRedevelopmentBase("");
-    }
+  // POI Voltage handler
+  const handlePoiVoltageChange = (value) => {
+    handleFieldChange("POI Voltage (KV)", value);
   };
 
   // Plant Owner handler
@@ -274,6 +267,28 @@ const AddSiteModal = ({
     handleFieldChange("Status", value);
   };
 
+  // Redevelopment Base Case handler
+  const handleRedevelopmentBaseChange = (base) => {
+    if (selectedRedevelopmentBases.includes(base)) {
+      const updated = selectedRedevelopmentBases.filter(b => b !== base);
+      setSelectedRedevelopmentBases(updated);
+      handleFieldChange("Redevelopment Base Case", updated.join("\n"));
+    } else {
+      const updated = [...selectedRedevelopmentBases, base];
+      setSelectedRedevelopmentBases(updated);
+      handleFieldChange("Redevelopment Base Case", updated.join("\n"));
+    }
+  };
+
+  const addNewRedevelopmentBase = () => {
+    if (newRedevelopmentBase.trim() && !selectedRedevelopmentBases.includes(newRedevelopmentBase.trim())) {
+      const updated = [...selectedRedevelopmentBases, newRedevelopmentBase.trim()];
+      setSelectedRedevelopmentBases(updated);
+      handleFieldChange("Redevelopment Base Case", updated.join("\n"));
+      setNewRedevelopmentBase("");
+    }
+  };
+
   // Redev Fuel handler
   const handleRedevFuelChange = (fuel) => {
     let updatedFuels;
@@ -317,6 +332,8 @@ const AddSiteModal = ({
       plant_owner: newSiteData["plant_owner"],
       project_type: newSiteData["project_type"],
       status: newSiteData["status"],
+      ma_tier: newSiteData["ma_tier"], // NEW: M&A Tier
+      poi_voltage_kv: newSiteData["poi_voltage_kv"], // NEW: POI Voltage
       redev_fuel: newSiteData["redev_fuel"],
       redevelopment_base_case: newSiteData["redevelopment_base_case"],
       allData: newSiteData
@@ -501,6 +518,40 @@ const AddSiteModal = ({
                   />
                 </div>
 
+                {/* NEW: M&A Tier Field - Added in same position as Edit Modal */}
+                            {/* Debug: Log dropdown options */}
+              {/* M&A Tier Field - Added in same position as Edit Modal */}
+              <div className="form-group">
+                <label className="form-label">M&A Tier</label>
+                <select
+                  className="form-select"
+                  value={newSiteData["ma_tier"] || newSiteData["M&A Tier"] || ""}
+                  onChange={(e) => handleMaTierChange(e.target.value)}
+                  style={{ width: '100%' }}
+                >
+                  <option value="">Select M&A Tier</option>
+                  {maTierOptions && maTierOptions.length > 0 ? (
+                    maTierOptions.map(tier => {
+                      // Handle different possible data structures
+                      const tierValue = tier.value || tier.tier_name || tier.name || tier;
+                      return (
+                        <option key={tierValue} value={tierValue}>
+                          {tierValue}
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <>
+                      <option value="Owned">Owned</option>
+                      <option value="Exclusivity">Exclusivity</option>
+                      <option value="second round">Second round</option>
+                      <option value="first round">First round</option>
+                      <option value="pipeline">Pipeline</option>
+                      <option value="passed">Passed</option>
+                    </>
+                  )}
+                </select>
+              </div>
                 <div className="form-group">
                   <label className="form-label">Status</label>
                   <select
@@ -530,6 +581,21 @@ const AddSiteModal = ({
                     value={newSiteData["legacy_nameplate_capacity_mw"] || newSiteData["Legacy Nameplate Capacity (MW)"] || ""}
                     onChange={(e) => handleFieldChange("Legacy Nameplate Capacity (MW)", e.target.value)}
                     placeholder="Enter capacity in MW"
+                    step="any"
+                    min="0"
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                
+                {/* NEW: POI Voltage Field - Added after Capacity MW */}
+                <div className="form-group">
+                  <label className="form-label">POI Voltage (KV)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newSiteData["poi_voltage_kv"] || newSiteData["POI Voltage (KV)"] || ""}
+                    onChange={(e) => handlePoiVoltageChange(e.target.value)}
+                    placeholder="Enter POI voltage in KV"
                     step="any"
                     min="0"
                     style={{ width: '100%' }}
