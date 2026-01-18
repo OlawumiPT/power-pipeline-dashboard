@@ -58,12 +58,11 @@ function DashboardContent() {
   const [activeRedevFilter, setActiveRedevFilter] = useState(null);
   const [activeCounterpartyFilter, setActiveCounterpartyFilter] = useState(null);
   const [notification, setNotification] = useState({
-  show: false,
-  message: '',
-  type: 'success'
-});
+    show: false,
+    message: '',
+    type: 'success'
+  });
 
-  
   const [allOwners, setAllOwners] = useState([]);
   const [allVoltages, setAllVoltages] = useState(["All"]);
   const [allData, setAllData] = useState([]);
@@ -76,6 +75,7 @@ function DashboardContent() {
     redevLeadOptions: [],
     redevSupportOptions: [],
     coLocateRepowerOptions: [],
+    maTierOptions: [], // NEW: M&A Tier options
     
     // From distinct values:
     plantOwners: [],
@@ -105,13 +105,9 @@ function DashboardContent() {
     direction: 'none',
   });
 
-
-
-  
-
   const [autoSortedPipelineRows, setAutoSortedPipelineRows] = useState([]);
 
-  // Add Site Modal State
+  // Add Site Modal State - UPDATED: Added ma_tier and status fields
   const [newSiteData, setNewSiteData] = useState({
     project_name: "",
     project_codename: "",
@@ -152,6 +148,7 @@ function DashboardContent() {
     redev_support: "",
     project_type: "",
     status: "",
+    ma_tier: "", // NEW: M&A Tier field
     transactability_scores: "",
     transactability: ""
   });
@@ -168,6 +165,7 @@ function DashboardContent() {
     redevLeadOptions = [],
     redevSupportOptions = [],
     coLocateRepowerOptions = [],
+    maTierOptions = [], // NEW: M&A Tier options
     
     // From distinct values:
     plantOwners = [],
@@ -217,6 +215,29 @@ function DashboardContent() {
     return aValue - bValue; // Ascending order
   };
 
+  // NEW: Custom sorting function for M&A Tier with custom order
+  const sortMaTier = (a, b) => {
+    const maTierOrder = {
+      'owned': 0,
+      'exclusivity': 1,
+      'second round': 2,
+      'first round': 3,
+      'pipeline': 4,
+      'passed': 5
+    };
+    
+    const getMaTierValue = (tier) => {
+      if (!tier) return 999;
+      const tierStr = String(tier).trim().toLowerCase();
+      return maTierOrder[tierStr] !== undefined ? maTierOrder[tierStr] : 999;
+    };
+    
+    const aValue = getMaTierValue(a);
+    const bValue = getMaTierValue(b);
+    
+    return aValue - bValue; // Ascending order based on the custom order
+  };
+
   // NEW: Function to automatically sort pipeline rows based on project type filter
   const getAutoSortedPipelineRows = (rows, projectType) => {
     if (!rows || rows.length === 0) return rows;
@@ -231,11 +252,9 @@ function DashboardContent() {
         return sortRedevTier(a.redevTier, b.redevTier);
       });
     } else if (projectType === 'M&A') {
-      // Sort M&A projects by Overall Score descending
+      // Sort M&A projects by M&A Tier in custom order
       sortedRows = sortedRows.sort((a, b) => {
-        const aScore = a.overall || 0;
-        const bScore = b.overall || 0;
-        return bScore - aScore; // Descending order
+        return sortMaTier(a.maTier, b.maTier);
       });
     }
     // For "All" or "Owned" project types, no automatic sorting
@@ -292,6 +311,29 @@ function DashboardContent() {
         
         const aTierValue = getTierValue(aValue);
         const bTierValue = getTierValue(bValue);
+        
+        return sortConfig.direction === 'asc' ? aTierValue - bTierValue : bTierValue - aTierValue;
+      }
+      
+      // Special handling for M&A Tier when manually sorting
+      if (sortConfig.column === 'maTier') {
+        const maTierOrder = {
+          'owned': 0,
+          'exclusivity': 1,
+          'second round': 2,
+          'first round': 3,
+          'pipeline': 4,
+          'passed': 5
+        };
+        
+        const getMaTierValue = (tier) => {
+          if (!tier) return 999;
+          const tierStr = String(tier).trim().toLowerCase();
+          return maTierOrder[tierStr] !== undefined ? maTierOrder[tierStr] : 999;
+        };
+        
+        const aTierValue = getMaTierValue(aValue);
+        const bTierValue = getMaTierValue(bValue);
         
         return sortConfig.direction === 'asc' ? aTierValue - bTierValue : bTierValue - aTierValue;
       }
@@ -489,300 +531,301 @@ function DashboardContent() {
     }
   };
 
-// Simple notification function
-const showAlert = (message, type = 'success') => {
-  // Create a simple alert element
-  const alertDiv = document.createElement('div');
-  alertDiv.className = `simple-alert simple-alert-${type}`;
-  alertDiv.innerHTML = `
-    <div style="
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
-      color: white;
-      padding: 12px 20px;
-      border-radius: 6px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-      z-index: 9999;
-      font-size: 14px;
-      animation: slideIn 0.3s ease-out;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    ">
-      ${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'} ${message}
-    </div>
-  `;
-  
-  // Add CSS for animation
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes slideIn {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-    @keyframes fadeOut {
-      from { opacity: 1; }
-      to { opacity: 0; }
-    }
-  `;
-  document.head.appendChild(style);
-  
-  document.body.appendChild(alertDiv);
-  
-  setTimeout(() => {
-    alertDiv.style.animation = 'fadeOut 0.3s ease-out';
+  // Simple notification function
+  const showAlert = (message, type = 'success') => {
+    // Create a simple alert element
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `simple-alert simple-alert-${type}`;
+    alertDiv.innerHTML = `
+      <div style="
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
+        color: white;
+        padding: 12px 20px;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 9999;
+        font-size: 14px;
+        animation: slideIn 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      ">
+        ${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'} ${message}
+      </div>
+    `;
+    
+    // Add CSS for animation
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes slideIn {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(alertDiv);
+    
     setTimeout(() => {
-      if (alertDiv.parentNode) {
-        alertDiv.parentNode.removeChild(alertDiv);
-      }
-    }, 300);
-  }, 3000);
-};
+      alertDiv.style.animation = 'fadeOut 0.3s ease-out';
+      setTimeout(() => {
+        if (alertDiv.parentNode) {
+          alertDiv.parentNode.removeChild(alertDiv);
+        }
+      }, 300);
+    }, 3000);
+  };
 
-
-const handleUpdateProject = async (updatedData) => {
-  console.log('🔄 handleUpdateProject called with:', updatedData);
-  
-  // FIXED: Get projectId from multiple possible sources
-  const projectId = updatedData.id || updatedData.project_id || updatedData.detailData?.id;
-  
-  if (!projectId) {
-    // Show error notification
-    setNotification({
-      show: true,
-      message: 'Project ID is required for update!',
-      type: 'error'
-    });
-    console.error('No project ID found in data:', updatedData);
-    return;
-  }
-  
-  console.log('Updating project ID:', projectId);
-  
-  try {
-    // Transform form data to match EXACT database schema
-    const backendData = {
-      // Basic Information (from database schema)
-      project_name: updatedData["Project Name"] || updatedData.project_name || null,
-      project_codename: updatedData["Project Codename"] || updatedData.project_codename || null,
-      plant_owner: updatedData["Plant Owner"] || updatedData.plant_owner || null,
-      location: updatedData["Location"] || updatedData.location || null,
-      site_acreage: updatedData["Site Acreage"] || updatedData.site_acreage || null,
-      status: updatedData["Status"] || updatedData.status || null,
-      
-      // Technical Details
-      legacy_nameplate_capacity_mw: updatedData["Legacy Nameplate Capacity (MW)"] || updatedData.mw || null,
-      tech: updatedData["Tech"] || updatedData.tech || null,
-      heat_rate_btu_kwh: updatedData["Heat Rate (Btu/kWh)"] || updatedData.hr || null,
-      capacity_factor_2024: updatedData["2024 Capacity Factor"] || updatedData.cf || null,
-      legacy_cod: updatedData["Legacy COD"] || updatedData.cod || null,
-      fuel: updatedData["Fuel"] || updatedData.fuel || null,
-      
-      // Market Details
-      iso: updatedData["ISO"] || updatedData.mkt || null,
-      zone_submarket: updatedData["Zone/Submarket"] || updatedData.zone || null,
-      markets: updatedData["Markets"] || updatedData.markets || null,
-      process_type: updatedData["Process (P) or Bilateral (B)"] || updatedData.process || null,
-      gas_reference: updatedData["Gas Reference"] || updatedData.gas_reference || null,
-      transactability: updatedData["Transactability"] || updatedData.transactability || null,
-      
-      // Redevelopment Details
-      redev_tier: updatedData["Redev Tier"] || updatedData.redev_tier || null,
-      redevelopment_base_case: updatedData["Redevelopment Base Case"] || updatedData.redev_base_case || null,
-      redev_capacity_mw: updatedData["Redev Capacity (MW)"] || updatedData.redev_capacity || null,
-      redev_tech: updatedData["Redev Tech"] || updatedData.redev_tech || null,
-      redev_fuel: updatedData["Redev Fuel"] || updatedData.redev_fuel || null,
-      redev_heatrate_btu_kwh: updatedData["Redev Heatrate (Btu/kWh)"] || updatedData.redev_heatrate || null,
-      redev_cod: updatedData["Redev COD"] || updatedData.redev_cod || null,
-      redev_land_control: updatedData["Redev Land Control"] || updatedData.redev_land_control || null,
-      redev_stage_gate: updatedData["Redev Stage Gate"] || updatedData.redev_stage_gate || null,
-      redev_lead: updatedData["Redev Lead"] || updatedData.redev_lead || null,
-      redev_support: updatedData["Redev Support"] || updatedData.redev_support || null,
-      co_locate_repower: updatedData["Co-Locate/Repower"] || updatedData.co_locate_repower || null,
-      
-      // Additional Information
-      contact: updatedData["Contact"] || updatedData.contact || null,
-      project_type: updatedData["Project Type"] || updatedData.project_type || null,
-      
-      // Scores - ONLY include if they exist in form
-      overall_project_score: updatedData.overall_project_score || updatedData.overall || null,
-      thermal_operating_score: updatedData.thermal_operating_score || updatedData.thermal || null,
-      redevelopment_score: updatedData.redevelopment_score || updatedData.redev || null,
-    };
+  const handleUpdateProject = async (updatedData) => {
+    console.log('🔄 handleUpdateProject called with:', updatedData);
     
-    // Parse numeric fields properly
-    const parseNumericField = (value) => {
-      if (value === null || value === undefined || value === "") return null;
-      const num = parseFloat(value);
-      return isNaN(num) ? null : num;
-    };
+    // FIXED: Get projectId from multiple possible sources
+    const projectId = updatedData.id || updatedData.project_id || updatedData.detailData?.id;
     
-    // Apply numeric parsing to specific fields
-    backendData.legacy_nameplate_capacity_mw = parseNumericField(backendData.legacy_nameplate_capacity_mw);
-    backendData.heat_rate_btu_kwh = parseNumericField(backendData.heat_rate_btu_kwh);
-    backendData.capacity_factor_2024 = parseNumericField(backendData.capacity_factor_2024);
-    backendData.redev_capacity_mw = parseNumericField(backendData.redev_capacity_mw);
-    backendData.redev_heatrate_btu_kwh = parseNumericField(backendData.redev_heatrate_btu_kwh);
-    backendData.overall_project_score = parseNumericField(backendData.overall_project_score);
-    backendData.thermal_operating_score = parseNumericField(backendData.thermal_operating_score);
-    backendData.redevelopment_score = parseNumericField(backendData.redevelopment_score);
-    
-    // Parse transactability as integer
-    if (backendData.transactability) {
-      const transactInt = parseInt(backendData.transactability);
-      backendData.transactability = isNaN(transactInt) ? null : transactInt;
-    }
-    
-    // Remove any fields that are explicitly null or undefined
-    const cleanData = {};
-    Object.keys(backendData).forEach(key => {
-      if (backendData[key] !== null && backendData[key] !== undefined) {
-        cleanData[key] = backendData[key];
-      }
-    });
-    
-    // CRITICAL: Remove the id field from the request body
-    // The id should only be in the URL, not the request body
-    delete cleanData.id;
-    delete cleanData.project_id;
-    
-    console.log('🔄 Sending to backend:', cleanData);
-    console.log('📊 Field count:', Object.keys(cleanData).length);
-    console.log('🚀 PUT request to:', `/api/projects/${projectId}`);
-    
-    const response = await fetch(`/api/projects/${projectId}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(cleanData)
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Server error response:', errorText);
-      
+    if (!projectId) {
       // Show error notification
       setNotification({
         show: true,
-        message: `Failed to update project: ${response.statusText}`,
+        message: 'Project ID is required for update!',
         type: 'error'
       });
-      
-      try {
-        const errorJson = JSON.parse(errorText);
-        throw new Error(`Failed to update project: ${errorJson.message || response.statusText}`);
-      } catch (e) {
-        throw new Error(`Failed to update project: ${response.status} ${response.statusText}\n${errorText.substring(0, 200)}`);
-      }
+      console.error('No project ID found in data:', updatedData);
+      return;
     }
     
-    const updatedProject = await response.json();
-    console.log('✅ Update response:', updatedProject);
+    console.log('Updating project ID:', projectId);
     
-    // Update local state with the response from backend
-    const updatedAllData = allData.map(row => {
-      if (row.id === projectId || row.project_id === projectId) {
-        const mergedProject = {
-          ...row,
-          ...updatedProject,
-          // Preserve original Excel row mapping if it exists
-          excel_row_id: row.excel_row_id || updatedProject.excel_row_id,
-        };
-        return mergedProject;
-      }
-      return row;
-    });
-    
-    const updatedPipelineRows = pipelineRows.map(row => {
-      if (row.id === projectId) {
-        const updatedRow = {
-          ...row,
-          // Map database fields to pipeline table format
-          asset: updatedProject.project_name || row.asset,
-          location: updatedProject.location || row.location,
-          owner: updatedProject.plant_owner || row.owner,
-          overall: parseFloat(updatedProject.overall_project_score || row.overall || 0),
-          thermal: parseFloat(updatedProject.thermal_operating_score || row.thermal || 0),
-          redev: parseFloat(updatedProject.redevelopment_score || row.redev || 0),
-          mw: parseFloat(updatedProject.legacy_nameplate_capacity_mw || row.mw || 0),
-          tech: updatedProject.tech || row.tech,
-          hr: parseFloat(updatedProject.heat_rate_btu_kwh || row.hr || 0),
-          cf: parseFloat(updatedProject.capacity_factor_2024 || row.cf || 0),
-          cod: updatedProject.legacy_cod || row.cod,
-          mkt: updatedProject.iso || row.mkt,
-          zone: updatedProject.zone_submarket || row.zone,
-          // Redevelopment fields
-          redevBaseCase: updatedProject.redevelopment_base_case || row.redevBaseCase,
-          redevCapacity: updatedProject.redev_capacity_mw || row.redevCapacity,
-          redevTier: updatedProject.redev_tier || row.redevTier,
-          redevTech: updatedProject.redev_tech || row.redevTech,
-          redevFuel: updatedProject.redev_fuel || row.redevFuel,
-          redevHeatrate: updatedProject.redev_heatrate_btu_kwh || row.redevHeatrate,
-          redevCOD: updatedProject.redev_cod || row.redevCOD,
-          redevLandControl: updatedProject.redev_land_control || row.redevLandControl,
-          redevStageGate: updatedProject.redev_stage_gate || row.redevStageGate,
-          redevLead: updatedProject.redev_lead || row.redevLead,
-          redevSupport: updatedProject.redev_support || row.redevSupport,
-          projectType: updatedProject.project_type || row.projectType,
-          status: updatedProject.status || row.status || calculateStatusFromCODs(updatedProject.legacy_cod || row.cod, updatedProject.redev_cod || row.redevCOD),
-          transactabilityScore: updatedProject.transactability || row.transactabilityScore,
-          detailData: { 
-            ...(row.detailData || {}), 
-            ...updatedProject,
-            id: projectId
-          }
-        };
+    try {
+      // Transform form data to match EXACT database schema
+      const backendData = {
+        // Basic Information (from database schema)
+        project_name: updatedData["Project Name"] || updatedData.project_name || null,
+        project_codename: updatedData["Project Codename"] || updatedData.project_codename || null,
+        plant_owner: updatedData["Plant Owner"] || updatedData.plant_owner || null,
+        location: updatedData["Location"] || updatedData.location || null,
+        site_acreage: updatedData["Site Acreage"] || updatedData.site_acreage || null,
+        status: updatedData["Status"] || updatedData.status || null,
+        ma_tier: updatedData["M&A Tier"] || updatedData.ma_tier || null, // NEW: M&A Tier
         
-        console.log('Updated pipeline row:', updatedRow);
-        return updatedRow;
+        // Technical Details
+        legacy_nameplate_capacity_mw: updatedData["Legacy Nameplate Capacity (MW)"] || updatedData.mw || null,
+        tech: updatedData["Tech"] || updatedData.tech || null,
+        heat_rate_btu_kwh: updatedData["Heat Rate (Btu/kWh)"] || updatedData.hr || null,
+        capacity_factor_2024: updatedData["2024 Capacity Factor"] || updatedData.cf || null,
+        legacy_cod: updatedData["Legacy COD"] || updatedData.cod || null,
+        fuel: updatedData["Fuel"] || updatedData.fuel || null,
+        
+        // Market Details
+        iso: updatedData["ISO"] || updatedData.mkt || null,
+        zone_submarket: updatedData["Zone/Submarket"] || updatedData.zone || null,
+        markets: updatedData["Markets"] || updatedData.markets || null,
+        process_type: updatedData["Process (P) or Bilateral (B)"] || updatedData.process || null,
+        gas_reference: updatedData["Gas Reference"] || updatedData.gas_reference || null,
+        transactability: updatedData["Transactability"] || updatedData.transactability || null,
+        
+        // Redevelopment Details
+        redev_tier: updatedData["Redev Tier"] || updatedData.redev_tier || null,
+        redevelopment_base_case: updatedData["Redevelopment Base Case"] || updatedData.redev_base_case || null,
+        redev_capacity_mw: updatedData["Redev Capacity (MW)"] || updatedData.redev_capacity || null,
+        redev_tech: updatedData["Redev Tech"] || updatedData.redev_tech || null,
+        redev_fuel: updatedData["Redev Fuel"] || updatedData.redev_fuel || null,
+        redev_heatrate_btu_kwh: updatedData["Redev Heatrate (Btu/kWh)"] || updatedData.redev_heatrate || null,
+        redev_cod: updatedData["Redev COD"] || updatedData.redev_cod || null,
+        redev_land_control: updatedData["Redev Land Control"] || updatedData.redev_land_control || null,
+        redev_stage_gate: updatedData["Redev Stage Gate"] || updatedData.redev_stage_gate || null,
+        redev_lead: updatedData["Redev Lead"] || updatedData.redev_lead || null,
+        redev_support: updatedData["Redev Support"] || updatedData.redev_support || null,
+        co_locate_repower: updatedData["Co-Locate/Repower"] || updatedData.co_locate_repower || null,
+        
+        // Additional Information
+        contact: updatedData["Contact"] || updatedData.contact || null,
+        project_type: updatedData["Project Type"] || updatedData.project_type || null,
+        
+        // Scores - ONLY include if they exist in form
+        overall_project_score: updatedData.overall_project_score || updatedData.overall || null,
+        thermal_operating_score: updatedData.thermal_operating_score || updatedData.thermal || null,
+        redevelopment_score: updatedData.redevelopment_score || updatedData.redev || null,
+      };
+      
+      // Parse numeric fields properly
+      const parseNumericField = (value) => {
+        if (value === null || value === undefined || value === "") return null;
+        const num = parseFloat(value);
+        return isNaN(num) ? null : num;
+      };
+      
+      // Apply numeric parsing to specific fields
+      backendData.legacy_nameplate_capacity_mw = parseNumericField(backendData.legacy_nameplate_capacity_mw);
+      backendData.heat_rate_btu_kwh = parseNumericField(backendData.heat_rate_btu_kwh);
+      backendData.capacity_factor_2024 = parseNumericField(backendData.capacity_factor_2024);
+      backendData.redev_capacity_mw = parseNumericField(backendData.redev_capacity_mw);
+      backendData.redev_heatrate_btu_kwh = parseNumericField(backendData.redev_heatrate_btu_kwh);
+      backendData.overall_project_score = parseNumericField(backendData.overall_project_score);
+      backendData.thermal_operating_score = parseNumericField(backendData.thermal_operating_score);
+      backendData.redevelopment_score = parseNumericField(backendData.redevelopment_score);
+      
+      // Parse transactability as integer
+      if (backendData.transactability) {
+        const transactInt = parseInt(backendData.transactability);
+        backendData.transactability = isNaN(transactInt) ? null : transactInt;
       }
-      return row;
-    });
-    
-    // Update states
-    setAllData(updatedAllData);
-    setPipelineRows(updatedPipelineRows);
-    
-    // SHOW WINDOW ALERT HERE - This will pop up immediately
-    window.alert(`✅ Project "${updatedProject.project_name || updatedData["Project Name"]}" has been successfully updated!`);
-    
-    setShowEditModal(false);
-    setEditingProject(null);
-    
-    // Show success notification (if you still want the in-app notification too)
-    setNotification({
-      show: true,
-      message: `Project "${updatedProject.project_name || updatedData["Project Name"]}" updated successfully!`,
-      type: 'success'
-    });
-    
-    // Recalculate data
-    const headers = Object.keys(updatedAllData[0] || {});
-    calculateAllData(updatedAllData, headers, {
-      setKpiRow1, setKpiRow2, setIsoData, setTechData, 
-      setRedevelopmentTypes, setCounterparties, setPipelineRows: () => {}
-    });
-    
-    
-    applyAutomaticSorting(updatedPipelineRows);
-    
-  } catch (error) {
-    console.error('❌ Update project error:', error);
-    
-    // Show error alert
-    window.alert(`❌ Failed to update project: ${error.message}`);
-    
-    setNotification({
-      show: true,
-      message: `Failed to update project: ${error.message}`,
-      type: 'error'
-    });
-  }
-};
+      
+      // Remove any fields that are explicitly null or undefined
+      const cleanData = {};
+      Object.keys(backendData).forEach(key => {
+        if (backendData[key] !== null && backendData[key] !== undefined) {
+          cleanData[key] = backendData[key];
+        }
+      });
+      
+      // CRITICAL: Remove the id field from the request body
+      // The id should only be in the URL, not the request body
+      delete cleanData.id;
+      delete cleanData.project_id;
+      
+      console.log('🔄 Sending to backend:', cleanData);
+      console.log('📊 Field count:', Object.keys(cleanData).length);
+      console.log('🚀 PUT request to:', `/api/projects/${projectId}`);
+      
+      const response = await fetch(`/api/projects/${projectId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(cleanData)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Server error response:', errorText);
+        
+        // Show error notification
+        setNotification({
+          show: true,
+          message: `Failed to update project: ${response.statusText}`,
+          type: 'error'
+        });
+        
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(`Failed to update project: ${errorJson.message || response.statusText}`);
+        } catch (e) {
+          throw new Error(`Failed to update project: ${response.status} ${response.statusText}\n${errorText.substring(0, 200)}`);
+        }
+      }
+      
+      const updatedProject = await response.json();
+      console.log('✅ Update response:', updatedProject);
+      
+      // Update local state with the response from backend
+      const updatedAllData = allData.map(row => {
+        if (row.id === projectId || row.project_id === projectId) {
+          const mergedProject = {
+            ...row,
+            ...updatedProject,
+            // Preserve original Excel row mapping if it exists
+            excel_row_id: row.excel_row_id || updatedProject.excel_row_id,
+          };
+          return mergedProject;
+        }
+        return row;
+      });
+      
+      const updatedPipelineRows = pipelineRows.map(row => {
+        if (row.id === projectId) {
+          const updatedRow = {
+            ...row,
+            // Map database fields to pipeline table format
+            asset: updatedProject.project_name || row.asset,
+            location: updatedProject.location || row.location,
+            owner: updatedProject.plant_owner || row.owner,
+            overall: parseFloat(updatedProject.overall_project_score || row.overall || 0),
+            thermal: parseFloat(updatedProject.thermal_operating_score || row.thermal || 0),
+            redev: parseFloat(updatedProject.redevelopment_score || row.redev || 0),
+            mw: parseFloat(updatedProject.legacy_nameplate_capacity_mw || row.mw || 0),
+            tech: updatedProject.tech || row.tech,
+            hr: parseFloat(updatedProject.heat_rate_btu_kwh || row.hr || 0),
+            cf: parseFloat(updatedProject.capacity_factor_2024 || row.cf || 0),
+            cod: updatedProject.legacy_cod || row.cod,
+            mkt: updatedProject.iso || row.mkt,
+            zone: updatedProject.zone_submarket || row.zone,
+            // NEW: M&A Tier field
+            maTier: updatedProject.ma_tier || row.maTier,
+            // Redevelopment fields
+            redevBaseCase: updatedProject.redevelopment_base_case || row.redevBaseCase,
+            redevCapacity: updatedProject.redev_capacity_mw || row.redevCapacity,
+            redevTier: updatedProject.redev_tier || row.redevTier,
+            redevTech: updatedProject.redev_tech || row.redevTech,
+            redevFuel: updatedProject.redev_fuel || row.redevFuel,
+            redevHeatrate: updatedProject.redev_heatrate_btu_kwh || row.redevHeatrate,
+            redevCOD: updatedProject.redev_cod || row.redevCOD,
+            redevLandControl: updatedProject.redev_land_control || row.redevLandControl,
+            redevStageGate: updatedProject.redev_stage_gate || row.redevStageGate,
+            redevLead: updatedProject.redev_lead || row.redevLead,
+            redevSupport: updatedProject.redev_support || row.redevSupport,
+            projectType: updatedProject.project_type || row.projectType,
+            status: updatedProject.status || row.status || calculateStatusFromCODs(updatedProject.legacy_cod || row.cod, updatedProject.redev_cod || row.redevCOD),
+            transactabilityScore: updatedProject.transactability || row.transactabilityScore,
+            detailData: { 
+              ...(row.detailData || {}), 
+              ...updatedProject,
+              id: projectId
+            }
+          };
+          
+          console.log('Updated pipeline row:', updatedRow);
+          return updatedRow;
+        }
+        return row;
+      });
+      
+      // Update states
+      setAllData(updatedAllData);
+      setPipelineRows(updatedPipelineRows);
+      
+      // SHOW WINDOW ALERT HERE - This will pop up immediately
+      window.alert(`✅ Project "${updatedProject.project_name || updatedData["Project Name"]}" has been successfully updated!`);
+      
+      setShowEditModal(false);
+      setEditingProject(null);
+      
+      // Show success notification (if you still want the in-app notification too)
+      setNotification({
+        show: true,
+        message: `Project "${updatedProject.project_name || updatedData["Project Name"]}" updated successfully!`,
+        type: 'success'
+      });
+      
+      // Recalculate data
+      const headers = Object.keys(updatedAllData[0] || {});
+      calculateAllData(updatedAllData, headers, {
+        setKpiRow1, setKpiRow2, setIsoData, setTechData, 
+        setRedevelopmentTypes, setCounterparties, setPipelineRows: () => {}
+      });
+      
+      applyAutomaticSorting(updatedPipelineRows);
+      
+    } catch (error) {
+      console.error('❌ Update project error:', error);
+      
+      // Show error alert
+      window.alert(`❌ Failed to update project: ${error.message}`);
+      
+      setNotification({
+        show: true,
+        message: `Failed to update project: ${error.message}`,
+        type: 'error'
+      });
+    }
+  };
 
   const closeEditModal = () => {
     setShowEditModal(false);
@@ -919,7 +962,7 @@ const handleUpdateProject = async (updatedData) => {
       detailData: {
         ...(dbRow || {}),
         ...(project.detailData || {}),
-        // Include database column names for redevelopment
+        // Include database column names for redevelopment and new fields
         redev_tier: (dbRow?.redev_tier && dbRow.redev_tier.toString().trim() !== "" 
                      ? dbRow.redev_tier 
                      : project.redevTier ?? project.detailData?.redev_tier ?? ""),
@@ -950,6 +993,10 @@ const handleUpdateProject = async (updatedData) => {
         redev_support: (dbRow?.redev_support && dbRow.redev_support.toString().trim() !== "" 
                       ? dbRow.redev_support 
                       : project.redevSupport ?? project.detailData?.redev_support ?? ""),
+        // NEW: M&A Tier field
+        ma_tier: (dbRow?.ma_tier && dbRow.ma_tier.toString().trim() !== "" 
+                 ? dbRow.ma_tier 
+                 : project.maTier ?? project.detailData?.ma_tier ?? ""),
         project_type: (dbRow?.project_type && dbRow.project_type.toString().trim() !== "" 
                      ? dbRow.project_type 
                      : project.projectType ?? project.detailData?.project_type ?? ""),
@@ -961,6 +1008,7 @@ const handleUpdateProject = async (updatedData) => {
     
     console.log('🔍 DEBUG: Project data being sent to modal:', projectWithTransmission);
     console.log('🔍 DEBUG: Database row found:', dbRow);
+    console.log('🔍 DEBUG: M&A Tier:', projectWithTransmission.detailData.ma_tier);
     
     setSelectedProject(projectWithTransmission);
     setShowProjectDetail(true);
@@ -1017,6 +1065,7 @@ const handleUpdateProject = async (updatedData) => {
       redev_support: "",
       project_type: "",
       status: "",
+      ma_tier: "", // NEW: M&A Tier field
       transactability_scores: "",
       transactability: ""
     });
@@ -1029,86 +1078,86 @@ const handleUpdateProject = async (updatedData) => {
     }));
   };
 
- const handleAddSiteSubmit = async (e) => {
-  e.preventDefault();
-  
-  try {
-    // Log the data being sent
-    console.log("📤 Original form data:", newSiteData);
+  const handleAddSiteSubmit = async (e) => {
+    e.preventDefault();
     
-    // Clean the data - convert empty strings to null for database
-    const cleanSiteData = {};
-    Object.entries(newSiteData).forEach(([key, value]) => {
-      if (value === "" || value === null || value === undefined) {
-        cleanSiteData[key] = null;
-      } else {
-        // Convert numeric fields if they contain numbers
-        const numericFields = [
-          'legacy_nameplate_capacity_mw', 'redev_capacity_mw',
-          'heat_rate_btu_kwh', 'redev_heatrate_btu_kwh',
-          'capacity_factor_2024', 'overall_project_score',
-          'thermal_operating_score', 'redevelopment_score'
-        ];
-        
-        if (numericFields.includes(key) && !isNaN(parseFloat(value))) {
-          cleanSiteData[key] = parseFloat(value);
+    try {
+      // Log the data being sent
+      console.log("📤 Original form data:", newSiteData);
+      
+      // Clean the data - convert empty strings to null for database
+      const cleanSiteData = {};
+      Object.entries(newSiteData).forEach(([key, value]) => {
+        if (value === "" || value === null || value === undefined) {
+          cleanSiteData[key] = null;
         } else {
-          cleanSiteData[key] = value;
+          // Convert numeric fields if they contain numbers
+          const numericFields = [
+            'legacy_nameplate_capacity_mw', 'redev_capacity_mw',
+            'heat_rate_btu_kwh', 'redev_heatrate_btu_kwh',
+            'capacity_factor_2024', 'overall_project_score',
+            'thermal_operating_score', 'redevelopment_score'
+          ];
+          
+          if (numericFields.includes(key) && !isNaN(parseFloat(value))) {
+            cleanSiteData[key] = parseFloat(value);
+          } else {
+            cleanSiteData[key] = value;
+          }
         }
+      });
+      
+      // Ensure status is calculated if not provided
+      if (!cleanSiteData.status || cleanSiteData.status === "") {
+        const calculatedStatus = calculateStatusFromCODs(
+          cleanSiteData.legacy_cod || "", 
+          cleanSiteData.redev_cod || ""
+        );
+        cleanSiteData.status = calculatedStatus || "Unknown";
       }
-    });
-    
-    // Ensure status is calculated if not provided
-    if (!cleanSiteData.status || cleanSiteData.status === "") {
-      const calculatedStatus = calculateStatusFromCODs(
-        cleanSiteData.legacy_cod || "", 
-        cleanSiteData.redev_cod || ""
-      );
-      cleanSiteData.status = calculatedStatus || "Unknown";
+      
+      // Set default scores if empty
+      cleanSiteData.overall_project_score = cleanSiteData.overall_project_score || "0.0";
+      cleanSiteData.thermal_operating_score = cleanSiteData.thermal_operating_score || "0.0";
+      cleanSiteData.redevelopment_score = cleanSiteData.redevelopment_score || "0.0";
+      
+      console.log("📤 Cleaned data being sent to API:", cleanSiteData);
+      
+      const response = await fetch('/api/projects', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(cleanSiteData)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Server error response:', errorText);
+        throw new Error(`Failed to add project: ${response.status} ${response.statusText}\nDetails: ${errorText}`);
+      }
+      
+      const newProject = await response.json();
+      
+      // Add to local state
+      const updatedData = [...allData, newProject];
+      setAllData(updatedData);
+      
+      // Recalculate data
+      const headers = Object.keys(updatedData[0] || {});
+      calculateAllData(updatedData, headers, {
+        setKpiRow1, setKpiRow2, setIsoData, setTechData, 
+        setRedevelopmentTypes, setCounterparties, setPipelineRows
+      });
+      
+      closeAddSiteModal();
+      alert("Site added successfully!");
+    } catch (error) {
+      console.error('❌ Add site error:', error);
+      alert(`Failed to add site: ${error.message}`);
     }
-    
-    // Set default scores if empty
-    cleanSiteData.overall_project_score = cleanSiteData.overall_project_score || "0.0";
-    cleanSiteData.thermal_operating_score = cleanSiteData.thermal_operating_score || "0.0";
-    cleanSiteData.redevelopment_score = cleanSiteData.redevelopment_score || "0.0";
-    
-    console.log("📤 Cleaned data being sent to API:", cleanSiteData);
-    
-    const response = await fetch('/api/projects', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(cleanSiteData)
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Server error response:', errorText);
-      throw new Error(`Failed to add project: ${response.status} ${response.statusText}\nDetails: ${errorText}`);
-    }
-    
-    const newProject = await response.json();
-    
-    // Add to local state
-    const updatedData = [...allData, newProject];
-    setAllData(updatedData);
-    
-    // Recalculate data
-    const headers = Object.keys(updatedData[0] || {});
-    calculateAllData(updatedData, headers, {
-      setKpiRow1, setKpiRow2, setIsoData, setTechData, 
-      setRedevelopmentTypes, setCounterparties, setPipelineRows
-    });
-    
-    closeAddSiteModal();
-    alert("Site added successfully!");
-  } catch (error) {
-    console.error('❌ Add site error:', error);
-    alert(`Failed to add site: ${error.message}`);
-  }
-};
+  };
 
   // Handler for scores submission (if using scoring modal)
   const handleScoresSubmitted = (scoringResult) => {
@@ -1155,6 +1204,7 @@ const handleUpdateProject = async (updatedData) => {
     const isoSet = new Set();
     const processSet = new Set();
     const fuelSet = new Set();
+    const maTierSet = new Set(["Owned", "Exclusivity", "second round", "first round", "pipeline", "passed"]);
     const redevTechSet = new Set(["ST", "GT", "CCGT", "Hydro", "Wind", "Solar", "BESS", "Other"]);
     const redevFuelSet = new Set(["Gas", "Coal", "Oil", "Nuclear", "Biomass", "Diesel", "N/A"]);
     const redevTierSet = new Set(["0", "1", "2", "3"]);
@@ -1183,12 +1233,26 @@ const handleUpdateProject = async (updatedData) => {
         const bases = row["Redevelopment Base Case"].toString().split(/[\n\/]/).map(b => b.trim()).filter(b => b);
         bases.forEach(base => redevelopmentBaseSet.add(base));
       }
+      // NEW: Extract M&A Tier from data
+      if (row["M&A Tier"]) {
+        const maTiers = row["M&A Tier"].toString().split(',').map(t => t.trim()).filter(t => t);
+        maTiers.forEach(tier => maTierSet.add(tier));
+      }
     });
     
     const extractedOptions = {
       projectTypeOptions: [{ type_name: "Redev" }, { type_name: "M&A" }, { type_name: "Owned" }],
       redevFuelOptions: Array.from(redevFuelSet).map(fuel => ({ fuel_name: fuel })),
       redevelopmentBaseOptions: Array.from(redevelopmentBaseSet).map(base => ({ base_case_name: base })),
+      maTierOptions: Array.from(maTierSet).map(tier => ({ 
+        value: tier, 
+        color: tier === 'Owned' ? '#8b5cf6' : 
+               tier === 'Exclusivity' ? '#10b981' : 
+               tier === 'second round' ? '#3b82f6' : 
+               tier === 'first round' ? '#f59e0b' : 
+               tier === 'pipeline' ? '#6b7280' : 
+               '#ef4444'
+      })),
       redevLeadOptions: [],
       redevSupportOptions: [],
       coLocateRepowerOptions: Array.from(coLocateRepowerSet).map(option => ({ option_name: option })),
@@ -1334,6 +1398,8 @@ const handleUpdateProject = async (updatedData) => {
           "Redev Stage Gate": project.redev_stage_gate || "",
           "Redev Lead": project.redev_lead || "",
           "Redev Support": project.redev_support || "",
+          // NEW: M&A Tier field
+          "M&A Tier": project.ma_tier || "",
           "Project Type": project.project_type || "",
           "Status": project.status || "",
           "Transactability Scores": project.transactability_scores || "",
@@ -1358,7 +1424,7 @@ const handleUpdateProject = async (updatedData) => {
       // Fetch dropdown options
       fetchDropdownOptions();
       
-      // Calculate initial data
+      // Calculate initial data - FIXED: Now passes all transformed data with new fields
       const headers = Object.keys(transformedData[0] || {});
       calculateAllData(transformedData, headers, {
         setKpiRow1, setKpiRow2, setIsoData, setTechData, 
@@ -1585,7 +1651,7 @@ const handleUpdateProject = async (updatedData) => {
     }
   }, [allData]);
 
-  // Update the getAllExpertAnalyses function to include ALL redevelopment fields
+  // Update the getAllExpertAnalyses function to include ALL redevelopment fields and M&A Tier
   const getAllExpertAnalyses = () => {
     const dataToUse = allData;
     
@@ -1874,30 +1940,29 @@ const handleUpdateProject = async (updatedData) => {
         />
         
         {/* UPDATED: Pass new filter handlers to BottomGridSection */}
-        <BottomGridSection 
-          counterparties={counterparties}
-          pipelineRows={pipelineRows}
-          sortConfig={sortConfig}
-          handleSort={handleSort}
-          getSortDirectionClass={getSortDirectionClass}
-          resetSort={resetSort}
-          getSortedPipelineRows={getSortedPipelineRows}
-          handleProjectClick={handleProjectClick}
-          kpiRow1={kpiRow1}
-          handleEditProject={handleEditProject}
-          handleDeleteProject={handleDeleteProject}
-          activeTechFilter={activeTechFilter}
-          clearTechFilter={() => setActiveTechFilter(null)}
-          handleFilterByCounterparty={handleFilterByCounterparty}
-          activeCounterpartyFilter={activeCounterpartyFilter}
-          clearCounterpartyFilter={() => setActiveCounterpartyFilter(null)}
-          activeIsoFilter={activeIsoFilter}
-          activeRedevFilter={activeRedevFilter}
-          clearIsoFilter={() => setActiveIsoFilter(null)}
-          clearRedevFilter={() => setActiveRedevFilter(null)}
-          selectedProjectType={selectedProjectType} // ADDED: Pass selectedProjectType to PipelineTable
-        />
-
+      <BottomGridSection 
+        counterparties={counterparties}
+        pipelineRows={autoSortedPipelineRows.length > 0 ? autoSortedPipelineRows : pipelineRows} // Pass auto-sorted rows
+        sortConfig={sortConfig}
+        handleSort={handleSort}
+        getSortDirectionClass={getSortDirectionClass}
+        resetSort={resetSort}
+        getSortedPipelineRows={getSortedPipelineRows}
+        handleProjectClick={handleProjectClick}
+        kpiRow1={kpiRow1}
+        handleEditProject={handleEditProject}
+        handleDeleteProject={handleDeleteProject}
+        activeTechFilter={activeTechFilter}
+        clearTechFilter={() => setActiveTechFilter(null)}
+        handleFilterByCounterparty={handleFilterByCounterparty}
+        activeCounterpartyFilter={activeCounterpartyFilter}
+        clearCounterpartyFilter={() => setActiveCounterpartyFilter(null)}
+        activeIsoFilter={activeIsoFilter}
+        activeRedevFilter={activeRedevFilter}
+        clearIsoFilter={() => setActiveIsoFilter(null)}
+        clearRedevFilter={() => setActiveRedevFilter(null)}
+        selectedProjectType={selectedProjectType}
+      />
         {/* Modals */}
         {showAddSiteModal && (
           <AddSiteModal

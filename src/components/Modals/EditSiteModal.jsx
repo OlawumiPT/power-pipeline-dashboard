@@ -6,8 +6,7 @@ const EditSiteModal = ({
   handleUpdateProject,
   projectData,
   allData,
-  dropdownOptions, // ALL FROM DATABASE TABLES
-  US_CITIES,
+  dropdownOptions, 
   calculateStatusFromCODs
 }) => {
   const [formData, setFormData] = useState({});
@@ -15,19 +14,14 @@ const EditSiteModal = ({
   const [filteredLocations, setFilteredLocations] = useState([]);
   const [showLocationSuggestions, setShowLocationSuggestions] = useState(false);
   
-  // Multi-select states
   const [selectedProjectTypes, setSelectedProjectTypes] = useState([]);
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedRedevelopmentBases, setSelectedRedevelopmentBases] = useState([]);
   const [newRedevelopmentBase, setNewRedevelopmentBase] = useState("");
   const [selectedRedevFuels, setSelectedRedevFuels] = useState([]);
   const [newRedevFuel, setNewRedevFuel] = useState("");
-  
-  // Add new options states
   const [showNewCoLocateRepowerInput, setShowNewCoLocateRepowerInput] = useState(false);
   const [newCoLocateRepower, setNewCoLocateRepower] = useState("");
-  
-  // ALL DROPDOWN OPTIONS FROM DATABASE
   const {
     // From lookup tables:
     projectTypeOptions = [],
@@ -36,20 +30,30 @@ const EditSiteModal = ({
     redevLeadOptions = [],
     redevSupportOptions = [],
     coLocateRepowerOptions = [],
-    
-    // From distinct values:
+    maTierOptions = [], 
     plantOwners = [],
     technologyOptions = [],
     fuelTypes = [],
     isoOptions = [],
-    
-    // Fixed options:
     processOptions = ["P", "B"],
     redevTechOptions = ["ST", "GT", "CCGT", "Hydro", "Wind", "Solar", "BESS", "Other"],
-    redevTierOptions = ["0", "1", "2", "3"],
+    redevTierOptions = ["0", "1", "2", "3", "I", "II", "III", "IV", "V"],
     redevLandControlOptions = ["Y", "N"],
     redevStageGateOptions = ["0", "1", "2", "3", "P"]
   } = dropdownOptions || {};
+  
+  const defaultMaTierOptions = [
+    'Owned',
+    'Exclusivity',
+    'Second round',
+    'First round',
+    'Pipeline',
+    'Passed'
+  ];
+  
+  const maTierOptionsToUse = maTierOptions && maTierOptions.length > 0 
+    ? maTierOptions.map(tier => tier.value || tier.tier_name || tier.name || tier)
+    : defaultMaTierOptions;
   
   // Transactability options
   const transactabilityScoreOptions = [
@@ -59,17 +63,38 @@ const EditSiteModal = ({
   ];
   
   // Status options
-  const statusOptions = ["Operating", "Retired", "Future", "N/A", "Unknown"];
-  
-  // Initialize form with project data
+  const statusOptions = ["Operating", "Retired", "Future", "Development", "Proposed", "Cancelled", "Unknown"];
+
+  // Import US_CITIES for location autocomplete
+  const US_CITIES = [
+    "New York, NY", "Los Angeles, CA", "Chicago, IL", "Houston, TX", "Phoenix, AZ",
+    "Philadelphia, PA", "San Antonio, TX", "San Diego, CA", "Dallas, TX", "San Jose, CA",
+    "Austin, TX", "Jacksonville, FL", "Fort Worth, TX", "Columbus, OH", "Charlotte, NC",
+    "San Francisco, CA", "Indianapolis, IN", "Seattle, WA", "Denver, CO", "Washington, DC",
+    "Boston, MA", "El Paso, TX", "Detroit, MI", "Nashville, TN", "Portland, OR",
+    "Memphis, TN", "Oklahoma City, OK", "Las Vegas, NV", "Louisville, KY", "Baltimore, MD",
+    "Milwaukee, WI", "Albuquerque, NM", "Tucson, AZ", "Fresno, CA", "Sacramento, CA",
+    "Kansas City, MO", "Long Beach, CA", "Mesa, AZ", "Atlanta, GA", "Colorado Springs, CO",
+    "Virginia Beach, VA", "Raleigh, NC", "Omaha, NE", "Miami, FL", "Oakland, CA",
+    "Minneapolis, MN", "Tulsa, OK", "Wichita, KS", "New Orleans, LA", "Arlington, TX"
+  ];
+
   useEffect(() => {
     if (showEditModal && projectData) {
       console.log("=== EDIT MODAL: Loading project data ===");
       console.log("Project data received:", projectData);
       
-      // Extract all values with proper field names - FIXED to handle all possible data structures
+      // Debug: Check all possible sources for POI Voltage
+      console.log("Checking POI Voltage sources:");
+      console.log("1. projectData['POI Voltage (KV)']:", projectData["POI Voltage (KV)"]);
+      console.log("2. projectData.poi_voltage_kv:", projectData.poi_voltage_kv);
+      console.log("3. projectData.poi_voltage:", projectData.poi_voltage);
+      console.log("4. projectData.poiVoltage:", projectData.poiVoltage);
+      console.log("5. projectData.detailData?.poi_voltage_kv:", projectData.detailData?.poi_voltage_kv);
+      console.log("6. projectData.detailData?.poiVoltage:", projectData.detailData?.poiVoltage);
+      console.log("7. projectData.detailData?.['POI Voltage (KV)']:", projectData.detailData?.["POI Voltage (KV)"]);
+      
       const formattedData = {
-        // Basic Information
         id: projectData.id || projectData.project_id || projectData.detailData?.id,
         project_id: projectData.project_id || projectData.id,
         "Project Name": projectData["Project Name"] || projectData.project_name || projectData.asset || "",
@@ -78,50 +103,84 @@ const EditSiteModal = ({
         "Location": projectData["Location"] || projectData.location || "",
         "Site Acreage": projectData["Site Acreage"] || projectData.site_acreage || projectData.acreage || "",
         "Status": projectData["Status"] || projectData.status || "",
-        
-        // Technical Details
-        "Legacy Nameplate Capacity (MW)": projectData["Legacy Nameplate Capacity (MW)"] || projectData.legacy_capacity_mw || projectData.mw || "",
+        "M&A Tier": projectData["M&A Tier"] || projectData.ma_tier || projectData.maTier || "",
+        // FIXED: Check multiple sources for POI Voltage
+        "POI Voltage (KV)": projectData["POI Voltage (KV)"] || 
+                           projectData.poi_voltage_kv || 
+                           projectData.poi_voltage || 
+                           projectData.poiVoltage ||
+                           projectData.detailData?.poi_voltage_kv ||
+                           projectData.detailData?.poiVoltage ||
+                           projectData.detailData?.["POI Voltage (KV)"] || 
+                           "",
+        "Legacy Nameplate Capacity (MW)": projectData["Legacy Nameplate Capacity (MW)"] || 
+                                          projectData.legacy_capacity_mw || 
+                                          projectData.mw || 
+                                          "",
         "Tech": projectData["Tech"] || projectData.technology || projectData.tech || "",
-        "Heat Rate (Btu/kWh)": projectData["Heat Rate (Btu/kWh)"] || projectData.heat_rate_btu_kwh || projectData.hr || "",
-        "2024 Capacity Factor": projectData["2024 Capacity Factor"] || projectData.capacity_factor_percent || projectData.cf || "",
+        "Heat Rate (Btu/kWh)": projectData["Heat Rate (Btu/kWh)"] || 
+                              projectData.heat_rate_btu_kwh || 
+                              projectData.hr || 
+                              "",
+        "2024 Capacity Factor": projectData["2024 Capacity Factor"] || 
+                               projectData.capacity_factor_percent || 
+                               projectData.cf || 
+                               "",
         "Legacy COD": projectData["Legacy COD"] || projectData.legacy_cod || projectData.cod || "",
         "Fuel": projectData["Fuel"] || projectData.fuel_type || projectData.fuel || "",
-        
-        // Market Details
         "ISO": projectData["ISO"] || projectData.iso_rto || projectData.mkt || "",
-        "Zone/Submarket": projectData["Zone/Submarket"] || projectData.zone_submarket || projectData.zone || "",
+        "Zone/Submarket": projectData["Zone/Submarket"] || 
+                         projectData.zone_submarket || 
+                         projectData.zone || 
+                         "",
         "Markets": projectData["Markets"] || projectData.markets || "",
-        "Process (P) or Bilateral (B)": projectData["Process (P) or Bilateral (B)"] || projectData.process_type || projectData.process || "",
-        "Gas Reference": projectData["Gas Reference"] || projectData.gas_reference || projectData.gasReference || "",
-        "Transactability": projectData["Transactability"] || projectData.transactability_score || "",
-        
-        // Redevelopment Details
+        "Process (P) or Bilateral (B)": projectData["Process (P) or Bilateral (B)"] || 
+                                       projectData.process_type || 
+                                       projectData.process || 
+                                       "",
+        "Gas Reference": projectData["Gas Reference"] || 
+                        projectData.gas_reference || 
+                        projectData.gasReference || 
+                        "",
+        "Transactability": projectData["Transactability"] || 
+                          projectData.transactability_score || 
+                          "",
         "Redev Tier": projectData["Redev Tier"] || projectData.redev_tier || "",
-        "Redevelopment Base Case": projectData["Redevelopment Base Case"] || projectData.redev_base_case || "",
-        "Redev Capacity (MW)": projectData["Redev Capacity (MW)"] || projectData.redev_capacity_mw || "",
+        "Redevelopment Base Case": projectData["Redevelopment Base Case"] || 
+                                   projectData.redev_base_case || 
+                                   "",
+        "Redev Capacity (MW)": projectData["Redev Capacity (MW)"] || 
+                              projectData.redev_capacity_mw || 
+                              "",
         "Redev Tech": projectData["Redev Tech"] || projectData.redev_tech || "",
         "Redev Fuel": projectData["Redev Fuel"] || projectData.redev_fuel || "",
-        "Redev Heatrate (Btu/kWh)": projectData["Redev Heatrate (Btu/kWh)"] || projectData.redev_heatrate_btu_kwh || "",
+        "Redev Heatrate (Btu/kWh)": projectData["Redev Heatrate (Btu/kWh)"] || 
+                                    projectData.redev_heatrate_btu_kwh || 
+                                    "",
         "Redev COD": projectData["Redev COD"] || projectData.redev_cod || "",
-        "Redev Land Control": projectData["Redev Land Control"] || projectData.redev_land_control || "",
-        "Redev Stage Gate": projectData["Redev Stage Gate"] || projectData.redev_stage_gate || "",
+        "Redev Land Control": projectData["Redev Land Control"] || 
+                             projectData.redev_land_control || 
+                             "",
+        "Redev Stage Gate": projectData["Redev Stage Gate"] || 
+                           projectData.redev_stage_gate || 
+                           "",
         "Redev Lead": projectData["Redev Lead"] || projectData.redev_lead || "",
         "Redev Support": projectData["Redev Support"] || projectData.redev_support || "",
-        "Co-Locate/Repower": projectData["Co-Locate/Repower"] || projectData.co_locate_repower || projectData.colocateRepower || "",
-        
-        // Additional Information
+        "Co-Locate/Repower": projectData["Co-Locate/Repower"] || 
+                            projectData.co_locate_repower || 
+                            projectData.colocateRepower || 
+                            "",
         "Contact": projectData["Contact"] || projectData.contact_name || projectData.contact || "",
         "Project Type": projectData["Project Type"] || projectData.project_type || "",
       };
       
       console.log("Formatted data for edit:", formattedData);
+      console.log("M&A Tier value:", formattedData["M&A Tier"]);
+      console.log("POI Voltage value:", formattedData["POI Voltage (KV)"]);
       
       // Set form data
       setFormData(formattedData);
       setLocationInput(formattedData["Location"] || "");
-      
-      // Parse multi-select fields
-      // Project Types
       const projectTypeValue = formattedData["Project Type"] || "";
       if (projectTypeValue) {
         const types = projectTypeValue.split(',').map(t => t.trim()).filter(t => t);
@@ -193,7 +252,8 @@ const EditSiteModal = ({
     
     // Auto-update status
     if (digitsOnly.length === 4) {
-      const calculatedStatus = calculateStatusFromCODs(digitsOnly, formData["Redev COD"] || "");
+      const redevCOD = formData["Redev COD"] || "";
+      const calculatedStatus = calculateStatusFromCODs(digitsOnly, redevCOD);
       if (calculatedStatus) {
         setSelectedStatus(calculatedStatus);
         handleInputChange("Status", calculatedStatus);
@@ -212,6 +272,17 @@ const EditSiteModal = ({
         setSelectedStatus(calculatedStatus);
         handleInputChange("Status", calculatedStatus);
       }
+    }
+  };
+
+  // POI Voltage handler - Updated to handle both string and number
+  const handlePoiVoltageChange = (value) => {
+    // Convert to number if it's a valid number, otherwise keep as string
+    const numericValue = parseFloat(value);
+    if (!isNaN(numericValue) && value.trim() !== '') {
+      handleInputChange("POI Voltage (KV)", numericValue);
+    } else {
+      handleInputChange("POI Voltage (KV)", value);
     }
   };
 
@@ -238,6 +309,11 @@ const EditSiteModal = ({
   const handleStatusChange = (value) => {
     setSelectedStatus(value);
     handleInputChange("Status", value);
+  };
+
+  // M&A Tier handler
+  const handleMaTierChange = (value) => {
+    handleInputChange("M&A Tier", value);
   };
 
   // Redevelopment Base Case handler
@@ -312,6 +388,9 @@ const EditSiteModal = ({
     console.log("Submitting updated project:", formData);
     console.log("Project ID:", formData.id);
     console.log("Project Type:", formData["Project Type"]);
+    console.log("M&A Tier:", formData["M&A Tier"]);
+    console.log("POI Voltage:", formData["POI Voltage (KV)"]);
+    console.log("Status:", formData["Status"]);
     console.log("Redev Fuel:", formData["Redev Fuel"]);
     console.log("Redev Base Case:", formData["Redevelopment Base Case"]);
     
@@ -457,6 +536,23 @@ const EditSiteModal = ({
                   />
                 </div>
 
+                {/* NEW: M&A Tier Field */}
+                <div className="form-group">
+                  <label className="form-label">M&A Tier</label>
+                  <select
+                    className="form-select"
+                    value={formData["M&A Tier"] || ""}
+                    onChange={(e) => handleMaTierChange(e.target.value)}
+                  >
+                    <option value="">Select M&A Tier</option>
+                    {maTierOptionsToUse.map(tier => (
+                      <option key={tier} value={tier}>
+                        {tier}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">Status</label>
                   <select
@@ -485,6 +581,20 @@ const EditSiteModal = ({
                     value={formData["Legacy Nameplate Capacity (MW)"] || ""}
                     onChange={(e) => handleInputChange("Legacy Nameplate Capacity (MW)", e.target.value)}
                     placeholder="Enter capacity in MW"
+                    step="any"
+                    min="0"
+                  />
+                </div>
+                
+                {/* NEW: POI Voltage Field - Added after Capacity MW */}
+                <div className="form-group">
+                  <label className="form-label">POI Voltage (KV)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={formData["POI Voltage (KV)"] || ""}
+                    onChange={(e) => handlePoiVoltageChange(e.target.value)}
+                    placeholder="Enter POI voltage in KV"
                     step="any"
                     min="0"
                   />

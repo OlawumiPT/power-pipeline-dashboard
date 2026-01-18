@@ -11,25 +11,21 @@ const BottomGridSection = ({
   getSortedPipelineRows,
   handleProjectClick,
   kpiRow1,
-  // Add these new props
   handleEditProject,
   handleDeleteProject,
-  // Tech filter props
   activeTechFilter,
   clearTechFilter,
-  // NEW: Counterparty filter props
   handleFilterByCounterparty,
   activeCounterpartyFilter,
   clearCounterpartyFilter,
-  // NEW: Other filter props for status display and clearing
   activeIsoFilter,
   activeRedevFilter,
   clearIsoFilter,
-  clearRedevFilter
+  clearRedevFilter,
+  selectedProjectType
 }) => {
 
-    // Debug: Check what props we're receiving
-  console.log('🔍 BottomGridSection - Props received:', {
+    console.log('🔍 BottomGridSection - Props received:', {
     hasHandleEditProject: !!handleEditProject,
     typeOfHandleEditProject: typeof handleEditProject,
     hasHandleDeleteProject: !!handleDeleteProject,
@@ -38,6 +34,7 @@ const BottomGridSection = ({
     hasClearTechFilter: !!clearTechFilter,
     hasHandleFilterByCounterparty: !!handleFilterByCounterparty,
     hasActiveCounterpartyFilter: !!activeCounterpartyFilter,
+    selectedProjectType: selectedProjectType 
   });
 
   return (
@@ -210,7 +207,7 @@ const BottomGridSection = ({
               )}
             </div>
 
-                       <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
               {/* Clear tech filter button */}
               {activeTechFilter && clearTechFilter && (
                 <button 
@@ -359,21 +356,23 @@ const BottomGridSection = ({
           resetSort={resetSort}
           getSortedPipelineRows={getSortedPipelineRows}
           handleProjectClick={handleProjectClick}
-          // Pass the new handlers
           handleEditProject={handleEditProject}
           handleDeleteProject={handleDeleteProject}
-          // Pass tech filter props
           activeTechFilter={activeTechFilter}
           clearTechFilter={clearTechFilter}
-          // Pass counterparty filter props
           activeCounterpartyFilter={activeCounterpartyFilter}
+          clearCounterpartyFilter={clearCounterpartyFilter}
+          clearIsoFilter={clearIsoFilter}
+          clearRedevFilter={clearRedevFilter}
+          activeIsoFilter={activeIsoFilter}
+          activeRedevFilter={activeRedevFilter}
+          selectedProjectType={selectedProjectType}
         />
       </div>
     </section>
   );
 };
 
-// Add default props for safety
 BottomGridSection.defaultProps = {
   handleEditProject: () => console.warn('BottomGridSection: handleEditProject not provided'),
   handleDeleteProject: () => console.warn('BottomGridSection: handleDeleteProject not provided'),
@@ -381,7 +380,8 @@ BottomGridSection.defaultProps = {
   handleFilterByCounterparty: () => console.warn('BottomGridSection: handleFilterByCounterparty not provided'),
   clearCounterpartyFilter: () => console.warn('BottomGridSection: clearCounterpartyFilter not provided'),
   clearIsoFilter: () => console.warn('BottomGridSection: clearIsoFilter not provided'),
-  clearRedevFilter: () => console.warn('BottomGridSection: clearRedevFilter not provided')
+  clearRedevFilter: () => console.warn('BottomGridSection: clearRedevFilter not provided'),
+  selectedProjectType: 'All' 
 };
 
 export default BottomGridSection;
