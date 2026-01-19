@@ -1,4 +1,4 @@
-name: Deploy React App
+﻿name: Deploy React App
 on: [push]
 jobs:
   deploy:
@@ -8,7 +8,7 @@ jobs:
       - uses: actions/setup-node@v3
         with:
           node-version: "18"
-      - run: npm ci
+      - run: npm install
       - run: npm run build
         env:
           REACT_APP_API_URL: "https://pt-power-pipeline-api.azurewebsites.net/api"
