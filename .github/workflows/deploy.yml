@@ -1,5 +1,7 @@
-﻿name: Deploy React App
+﻿name: Deploy
+
 on: [push]
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -7,14 +9,14 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
         with:
-          node-version: "18"
+          node-version: 18
       - run: npm install
       - run: npm run build
         env:
-          REACT_APP_API_URL: "https://pt-power-pipeline-api.azurewebsites.net/api"
+          REACT_APP_API_URL: https://pt-power-pipeline-api.azurewebsites.net/api
       - uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          action: "upload"
-          app_location: "."
-          output_location: "build"
+          action: upload
+          app_location: .
+          output_location: build
