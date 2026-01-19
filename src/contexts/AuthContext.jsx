@@ -24,8 +24,8 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(() => localStorage.getItem('pipeline_token'));
 
-  // API base URL
-  const API_URL = import.meta.env.VITE_API_URL || '/api';
+  // API base URL - FIXED: Use correct backend URL
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
   // Configure axios defaults once
   useEffect(() => {
@@ -43,8 +43,10 @@ export const AuthProvider = ({ children }) => {
       
       if (storedToken && storedUser) {
         try {
-          // Verify token with backend
-          const response = await axios.post('/auth/verify', { token: storedToken });
+          // Verify token with backend - FIXED: Correct endpoint path
+          const response = await axios.post('/api/auth/verify', { token: storedToken }, {
+            timeout: 5000
+          });
           
           if (response.data.valid) {
             setToken(storedToken);
@@ -71,69 +73,66 @@ export const AuthProvider = ({ children }) => {
     verifyToken();
   }, []);
 
- // In AuthContext.jsx, update the register function:
+  const register = async (userData) => {
+    try {
+      console.log('Registering user with approval flow:', userData);
+      
+      const response = await axios.post('/api/auth/register', {
+        ...userData,
+        status: 'pending_approval'
+      }, {
+        timeout: 10000
+      });
 
-const register = async (userData) => {
-  try {
-    console.log('Registering user with approval flow:', userData);
-    
-    const response = await axios.post('/auth/register', {
-      ...userData,
-      status: 'pending_approval' // Ensure this is sent
-    }, {
-      timeout: 10000,
-      validateStatus: function (status) {
-        return status >= 200 && status < 300;
-      }
-    });
-
-    // DO NOT auto-login
-    // DO NOT store token
-    // Return success message only
-    
-    return { 
-      success: true, 
-      message: response.data.message || 'Registration submitted for admin approval. You will receive an email once approved.'
-    };
-    
-  } catch (error) {
-    console.error('Registration error:', error);
-    
-    let errorMessage = 'Registration failed. Please try again.';
-    
-    if (error.code === 'ECONNABORTED') {
-      errorMessage = 'Registration request timed out. Please try again.';
-    } else if (error.response) {
-      // Handle specific backend messages
-      if (error.response.status === 400) {
-        errorMessage = error.response.data?.message || 'Invalid registration data.';
-      } else if (error.response.status === 409) {
-        errorMessage = 'Username or email already exists.';
+      // DO NOT auto-login
+      // DO NOT store token
+      // Return success message only
+      
+      return { 
+        success: true, 
+        message: response.data.message || 'Registration submitted for admin approval. You will receive an email once approved.'
+      };
+      
+    } catch (error) {
+      console.error('Registration error:', error);
+      
+      let errorMessage = 'Registration failed. Please try again.';
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Registration request timed out. Please try again.';
+      } else if (error.response) {
+        // Handle specific backend messages
+        if (error.response.status === 400) {
+          errorMessage = error.response.data?.message || 'Invalid registration data.';
+        } else if (error.response.status === 409) {
+          errorMessage = 'Username or email already exists.';
+        } else if (error.response.status === 500) {
+          errorMessage = 'Server error. Please contact administrator.';
+        } else {
+          errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
+        }
+      } else if (error.request) {
+        errorMessage = 'No response from server. Please check your connection and ensure backend is running.';
       } else {
-        errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
+        errorMessage = error.message || 'Registration failed. Please try again.';
       }
-    } else if (error.request) {
-      errorMessage = 'No response from server. Please check your connection.';
-    } else {
-      errorMessage = error.message || 'Registration failed. Please try again.';
+      
+      return { 
+        success: false, 
+        message: errorMessage
+      };
     }
-    
-    return { 
-      success: false, 
-      message: errorMessage
-    };
-  }
-};
+  };
 
-    // Add a new function to check registration status
-    const checkRegistrationStatus = async (email) => {
-      try {
-        const response = await axios.get(`/auth/registration-status/${encodeURIComponent(email)}`);
-        return { success: true, status: response.data.status };
-      } catch (error) {
-        return { success: false, message: 'Could not check registration status' };
-      }
-    };
+  // Add a new function to check registration status
+  const checkRegistrationStatus = async (email) => {
+    try {
+      const response = await axios.get(`/api/auth/registration-status/${encodeURIComponent(email)}`);
+      return { success: true, status: response.data.status };
+    } catch (error) {
+      return { success: false, message: 'Could not check registration status' };
+    }
+  };
 
   const login = async (credentials) => {
     try {
@@ -143,9 +142,7 @@ const register = async (userData) => {
       try {
         const ipResponse = await axios.get('https://api.ipify.org?format=json', {
           timeout: 5000,
-          validateStatus: function (status) {
-            return status >= 200 && status < 300;
-          }
+          baseURL: '' // Override base URL for external API
         });
         
         if (ipResponse.data && ipResponse.data.ip) {
@@ -161,34 +158,46 @@ const register = async (userData) => {
         device_fingerprint: generateDeviceFingerprint()
       };
 
-      // Send login request with client info
-      const response = await axios.post('/auth/login', {
+      // Send login request with client info - FIXED: Correct endpoint path
+      const response = await axios.post('/api/auth/login', {
         ...credentials,
         ...clientInfo
       }, {
         timeout: 10000,
-        validateStatus: function (status) {
-          return status >= 200 && status < 300;
+        validateStatus: (status) => {
+          // Accept both success (200-299) and some error statuses
+          return (status >= 200 && status < 300) || status === 401 || status === 400;
         }
       });
 
-      const { token: newToken, user: userData } = response.data;
+      // Check if login was successful
+      if (response.status === 200 || response.status === 201) {
+        const { token: newToken, user: userData } = response.data;
+        
+        // Store token and user
+        localStorage.setItem('pipeline_token', newToken);
+        localStorage.setItem('pipeline_user', JSON.stringify(userData));
+        
+        // Update axios defaults
+        axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+        
+        // Update state
+        setToken(newToken);
+        setUser(userData);
+        
+        return { 
+          success: true, 
+          user: userData,
+          token: newToken
+        };
+      } else {
+        // Login failed but server responded
+        return {
+          success: false,
+          message: response.data?.message || 'Login failed. Please check your credentials.'
+        };
+      }
       
-      // Store token and user
-      localStorage.setItem('pipeline_token', newToken);
-      localStorage.setItem('pipeline_user', JSON.stringify(userData));
-      
-      // Update axios defaults
-      axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-      
-      // Update state
-      setToken(newToken);
-      setUser(userData);
-      
-      return { 
-        success: true, 
-        user: userData
-      };
     } catch (error) {
       console.error('Login error:', error);
       
@@ -197,9 +206,18 @@ const register = async (userData) => {
       if (error.code === 'ECONNABORTED') {
         errorMessage = 'Login request timed out. Please try again.';
       } else if (error.response) {
-        errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
+        // Handle specific error statuses
+        if (error.response.status === 401) {
+          errorMessage = 'Invalid credentials or account not approved.';
+        } else if (error.response.status === 404) {
+          errorMessage = 'Login endpoint not found. Please check backend configuration.';
+        } else if (error.response.status === 500) {
+          errorMessage = 'Server error. Please contact administrator.';
+        } else {
+          errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
+        }
       } else if (error.request) {
-        errorMessage = 'No response from server. Please check your connection.';
+        errorMessage = 'Cannot connect to server. Please check:\n1. Backend is running\n2. Network connection\n3. CORS configuration';
       } else {
         errorMessage = error.message || 'Login failed. Please try again.';
       }
@@ -213,11 +231,8 @@ const register = async (userData) => {
 
   const forgotPassword = async (email) => {
     try {
-      const response = await axios.post('/auth/forgot-password', { email }, {
-        timeout: 10000,
-        validateStatus: function (status) {
-          return status >= 200 && status < 300;
-        }
+      const response = await axios.post('/api/auth/forgot-password', { email }, {
+        timeout: 10000
       });
 
       return { 
@@ -248,11 +263,8 @@ const register = async (userData) => {
 
   const resetPassword = async (token, password) => {
     try {
-      const response = await axios.post(`/auth/reset-password/${token}`, { password }, {
-        timeout: 10000,
-        validateStatus: function (status) {
-          return status >= 200 && status < 300;
-        }
+      const response = await axios.post(`/api/auth/reset-password/${token}`, { password }, {
+        timeout: 10000
       });
 
       return { 
@@ -285,7 +297,7 @@ const register = async (userData) => {
     // Call logout API to invalidate token and log session
     if (token) {
       try {
-        await axios.post('/auth/logout', { token });
+        await axios.post('/api/auth/logout', { token });
       } catch (error) {
         console.warn('Logout API call failed:', error);
       }
@@ -304,6 +316,46 @@ const register = async (userData) => {
     
     // Redirect to login
     window.location.href = '/login';
+  };
+
+  // Admin functions
+  const getPendingUsers = async () => {
+    try {
+      const response = await axios.get('/api/admin/pending-users');
+      return { success: true, users: response.data };
+    } catch (error) {
+      console.error('Get pending users error:', error);
+      return { 
+        success: false, 
+        message: error.response?.data?.message || 'Failed to fetch pending users' 
+      };
+    }
+  };
+
+  const approveUser = async (userId, role = 'operator') => {
+    try {
+      const response = await axios.post(`/api/admin/approve-user/${userId}`, { role });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Approve user error:', error);
+      return { 
+        success: false, 
+        message: error.response?.data?.message || 'Failed to approve user' 
+      };
+    }
+  };
+
+  const rejectUser = async (userId, reason = '') => {
+    try {
+      const response = await axios.post(`/api/admin/reject-user/${userId}`, { reason });
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Reject user error:', error);
+      return { 
+        success: false, 
+        message: error.response?.data?.message || 'Failed to reject user' 
+      };
+    }
   };
 
   // Generate a simple device fingerprint
@@ -327,16 +379,43 @@ const register = async (userData) => {
     }
   };
 
+  // Test backend connection
+  const testBackendConnection = async () => {
+    try {
+      const response = await axios.get('/health', {
+        timeout: 5000,
+        validateStatus: () => true // Accept all status codes
+      });
+      
+      return {
+        success: response.status === 200,
+        status: response.status,
+        data: response.data
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  };
+
   // Memoize the context value to prevent unnecessary re-renders
   const contextValue = useMemo(() => ({
     user,
     token,
+    loading,
     register,
     login,
     logout,
     forgotPassword,
     resetPassword,
-    loading
+    checkRegistrationStatus,
+    getPendingUsers,
+    approveUser,
+    rejectUser,
+    testBackendConnection,
+    isAuthenticated: !!token
   }), [user, token, loading]);
 
   return (
