@@ -8,27 +8,27 @@ const jwt = require('jsonwebtoken');
 const { Pool } = require('pg');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
-require('dotenv').config();
 
 // Import routes
 const projectRoutes = require('./routes/projects');
 
 // Create Express app
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;  // FIXED: Azure uses 8080, not 5000
 
-// Database connection
+// Database connection - FIXED: No defaults, added SSL for Azure
 const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
+  host: process.env.DB_HOST,
   port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'pipeline_dashboard',
-  user: process.env.DB_USER || 'dashboard_admin',
-  password: process.env.DB_PASSWORD || 'powertransition'
+  database: process.env.DB_NAME,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Set schema for all connections
+// Set schema for all connections - FIXED: Use environment variable
 pool.on('connect', (client) => {
-  client.query(`SET search_path TO pipeline_dashboard`);
+  client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}`);
 });
 
 // Debug mode
@@ -285,14 +285,15 @@ if (DEBUG_MODE) {
 // Security headers
 app.use(helmet());
 
-// CORS configuration
+// CORS configuration - UPDATED: Added Azure Static Web App URL
 app.use(cors({
   origin: [
     'http://localhost:5173',
     'http://localhost:5174', 
     'http://localhost:5175', 
     'http://localhost:3000',
-    process.env.FRONTEND_URL || 'http://localhost:3000'
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    'https://lively-water-022a59110.6.azurestaticapps.net'  // ADDED: Your Static Web App
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -380,7 +381,7 @@ app.get('/health', (req, res) => {
 app.get('/api/test', (req, res) => {
   res.json({ 
     message: 'Power Pipeline API is running!',
-    schema: 'pipeline_dashboard',
+    schema: process.env.DB_SCHEMA || 'pipeline_dashboard',
     admin_email: ADMIN_EMAIL,
     email_service: emailServiceReady ? `Active (${emailService.mode})` : 'Inactive',
     domain_restriction: 'Only @power-transitions.com allowed',
@@ -448,7 +449,7 @@ app.post('/api/debug/test-register', async (req, res) => {
     
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      `INSERT INTO pipeline_dashboard.users 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        (username, email, password_hash, role, status) 
        VALUES ($1, $2, $3, 'pending', 'pending_approval') 
        RETURNING id, username, email`,
@@ -476,7 +477,7 @@ app.get('/api/debug/all-users', async (req, res) => {
         role,
         created_at,
         approved_at
-      FROM users 
+      FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
       ORDER BY created_at DESC
     `);
     
@@ -553,7 +554,7 @@ app.post('/api/auth/register', async (req, res) => {
     const emailLower = email.toLowerCase();
     
     const existingUser = await client.query(
-      `SELECT id, username, email FROM users 
+      `SELECT id, username, email FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        WHERE LOWER(username) = $1 OR LOWER(email) = $2`,
       [usernameLower, emailLower]
     );
@@ -588,7 +589,7 @@ app.post('/api/auth/register', async (req, res) => {
     if (DEBUG_MODE) console.log('✅ Password hashed');
 
     const newUser = await client.query(
-      `INSERT INTO users 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        (username, email, password_hash, full_name, role, status) 
        VALUES ($1, $2, $3, $4, $5, $6) 
        RETURNING id, username, email, full_name, role, status, created_at`,
@@ -602,7 +603,7 @@ app.post('/api/auth/register', async (req, res) => {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await client.query(
-      `INSERT INTO approval_tokens 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.approval_tokens 
        (user_id, token, token_type, admin_email, expires_at) 
        VALUES ($1, $2, $3, $4, $5)`,
       [user.id, approvalToken, 'admin_approval', ADMIN_EMAIL, expiresAt]
@@ -728,7 +729,7 @@ app.post('/api/auth/login', async (req, res) => {
     const { username, password, ip_address, user_agent, device_fingerprint } = req.body;
 
     const userResult = await pool.query(
-      `SELECT * FROM users WHERE (username = $1 OR email = $1) 
+      `SELECT * FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users WHERE (username = $1 OR email = $1) 
        AND status = 'active' AND is_active = true`,
       [username]
     );
@@ -758,12 +759,12 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     await pool.query(
-      'UPDATE users SET last_login = NOW(), login_count = login_count + 1 WHERE id = $1',
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users SET last_login = NOW(), login_count = login_count + 1 WHERE id = $1`,
       [user.id]
     );
 
     await pool.query(
-      `INSERT INTO login_logs 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.login_logs 
        (user_id, ip_address, user_agent, device_fingerprint, login_time) 
        VALUES ($1, $2, $3, $4, NOW())`,
       [user.id, ip_address, user_agent, device_fingerprint]
@@ -828,7 +829,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     }
 
     const userResult = await pool.query(
-      'SELECT id, username, email, full_name FROM users WHERE email = $1 AND status = \'active\' AND is_active = true',
+      `SELECT id, username, email, full_name FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users WHERE email = $1 AND status = 'active' AND is_active = true`,
       [email]
     );
 
@@ -846,7 +847,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     const resetTokenExpiry = new Date(Date.now() + 3600000);
 
     await pool.query(
-      'UPDATE users SET reset_password_token = $1, reset_password_expires = $2 WHERE id = $3',
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users SET reset_password_token = $1, reset_password_expires = $2 WHERE id = $3`,
       [resetTokenHash, resetTokenExpiry, user.id]
     );
 
@@ -910,7 +911,7 @@ app.post('/api/auth/reset-password/:token', async (req, res) => {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
     const userResult = await pool.query(
-      `SELECT id, email FROM users 
+      `SELECT id, email FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        WHERE reset_password_token = $1 
        AND reset_password_expires > NOW() 
        AND status = 'active' 
@@ -931,7 +932,7 @@ app.post('/api/auth/reset-password/:token', async (req, res) => {
     const passwordHash = await hashPassword(password);
 
     await pool.query(
-      `UPDATE users 
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        SET password_hash = $1, 
            reset_password_token = NULL, 
            reset_password_expires = NULL,
@@ -986,7 +987,7 @@ app.post('/api/auth/verify', async (req, res) => {
     
     const userResult = await pool.query(
       `SELECT id, username, email, full_name, role, status, last_login, login_count 
-       FROM users 
+       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        WHERE id = $1 AND status = 'active' AND is_active = true`,
       [decoded.userId]
     );
@@ -1014,7 +1015,7 @@ app.post('/api/auth/logout', async (req, res) => {
       try {
         const decoded = jwt.verify(token, JWT_SECRET);
         await pool.query(
-          `UPDATE login_logs 
+          `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.login_logs 
            SET logout_time = NOW(),
                session_duration = EXTRACT(EPOCH FROM (NOW() - login_time))
            WHERE user_id = $1 
@@ -1051,7 +1052,7 @@ app.get('/api/admin/pending-users', authenticateToken, isAdmin, async (req, res)
   try {
     const pendingUsers = await pool.query(
       `SELECT id, username, email, full_name, created_at 
-       FROM users 
+       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        WHERE status = 'pending_approval'
        ORDER BY created_at DESC`
     );
@@ -1077,7 +1078,7 @@ app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, 
     await client.query('BEGIN');
 
     const userQuery = await client.query(
-      `SELECT id, username, email, status, role FROM users 
+      `SELECT id, username, email, status, role FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        WHERE id = $1`,
       [id]
     );
@@ -1101,7 +1102,7 @@ app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, 
     }
 
     await client.query(
-      `UPDATE users 
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        SET status = 'active', 
            role = $1,
            approved_by = $2,
@@ -1112,7 +1113,7 @@ app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, 
     );
 
     await client.query(
-      `INSERT INTO admin_actions 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.admin_actions 
         (admin_id, target_user_id, action_type, previous_status, new_status, previous_role, new_role) 
        VALUES ($1, $2, 'approve', $3, 'active', $4, $5)`,
       [adminId, id, user.status, user.role, role]
@@ -1185,7 +1186,7 @@ app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, r
     await client.query('BEGIN');
 
     const userQuery = await client.query(
-      `SELECT id, username, email, status FROM users 
+      `SELECT id, username, email, status FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        WHERE id = $1`,
       [id]
     );
@@ -1209,7 +1210,7 @@ app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, r
     }
 
     await client.query(
-      `UPDATE users 
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        SET status = 'rejected',
            rejection_reason = $1,
            is_active = false
@@ -1218,7 +1219,7 @@ app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, r
     );
 
     await client.query(
-      `INSERT INTO admin_actions 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.admin_actions 
         (admin_id, target_user_id, action_type, previous_status, new_status, notes) 
        VALUES ($1, $2, 'reject', $3, 'rejected', $4)`,
       [adminId, id, user.status, reason]
@@ -1278,8 +1279,8 @@ app.get('/api/admin/approve/:token', async (req, res) => {
     
     const tokenQuery = await client.query(
       `SELECT at.*, u.username, u.email, u.full_name, u.status 
-       FROM approval_tokens at
-       JOIN users u ON at.user_id = u.id
+       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.approval_tokens at
+       JOIN ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users u ON at.user_id = u.id
        WHERE at.token = $1 AND at.token_type = 'admin_approval' 
        AND at.expires_at > NOW() AND at.used = false`,
       [token]
@@ -1304,13 +1305,13 @@ app.get('/api/admin/approve/:token', async (req, res) => {
     await client.query('BEGIN');
     
     const adminQuery = await client.query(
-      `SELECT id FROM users WHERE role = 'admin' AND status = 'active' LIMIT 1`
+      `SELECT id FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users WHERE role = 'admin' AND status = 'active' LIMIT 1`
     );
     
     const adminId = adminQuery.rows[0]?.id || 1;
     
     await client.query(
-      `UPDATE users 
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        SET status = 'active', 
            role = 'operator',
            approved_by = $1,
@@ -1321,14 +1322,14 @@ app.get('/api/admin/approve/:token', async (req, res) => {
     );
     
     await client.query(
-      `UPDATE approval_tokens 
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.approval_tokens 
        SET used = true, used_at = NOW() 
        WHERE id = $1`,
       [tokenData.id]
     );
     
     await client.query(
-      `INSERT INTO admin_actions 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.admin_actions 
         (admin_id, target_user_id, action_type, previous_status, new_status, previous_role, new_role) 
        VALUES ($1, $2, 'approve', 'pending_approval', 'active', 'pending', 'operator')`,
       [adminId, tokenData.user_id]
@@ -1390,8 +1391,8 @@ app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
     let query = `
       SELECT id, username, email, full_name, role, status, 
              approved_at, last_login, login_count, created_at,
-             (SELECT COUNT(*) FROM users) as total_count
-      FROM users
+             (SELECT COUNT(*) FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users) as total_count
+      FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
       WHERE 1=1
     `;
     
@@ -1447,7 +1448,7 @@ app.get('/api/auth/registration-status/:email', async (req, res) => {
     
     const query = await pool.query(
       `SELECT status, approved_at, rejection_reason 
-       FROM users 
+       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
        WHERE email = $1`,
       [email]
     );
@@ -1569,7 +1570,7 @@ app.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   console.log(`🔗 Health Check: http://localhost:${PORT}/health`);
   console.log(`📊 Projects API: http://localhost:${PORT}/api/projects`);
-  console.log(`🗄️ Using schema: pipeline_dashboard`);
+  console.log(`🗄️ Using schema: ${process.env.DB_SCHEMA || 'pipeline_dashboard'}`);
   console.log(`👤 Admin email: ${ADMIN_EMAIL}`);
   console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
   console.log(`📧 Email mode: ${emailServiceReady ? `Active (${emailService.mode})` : 'Inactive'}`);
@@ -1594,7 +1595,6 @@ app.listen(PORT, () => {
   console.log('✅ Ready to accept requests!');
   console.log('='.repeat(70));
 });
-
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
