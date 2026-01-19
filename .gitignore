@@ -34,3 +34,4 @@ minimal-*.json
 
 # Database backups (should be handled separately)
 backend/migrations/*.sql
+dist/
