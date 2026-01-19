@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.cjs",
     "dev": "nodemon server.cjs",
-    "migrate": "psql -U dashboard_admin -d pipeline_dashboard -f migrations/001_create_users_table.sql"
+    "build": "echo 'No build step required'",
+    "migrate": "psql -U dashboard_admin -d pipeline_dashboard -f migrations/local_backup.sql",
+    "test": "echo 'No tests configured'"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -34,6 +36,7 @@
     "nodemon": "^3.0.1"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
   }
 }
