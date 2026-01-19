@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Azure deployment files
+.deployment
+deployment.zip
+AzureCLI.msi
+
+# Temporary/backup files
+temp-backend/
+minimal-*.js
+minimal-*.json
+
+# Database backups (should be handled separately)
+backend/migrations/*.sql
