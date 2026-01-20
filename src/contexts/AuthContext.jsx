@@ -24,12 +24,15 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(() => localStorage.getItem('pipeline_token'));
 
-  // API base URL - FIXED: Use correct backend URL
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
+  // ⭐⭐ CRITICAL: Use environment variable with fallback ⭐⭐
+  const API_URL = import.meta.env.VITE_API_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
 
   // Configure axios defaults once
   useEffect(() => {
+    console.log('🔧 AuthContext using API_URL:', API_URL);
     axios.defaults.baseURL = API_URL;
+    axios.defaults.headers.common['Content-Type'] = 'application/json';
+    
     if (token) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     }
@@ -43,7 +46,7 @@ export const AuthProvider = ({ children }) => {
       
       if (storedToken && storedUser) {
         try {
-          // Verify token with backend - FIXED: Correct endpoint path
+          // Verify token with backend
           const response = await axios.post('/api/auth/verify', { token: storedToken }, {
             timeout: 5000
           });
@@ -52,20 +55,24 @@ export const AuthProvider = ({ children }) => {
             setToken(storedToken);
             setUser(JSON.parse(storedUser));
             axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+            console.log('✅ Token verified, user authenticated');
           } else {
             // Token invalid, clear storage
+            console.log('❌ Token invalid, clearing storage');
             localStorage.removeItem('pipeline_token');
             localStorage.removeItem('pipeline_user');
             setToken(null);
             setUser(null);
           }
         } catch (error) {
-          console.error('Token verification failed:', error);
+          console.error('Token verification failed:', error.message);
           localStorage.removeItem('pipeline_token');
           localStorage.removeItem('pipeline_user');
           setToken(null);
           setUser(null);
         }
+      } else {
+        console.log('No stored token or user found');
       }
       setLoading(false);
     };
@@ -75,7 +82,7 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      console.log('Registering user with approval flow:', userData);
+      console.log('🔵 Registering user via:', API_URL);
       
       const response = await axios.post('/api/auth/register', {
         ...userData,
@@ -84,13 +91,9 @@ export const AuthProvider = ({ children }) => {
         timeout: 10000
       });
 
-      // DO NOT auto-login
-      // DO NOT store token
-      // Return success message only
-      
       return { 
         success: true, 
-        message: response.data.message || 'Registration submitted for admin approval. You will receive an email once approved.'
+        message: response.data.message || 'Registration submitted for admin approval.'
       };
       
     } catch (error) {
@@ -99,22 +102,11 @@ export const AuthProvider = ({ children }) => {
       let errorMessage = 'Registration failed. Please try again.';
       
       if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Registration request timed out. Please try again.';
+        errorMessage = 'Registration request timed out.';
       } else if (error.response) {
-        // Handle specific backend messages
-        if (error.response.status === 400) {
-          errorMessage = error.response.data?.message || 'Invalid registration data.';
-        } else if (error.response.status === 409) {
-          errorMessage = 'Username or email already exists.';
-        } else if (error.response.status === 500) {
-          errorMessage = 'Server error. Please contact administrator.';
-        } else {
-          errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
-        }
+        errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
       } else if (error.request) {
-        errorMessage = 'No response from server. Please check your connection and ensure backend is running.';
-      } else {
-        errorMessage = error.message || 'Registration failed. Please try again.';
+        errorMessage = 'Cannot connect to server. Check if backend is running.';
       }
       
       return { 
@@ -124,7 +116,6 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Add a new function to check registration status
   const checkRegistrationStatus = async (email) => {
     try {
       const response = await axios.get(`/api/auth/registration-status/${encodeURIComponent(email)}`);
@@ -136,43 +127,28 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     try {
-      let clientIp = '127.0.0.1';
+      console.log('🔐 Attempting login via:', API_URL);
       
-      // Try to get IP address, but don't fail if it doesn't work
-      try {
-        const ipResponse = await axios.get('https://api.ipify.org?format=json', {
-          timeout: 5000,
-          baseURL: '' // Override base URL for external API
-        });
-        
-        if (ipResponse.data && ipResponse.data.ip) {
-          clientIp = ipResponse.data.ip;
-        }
-      } catch (ipError) {
-        console.warn('Could not fetch IP address, using localhost:', ipError.message);
-      }
-      
+      // Simplified client info - remove IP fetching for now
       const clientInfo = {
-        ip_address: clientIp,
+        ip_address: '127.0.0.1',
         user_agent: navigator.userAgent,
         device_fingerprint: generateDeviceFingerprint()
       };
 
-      // Send login request with client info - FIXED: Correct endpoint path
+      // ⭐⭐ SIMPLIFIED: Remove complex IP fetching that might fail ⭐⭐
       const response = await axios.post('/api/auth/login', {
         ...credentials,
         ...clientInfo
       }, {
-        timeout: 10000,
-        validateStatus: (status) => {
-          // Accept both success (200-299) and some error statuses
-          return (status >= 200 && status < 300) || status === 401 || status === 400;
-        }
+        timeout: 10000
       });
 
       // Check if login was successful
       if (response.status === 200 || response.status === 201) {
         const { token: newToken, user: userData } = response.data;
+        
+        console.log('✅ Login successful, storing token and user');
         
         // Store token and user
         localStorage.setItem('pipeline_token', newToken);
@@ -194,32 +170,27 @@ export const AuthProvider = ({ children }) => {
         // Login failed but server responded
         return {
           success: false,
-          message: response.data?.message || 'Login failed. Please check your credentials.'
+          message: response.data?.message || 'Login failed.'
         };
       }
       
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('❌ Login error:', error);
       
       let errorMessage = 'Login failed. Please check credentials.';
       
       if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Login request timed out. Please try again.';
+        errorMessage = 'Login request timed out.';
       } else if (error.response) {
-        // Handle specific error statuses
         if (error.response.status === 401) {
           errorMessage = 'Invalid credentials or account not approved.';
         } else if (error.response.status === 404) {
-          errorMessage = 'Login endpoint not found. Please check backend configuration.';
-        } else if (error.response.status === 500) {
-          errorMessage = 'Server error. Please contact administrator.';
+          errorMessage = 'Login endpoint not found. Check backend URL.';
         } else {
           errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
         }
       } else if (error.request) {
-        errorMessage = 'Cannot connect to server. Please check:\n1. Backend is running\n2. Network connection\n3. CORS configuration';
-      } else {
-        errorMessage = error.message || 'Login failed. Please try again.';
+        errorMessage = `Cannot connect to server at ${API_URL}. Check:\n1. Backend is running\n2. Network connection`;
       }
       
       return { 
@@ -241,22 +212,9 @@ export const AuthProvider = ({ children }) => {
       };
     } catch (error) {
       console.error('Forgot password error:', error);
-      
-      let errorMessage = 'Failed to process password reset request.';
-      
-      if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Request timed out. Please try again.';
-      } else if (error.response) {
-        errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
-      } else if (error.request) {
-        errorMessage = 'No response from server. Please check your connection.';
-      } else {
-        errorMessage = error.message || 'Failed to process request.';
-      }
-      
       return { 
         success: false, 
-        message: errorMessage
+        message: error.response?.data?.message || 'Failed to process request' 
       };
     }
   };
@@ -273,33 +231,20 @@ export const AuthProvider = ({ children }) => {
       };
     } catch (error) {
       console.error('Reset password error:', error);
-      
-      let errorMessage = 'Failed to reset password.';
-      
-      if (error.code === 'ECONNABORTED') {
-        errorMessage = 'Request timed out. Please try again.';
-      } else if (error.response) {
-        errorMessage = error.response.data?.message || `Server error: ${error.response.status}`;
-      } else if (error.request) {
-        errorMessage = 'No response from server. Please check your connection.';
-      } else {
-        errorMessage = error.message || 'Failed to reset password.';
-      }
-      
       return { 
         success: false, 
-        message: errorMessage
+        message: error.response?.data?.message || 'Failed to reset password' 
       };
     }
   };
 
   const logout = async () => {
-    // Call logout API to invalidate token and log session
+    // Call logout API if token exists
     if (token) {
       try {
         await axios.post('/api/auth/logout', { token });
       } catch (error) {
-        console.warn('Logout API call failed:', error);
+        console.warn('Logout API call failed:', error.message);
       }
     }
     
@@ -365,17 +310,13 @@ export const AuthProvider = ({ children }) => {
         userAgent: navigator.userAgent,
         platform: navigator.platform,
         language: navigator.language,
-        screen: `${window.screen.width}x${window.screen.height}`,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        cookiesEnabled: navigator.cookieEnabled,
-        hardwareConcurrency: navigator.hardwareConcurrency || 'unknown'
+        screen: `${window.screen.width}x${window.screen.height}`
       };
       
       const infoString = JSON.stringify(navigatorInfo);
       return btoa(infoString).substring(0, 32);
     } catch (error) {
-      console.warn('Could not generate device fingerprint:', error);
-      return 'unknown-device-' + Date.now();
+      return 'device-' + Date.now();
     }
   };
 
@@ -383,8 +324,7 @@ export const AuthProvider = ({ children }) => {
   const testBackendConnection = async () => {
     try {
       const response = await axios.get('/health', {
-        timeout: 5000,
-        validateStatus: () => true // Accept all status codes
+        timeout: 5000
       });
       
       return {
@@ -395,12 +335,13 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       return {
         success: false,
-        error: error.message
+        error: error.message,
+        apiUrl: API_URL
       };
     }
   };
 
-  // Memoize the context value to prevent unnecessary re-renders
+  // Memoize the context value
   const contextValue = useMemo(() => ({
     user,
     token,
@@ -415,7 +356,8 @@ export const AuthProvider = ({ children }) => {
     approveUser,
     rejectUser,
     testBackendConnection,
-    isAuthenticated: !!token
+    isAuthenticated: !!token,
+    apiUrl: API_URL // Expose for debugging
   }), [user, token, loading]);
 
   return (
