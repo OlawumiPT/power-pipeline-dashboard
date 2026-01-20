@@ -1,6 +1,4 @@
 import React from "react";
-import { createRoot } from "react-dom/client";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Login from './components/Login';
@@ -14,13 +12,6 @@ import ApprovalSuccess from './components/ApprovalSuccess';
 import AdminApproval from './components/AdminApproval';;
 import './index.css';
 
-createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <HashRouter>
-      <App />
-    </HashRouter>
-  </React.StrictMode>
-);
 // Main App component
 function App() {
   return (
