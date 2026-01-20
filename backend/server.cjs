@@ -1,3 +1,9 @@
+/**
+ * server.cjs (UPDATED)
+ * - Clean + correct CORS for Azure Static Web Apps + local dev
+ * - Removed any manual Access-Control-* header middleware
+ */
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -14,7 +20,7 @@ const projectRoutes = require('./routes/projects');
 
 // Create Express app
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 8080; // Azure commonly uses 8080
 
 // Database connection
 const pool = new Pool({
@@ -50,7 +56,7 @@ class EmailService {
     this.initialized = false;
     this.mode = 'ethereal';
     this.etherealAccount = null;
-    
+
     if (DEBUG_MODE) {
       console.log('🔧 Email Service: Debug mode detected');
     }
@@ -58,34 +64,34 @@ class EmailService {
 
   async initialize() {
     console.log('\n🔧 Initializing Email Service...\n');
-    
+
     if (DEBUG_MODE) {
       console.log('🔧 Using DEBUG email service (emails logged to console)');
       this.mode = 'debug';
       this.initialized = true;
       return true;
     }
-    
+
     console.log('1. Testing Office 365 SMTP...');
     const office365Works = await this.tryOffice365();
-    
+
     if (office365Works) {
       this.mode = 'office365';
       console.log('✅ Using OFFICE 365 SMTP');
       this.initialized = true;
       return true;
     }
-    
+
     console.log('⚠️ Office 365 SMTP blocked by IT policies');
     console.log('💡 Using Ethereal SMTP for immediate testing...\n');
-    
+
     try {
       console.log('2. Creating Ethereal test account...');
       this.etherealAccount = await nodemailer.createTestAccount();
-      
+
       console.log(`✅ Account: ${this.etherealAccount.user}`);
       console.log('📧 View sent emails at: https://ethereal.email/\n');
-      
+
       this.transporter = nodemailer.createTransport({
         host: 'smtp.ethereal.email',
         port: 587,
@@ -95,10 +101,10 @@ class EmailService {
           pass: this.etherealAccount.pass
         }
       });
-      
+
       await this.transporter.verify();
       console.log('✅ Ethereal SMTP connection verified');
-      
+
       const testResult = await this.sendTestEmail();
       if (testResult.success) {
         console.log('🎉 Temporary email service ready!');
@@ -106,7 +112,7 @@ class EmailService {
         this.mode = 'ethereal';
         return true;
       }
-      
+
       return false;
     } catch (error) {
       console.error('❌ Ethereal initialization failed:', error.message);
@@ -126,18 +132,18 @@ class EmailService {
       },
       tls: { rejectUnauthorized: false }
     };
-    
+
     try {
       const testTransporter = nodemailer.createTransport(office365Config);
       await testTransporter.verify();
-      
+
       await testTransporter.sendMail({
         from: `"Test" <noreply@power-transitions.com>`,
         to: ADMIN_EMAIL,
         subject: 'Test',
         text: 'Test'
       });
-      
+
       this.transporter = testTransporter;
       return true;
     } catch (error) {
@@ -154,7 +160,7 @@ class EmailService {
         console.log('   Mode: debug\n');
         return { success: true, debug: true };
       }
-      
+
       const info = await this.transporter.sendMail({
         from: `"Power Pipeline" <${this.fromEmail}>`,
         to: ADMIN_EMAIL,
@@ -166,12 +172,12 @@ class EmailService {
           <p>IT Action Required: Enable Office 365 SMTP AUTH</p>
         `
       });
-      
+
       console.log(`✅ Test email sent to ${ADMIN_EMAIL}`);
       if (this.mode === 'ethereal') {
         console.log(`📧 Preview: https://ethereal.email/message/${info.messageId}`);
       }
-      
+
       return { success: true, messageId: info.messageId };
     } catch (error) {
       return { success: false, error: error.message };
@@ -193,7 +199,7 @@ class EmailService {
       console.error('❌ Email service not ready');
       return { success: false, error: 'Email service not ready' };
     }
-    
+
     if (DEBUG_MODE || this.mode === 'debug') {
       console.log('\n📧 [DEBUG EMAIL]:');
       console.log(`   To: ${to}`);
@@ -202,18 +208,18 @@ class EmailService {
       console.log(`   HTML Preview: ${html.substring(0, 100)}...\n`);
       return { success: true, debug: true };
     }
-    
+
     if (!this.validateEmailDomain(to)) {
       console.error(`🚫 REJECTED: Email domain not allowed for ${to}`);
-      return { 
-        success: false, 
-        error: `Only @power-transitions.com email addresses are allowed` 
+      return {
+        success: false,
+        error: `Only @power-transitions.com email addresses are allowed`
       };
     }
-    
+
     try {
       console.log(`📧 Sending email to ${to} (via ${this.mode})`);
-      
+
       const mailOptions = {
         from: `"Power Pipeline System" <${this.fromEmail}>`,
         to: to,
@@ -221,20 +227,20 @@ class EmailService {
         html: html,
         text: text || this.htmlToText(html)
       };
-      
+
       const info = await this.transporter.sendMail(mailOptions);
-      
+
       console.log(`✅ Email sent to ${to}`);
-      
+
       if (this.mode === 'ethereal') {
         console.log(`📧 Preview: https://ethereal.email/message/${info.messageId}`);
-        return { 
-          success: true, 
+        return {
+          success: true,
           messageId: info.messageId,
           previewUrl: `https://ethereal.email/message/${info.messageId}`
         };
       }
-      
+
       return { success: true, messageId: info.messageId };
     } catch (error) {
       console.error(`❌ Email failed:`, error.message);
@@ -256,9 +262,10 @@ let emailServiceReady = false;
 (async () => {
   try {
     emailServiceReady = await emailService.initialize();
-    console.log(emailServiceReady ? 
-      `✅ Email service initialized (Mode: ${emailService.mode})` : 
-      '❌ Email service failed to initialize'
+    console.log(
+      emailServiceReady
+        ? `✅ Email service initialized (Mode: ${emailService.mode})`
+        : '❌ Email service failed to initialize'
     );
   } catch (error) {
     console.error('Email service init error:', error);
@@ -270,7 +277,7 @@ let emailServiceReady = false;
 // ============================================
 if (DEBUG_MODE) {
   console.log('🔧 DEBUG MODE ENABLED');
-  
+
   app.use((req, res, next) => {
     console.log(`📨 ${req.method} ${req.path}`);
     if (req.method === 'POST' && req.path === '/api/auth/register') {
@@ -282,39 +289,49 @@ if (DEBUG_MODE) {
 
 // ========== MIDDLEWARE SETUP ==========
 
-// CORS configuration - FIXED
-const corsOptions = {
-  origin: [
-    'https://lively-water-022a59110.6.azurestaticapps.net',
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://localhost:5174',
-    'http://localhost:5175',
-    process.env.FRONTEND_URL || 'http://localhost:3000'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
-  exposedHeaders: ['Content-Range', 'X-Content-Range'],
-  maxAge: 86400
-};
+// Security headers
+app.use(helmet());
 
-// Security headers - adjusted for CORS
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  crossOriginEmbedderPolicy: false
-}));
+// ✅ CORS CONFIG (UPDATED + CLEAN)
+// - Allows your Azure Static Web App origin + local dev
+// - Also allows whatever you set in FRONTEND_URL (for custom domain)
+// - No manual Access-Control-* headers anywhere
+const allowedOrigins = [
+  'https://lively-water-022a59110.6.azurestaticapps.net',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5174',
+  'http://localhost:5175'
+];
 
-// Use CORS middleware
-app.use(cors(corsOptions));
+if (process.env.FRONTEND_URL) {
+  // ensure you store a full origin like: https://yourdomain.com (no trailing slash)
+  allowedOrigins.push(process.env.FRONTEND_URL);
+}
 
-// Handle preflight requests globally - FIX FOR CORS ERROR
-app.options('*', cors(corsOptions));
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // allow server-to-server / Postman (no Origin header)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  })
+);
+
+// Handle preflight for all routes
+app.options('*', cors());
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1000,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // Limit each IP to 1000 requests per windowMs
   message: {
     success: false,
     error: 'Too many requests from this IP, please try again later.'
@@ -345,17 +362,17 @@ const authenticateToken = (req, res, next) => {
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Access token required' 
+    return res.status(401).json({
+      success: false,
+      message: 'Access token required'
     });
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Invalid or expired token' 
+      return res.status(403).json({
+        success: false,
+        message: 'Invalid or expired token'
       });
     }
     req.user = user;
@@ -365,9 +382,9 @@ const authenticateToken = (req, res, next) => {
 
 const isAdmin = (req, res, next) => {
   if (req.user.role !== 'admin') {
-    return res.status(403).json({ 
-      success: false, 
-      message: 'Admin access required' 
+    return res.status(403).json({
+      success: false,
+      message: 'Admin access required'
     });
   }
   next();
@@ -390,7 +407,7 @@ app.get('/health', (req, res) => {
 
 // ========== TEST ENDPOINTS ==========
 app.get('/api/test', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'Power Pipeline API is running!',
     schema: process.env.DB_SCHEMA || 'pipeline_dashboard',
     admin_email: ADMIN_EMAIL,
@@ -407,22 +424,22 @@ app.get('/api/debug/db-connection', async (req, res) => {
     const envVars = {
       DB_HOST: process.env.DB_HOST,
       DB_PORT: process.env.DB_PORT,
-      DB_NAME: process.env.DB_NAME,  
+      DB_NAME: process.env.DB_NAME,
       DB_USER: process.env.DB_USER,
       NODE_ENV: process.env.NODE_ENV,
       DEBUG_MODE: process.env.DEBUG_MODE
     };
-    
+
     // Check actual database connection
     const client = await pool.connect();
     try {
       const dbInfo = await client.query(`
-        SELECT 
+        SELECT
           current_database() as current_db,
           current_schema() as current_schema,
           version() as pg_version
       `);
-      
+
       res.json({
         success: true,
         environment_variables: envVars,
@@ -444,8 +461,8 @@ app.post('/api/echo', (req, res) => {
   if (DEBUG_MODE) {
     console.log('📨 Echo endpoint called:', req.body);
   }
-  res.json({ 
-    success: true, 
+  res.json({
+    success: true,
     received: req.body,
     timestamp: new Date().toISOString()
   });
@@ -454,22 +471,21 @@ app.post('/api/echo', (req, res) => {
 // Debug route for testing registration
 app.post('/api/debug/test-register', async (req, res) => {
   console.log('🔍 DEBUG REGISTER REQUEST:', req.body);
-  
+
   try {
     const { username, email, password } = req.body;
-    
+
     const passwordHash = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
-       (username, email, password_hash, role, status) 
-       VALUES ($1, $2, $3, 'pending', 'pending_approval') 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
+       (username, email, password_hash, role, status)
+       VALUES ($1, $2, $3, 'pending', 'pending_approval')
        RETURNING id, username, email`,
       [username, email, passwordHash]
     );
-    
+
     console.log('✅ DEBUG INSERT SUCCESS:', result.rows[0]);
     res.json({ success: true, user: result.rows[0] });
-    
   } catch (error) {
     console.error('❌ DEBUG INSERT ERROR:', error.message);
     res.status(500).json({ success: false, error: error.message });
@@ -480,7 +496,7 @@ app.post('/api/debug/test-register', async (req, res) => {
 app.get('/api/debug/all-users', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT 
+      SELECT
         id,
         username,
         email,
@@ -488,10 +504,10 @@ app.get('/api/debug/all-users', async (req, res) => {
         role,
         created_at,
         approved_at
-      FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
+      FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
       ORDER BY created_at DESC
     `);
-    
+
     res.json({
       success: true,
       count: result.rows.length,
@@ -499,37 +515,16 @@ app.get('/api/debug/all-users', async (req, res) => {
     });
   } catch (error) {
     console.error('Debug endpoint error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
 
 // ============================================
-// CORS TEST ENDPOINT
-// ============================================
-app.get('/api/cors-test', (req, res) => {
-  res.json({
-    success: true,
-    message: 'CORS test successful',
-    timestamp: new Date().toISOString(),
-    origin: req.headers.origin,
-    corsConfigured: true,
-    allowedOrigins: [
-      'https://lively-water-022a59110.6.azurestaticapps.net',
-      'http://localhost:5173',
-      'http://localhost:3000'
-    ]
-  });
-});
-
-// ============================================
 // AUTH ROUTES
 // ============================================
-
-// Explicit preflight for login
-app.options('/api/auth/login', cors(corsOptions));
 
 // REGISTER NEW USER
 app.post('/api/auth/register', async (req, res) => {
@@ -537,43 +532,43 @@ app.post('/api/auth/register', async (req, res) => {
     console.log('\n🔵 REGISTRATION REQUEST RECEIVED');
     console.log('Body:', JSON.stringify(req.body, null, 2));
   }
-  
+
   const client = await pool.connect();
-  
+
   try {
     const { username, email, password, full_name } = req.body;
 
     if (!username || !email || !password) {
       if (DEBUG_MODE) console.log('❌ Missing required fields');
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Username, email, and password are required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Username, email, and password are required'
       });
     }
 
     if (password.length < 8) {
       if (DEBUG_MODE) console.log('❌ Password too short');
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Password must be at least 8 characters long' 
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters long'
       });
     }
 
     const emailDomain = email.toLowerCase().split('@')[1];
     if (emailDomain !== 'power-transitions.com') {
       if (DEBUG_MODE) console.log(`❌ Invalid email domain: ${emailDomain}`);
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Only @power-transitions.com email addresses are allowed for registration' 
+      return res.status(400).json({
+        success: false,
+        message: 'Only @power-transitions.com email addresses are allowed for registration'
       });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       if (DEBUG_MODE) console.log('❌ Invalid email format');
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid email format' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid email format'
       });
     }
 
@@ -584,19 +579,19 @@ app.post('/api/auth/register', async (req, res) => {
 
     const usernameLower = username.toLowerCase();
     const emailLower = email.toLowerCase();
-    
+
     const existingUser = await client.query(
-      `SELECT id, username, email FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
+      `SELECT id, username, email FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
        WHERE LOWER(username) = $1 OR LOWER(email) = $2`,
       [usernameLower, emailLower]
     );
 
     if (existingUser.rows.length > 0) {
       await client.query('ROLLBACK');
-      
+
       const existing = existingUser.rows[0];
       let conflictMessage = '';
-      
+
       if (existing.username.toLowerCase() === usernameLower) {
         conflictMessage = `Username "${existing.username}" is already registered`;
       } else if (existing.email.toLowerCase() === emailLower) {
@@ -609,8 +604,8 @@ app.post('/api/auth/register', async (req, res) => {
         console.log('❌ Registration conflict:', conflictMessage);
       }
 
-      return res.status(409).json({ 
-        success: false, 
+      return res.status(409).json({
+        success: false,
         message: conflictMessage
       });
     }
@@ -621,9 +616,9 @@ app.post('/api/auth/register', async (req, res) => {
     if (DEBUG_MODE) console.log('✅ Password hashed');
 
     const newUser = await client.query(
-      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
-       (username, email, password_hash, full_name, role, status) 
-       VALUES ($1, $2, $3, $4, $5, $6) 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
+       (username, email, password_hash, full_name, role, status)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, username, email, full_name, role, status, created_at`,
       [username, email, passwordHash, full_name || '', 'pending', 'pending_approval']
     );
@@ -635,8 +630,8 @@ app.post('/api/auth/register', async (req, res) => {
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     await client.query(
-      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.approval_tokens 
-       (user_id, token, token_type, admin_email, expires_at) 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.approval_tokens
+       (user_id, token, token_type, admin_email, expires_at)
        VALUES ($1, $2, $3, $4, $5)`,
       [user.id, approvalToken, 'admin_approval', ADMIN_EMAIL, expiresAt]
     );
@@ -648,7 +643,7 @@ app.post('/api/auth/register', async (req, res) => {
         <h2>Registration Submitted Successfully</h2>
         <p>Thank you for registering with Power Pipeline Dashboard!</p>
         <p>Your registration has been submitted for administrator approval.</p>
-        
+
         <div style="background:#f8f9fa;padding:15px;border-radius:8px;margin:20px 0;">
           <h3>What happens next?</h3>
           <ol>
@@ -658,7 +653,7 @@ app.post('/api/auth/register', async (req, res) => {
             <li>You can then log in with your credentials</li>
           </ol>
         </div>
-        
+
         <p><strong>Your Registration Details:</strong></p>
         <ul>
           <li><strong>Username:</strong> ${username}</li>
@@ -666,16 +661,16 @@ app.post('/api/auth/register', async (req, res) => {
           ${full_name ? `<li><strong>Full Name:</strong> ${full_name}</li>` : ''}
           <li><strong>Status:</strong> Pending Approval</li>
         </ul>
-        
+
         <p>If you have any questions, please contact the system administrator.</p>
       `;
-      
+
       const userEmailResult = await emailService.sendEmail(
         email,
         'Registration Submitted for Approval - Power Pipeline Dashboard',
         userEmailHtml
       );
-      
+
       if (userEmailResult.success) {
         if (DEBUG_MODE) console.log(`✅ Registration email sent to ${email}`);
       } else {
@@ -685,7 +680,7 @@ app.post('/api/auth/register', async (req, res) => {
 
     if (emailServiceReady) {
       const approvalLink = `${FRONTEND_URL}/admin/approve/${approvalToken}`;
-      
+
       const adminEmailHtml = `
         <h2>New User Registration Requires Approval</h2>
         <p>A new user has registered and requires your approval:</p>
@@ -700,13 +695,13 @@ app.post('/api/auth/register', async (req, res) => {
         </a></p>
         <p><small>This link expires in 24 hours.</small></p>
       `;
-      
+
       const adminEmailResult = await emailService.sendEmail(
         ADMIN_EMAIL,
         `[Action Required] New User Registration - ${username}`,
         adminEmailHtml
       );
-      
+
       if (adminEmailResult.success) {
         if (DEBUG_MODE) console.log(`✅ Admin notification sent to ${ADMIN_EMAIL}`);
       } else {
@@ -729,25 +724,28 @@ app.post('/api/auth/register', async (req, res) => {
       email_service: {
         active: emailServiceReady,
         mode: emailService.mode,
-        note: emailService.mode === 'ethereal' ? 'Using temporary service while waiting for Office 365 SMTP fix' : 
-              emailService.mode === 'debug' ? 'Debug mode - emails logged to console' : 'Using Office 365 SMTP'
+        note:
+          emailService.mode === 'ethereal'
+            ? 'Using temporary service while waiting for Office 365 SMTP fix'
+            : emailService.mode === 'debug'
+            ? 'Debug mode - emails logged to console'
+            : 'Using Office 365 SMTP'
       }
     });
-
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Registration error:', error);
-    
+
     if (DEBUG_MODE) {
       console.error('❌ REGISTRATION ERROR:', error);
       console.error('Error stack:', error.stack);
     }
-    
-    res.status(500).json({ 
-      success: false, 
+
+    res.status(500).json({
+      success: false,
       message: 'Registration failed. Please try again later.',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
-      stack: (DEBUG_MODE && process.env.NODE_ENV === 'development') ? error.stack : undefined
+      stack: DEBUG_MODE && process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   } finally {
     client.release();
@@ -761,32 +759,32 @@ app.post('/api/auth/login', async (req, res) => {
     const { username, password, ip_address, user_agent, device_fingerprint } = req.body;
 
     const userResult = await pool.query(
-      `SELECT * FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users WHERE (username = $1 OR email = $1) 
+      `SELECT * FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users WHERE (username = $1 OR email = $1)
        AND status = 'active' AND is_active = true`,
       [username]
     );
 
     if (userResult.rows.length === 0) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid credentials or account not approved' 
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials or account not approved'
       });
     }
 
     const user = userResult.rows[0];
 
     if (user.status !== 'active') {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Account is not approved yet. Please wait for admin approval.' 
+      return res.status(401).json({
+        success: false,
+        message: 'Account is not approved yet. Please wait for admin approval.'
       });
     }
 
     const isValidPassword = await verifyPassword(password, user.password_hash);
     if (!isValidPassword) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid credentials' 
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid credentials'
       });
     }
 
@@ -796,16 +794,16 @@ app.post('/api/auth/login', async (req, res) => {
     );
 
     await pool.query(
-      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.login_logs 
-       (user_id, ip_address, user_agent, device_fingerprint, login_time) 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.login_logs
+       (user_id, ip_address, user_agent, device_fingerprint, login_time)
        VALUES ($1, $2, $3, $4, NOW())`,
       [user.id, ip_address, user_agent, device_fingerprint]
     );
 
     const token = jwt.sign(
-      { 
-        userId: user.id, 
-        username: user.username, 
+      {
+        userId: user.id,
+        username: user.username,
         role: user.role,
         email: user.email
       },
@@ -830,12 +828,11 @@ app.post('/api/auth/login', async (req, res) => {
       token,
       user: userData
     });
-
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error during login' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error during login'
     });
   }
 });
@@ -846,17 +843,17 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email is required' 
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
       });
     }
 
     const emailDomain = email.toLowerCase().split('@')[1];
     if (emailDomain !== 'power-transitions.com') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Only @power-transitions.com email addresses are allowed' 
+      return res.status(400).json({
+        success: false,
+        message: 'Only @power-transitions.com email addresses are allowed'
       });
     }
 
@@ -866,9 +863,9 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     );
 
     if (userResult.rows.length === 0) {
-      return res.json({ 
-        success: true, 
-        message: 'If an account exists with this email, you will receive a password reset link' 
+      return res.json({
+        success: true,
+        message: 'If an account exists with this email, you will receive a password reset link'
       });
     }
 
@@ -885,7 +882,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 
     if (emailServiceReady) {
       const resetUrl = `${FRONTEND_URL}/reset-password/${resetToken}`;
-      
+
       const resetEmailHtml = `
         <h2>Password Reset Request</h2>
         <p>You requested a password reset for your Power Pipeline Dashboard account.</p>
@@ -895,13 +892,13 @@ app.post('/api/auth/forgot-password', async (req, res) => {
         <p><small>This link expires in 1 hour. If you didn't request this, please ignore this email.</small></p>
         <p><strong>Username:</strong> ${user.username}</p>
       `;
-      
+
       const emailResult = await emailService.sendEmail(
         user.email,
         'Password Reset Request - Power Pipeline Dashboard',
         resetEmailHtml
       );
-      
+
       if (emailResult.success) {
         console.log(`✅ Password reset email sent to ${user.email}`);
       } else {
@@ -909,20 +906,19 @@ app.post('/api/auth/forgot-password', async (req, res) => {
       }
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: 'Password reset link sent to your email.',
       email_service: {
         active: emailServiceReady,
         mode: emailService.mode
       }
     });
-
   } catch (error) {
     console.error('Forgot password error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error processing request' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error processing request'
     });
   }
 });
@@ -934,27 +930,27 @@ app.post('/api/auth/reset-password/:token', async (req, res) => {
     const { password } = req.body;
 
     if (!password || password.length < 8) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Password must be at least 8 characters long' 
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters long'
       });
     }
 
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
     const userResult = await pool.query(
-      `SELECT id, email FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
-       WHERE reset_password_token = $1 
-       AND reset_password_expires > NOW() 
-       AND status = 'active' 
+      `SELECT id, email FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
+       WHERE reset_password_token = $1
+       AND reset_password_expires > NOW()
+       AND status = 'active'
        AND is_active = true`,
       [tokenHash]
     );
 
     if (userResult.rows.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid or expired reset token' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired reset token'
       });
     }
 
@@ -964,9 +960,9 @@ app.post('/api/auth/reset-password/:token', async (req, res) => {
     const passwordHash = await hashPassword(password);
 
     await pool.query(
-      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
-       SET password_hash = $1, 
-           reset_password_token = NULL, 
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
+       SET password_hash = $1,
+           reset_password_token = NULL,
            reset_password_expires = NULL,
            updated_at = NOW()
        WHERE id = $2`,
@@ -984,7 +980,7 @@ app.post('/api/auth/reset-password/:token', async (req, res) => {
         <p>You can now log in with your new password.</p>
         <p>If you did not make this change, please contact the system administrator immediately.</p>
       `;
-      
+
       await emailService.sendEmail(
         userEmail,
         'Password Reset Successful - Power Pipeline Dashboard',
@@ -992,16 +988,15 @@ app.post('/api/auth/reset-password/:token', async (req, res) => {
       );
     }
 
-    res.json({ 
-      success: true, 
-      message: 'Password reset successful. You can now login with your new password.' 
+    res.json({
+      success: true,
+      message: 'Password reset successful. You can now login with your new password.'
     });
-
   } catch (error) {
     console.error('Reset password error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error resetting password' 
+    res.status(500).json({
+      success: false,
+      message: 'Server error resetting password'
     });
   }
 });
@@ -1016,10 +1011,10 @@ app.post('/api/auth/verify', async (req, res) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
-    
+
     const userResult = await pool.query(
-      `SELECT id, username, email, full_name, role, status, last_login, login_count 
-       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
+      `SELECT id, username, email, full_name, role, status, last_login, login_count
+       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
        WHERE id = $1 AND status = 'active' AND is_active = true`,
       [decoded.userId]
     );
@@ -1028,11 +1023,10 @@ app.post('/api/auth/verify', async (req, res) => {
       return res.json({ valid: false });
     }
 
-    res.json({ 
-      valid: true, 
-      user: userResult.rows[0] 
+    res.json({
+      valid: true,
+      user: userResult.rows[0]
     });
-
   } catch (error) {
     res.json({ valid: false });
   }
@@ -1042,17 +1036,17 @@ app.post('/api/auth/verify', async (req, res) => {
 app.post('/api/auth/logout', async (req, res) => {
   try {
     const { token } = req.body;
-    
+
     if (token) {
       try {
         const decoded = jwt.verify(token, JWT_SECRET);
         await pool.query(
-          `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.login_logs 
+          `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.login_logs
            SET logout_time = NOW(),
                session_duration = EXTRACT(EPOCH FROM (NOW() - login_time))
-           WHERE user_id = $1 
+           WHERE user_id = $1
            AND logout_time IS NULL
-           ORDER BY login_time DESC 
+           ORDER BY login_time DESC
            LIMIT 1`,
           [decoded.userId]
         );
@@ -1068,14 +1062,12 @@ app.post('/api/auth/logout', async (req, res) => {
   }
 });
 
-
 // Share the pool with routes
 app.set('pool', pool);
 
-// Drop down list 
+// Drop down list
 const dropdownOptionsRouter = require('./routes/dropdownOptions');
 app.use('/api/dropdown-options', dropdownOptionsRouter);
-
 
 // ============================================
 // ADMIN ROUTES
@@ -1083,8 +1075,8 @@ app.use('/api/dropdown-options', dropdownOptionsRouter);
 app.get('/api/admin/pending-users', authenticateToken, isAdmin, async (req, res) => {
   try {
     const pendingUsers = await pool.query(
-      `SELECT id, username, email, full_name, created_at 
-       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
+      `SELECT id, username, email, full_name, created_at
+       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
        WHERE status = 'pending_approval'
        ORDER BY created_at DESC`
     );
@@ -1092,16 +1084,16 @@ app.get('/api/admin/pending-users', authenticateToken, isAdmin, async (req, res)
     res.json(pendingUsers.rows);
   } catch (error) {
     console.error('Get pending users error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch pending users' 
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch pending users'
     });
   }
 });
 
 app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
     const { id } = req.params;
     const { role = 'operator' } = req.body;
@@ -1110,16 +1102,16 @@ app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, 
     await client.query('BEGIN');
 
     const userQuery = await client.query(
-      `SELECT id, username, email, status, role FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
+      `SELECT id, username, email, status, role FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
        WHERE id = $1`,
       [id]
     );
 
     if (userQuery.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
 
@@ -1127,15 +1119,15 @@ app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, 
 
     if (user.status !== 'pending_approval') {
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
-        success: false, 
-        message: `User is not pending approval (current status: ${user.status})` 
+      return res.status(400).json({
+        success: false,
+        message: `User is not pending approval (current status: ${user.status})`
       });
     }
 
     await client.query(
-      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
-       SET status = 'active', 
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
+       SET status = 'active',
            role = $1,
            approved_by = $2,
            approved_at = NOW(),
@@ -1145,8 +1137,8 @@ app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, 
     );
 
     await client.query(
-      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.admin_actions 
-        (admin_id, target_user_id, action_type, previous_status, new_status, previous_role, new_role) 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.admin_actions
+        (admin_id, target_user_id, action_type, previous_status, new_status, previous_role, new_role)
        VALUES ($1, $2, 'approve', $3, 'active', $4, $5)`,
       [adminId, id, user.status, user.role, role]
     );
@@ -1155,7 +1147,7 @@ app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, 
       const emailHtml = `
         <h2>Your Account Has Been Approved!</h2>
         <p>Your Power Pipeline Dashboard account has been approved by an administrator.</p>
-        
+
         <div style="background:#d4edda;padding:15px;border-radius:8px;margin:20px 0;">
           <h3 style="color:#155724;">Account Details:</h3>
           <ul>
@@ -1165,20 +1157,16 @@ app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, 
             <li><strong>Approval Date:</strong> ${new Date().toLocaleDateString()}</li>
           </ul>
         </div>
-        
-        <p><a href="${FRONTEND_URL}/login" 
+
+        <p><a href="${FRONTEND_URL}/login"
            style="background:#28a745;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">
           Log In Now
         </a></p>
-        
+
         <p>You can now log in with your credentials.</p>
       `;
-      
-      await emailService.sendEmail(
-        user.email,
-        'Account Approved - Power Pipeline Dashboard',
-        emailHtml
-      );
+
+      await emailService.sendEmail(user.email, 'Account Approved - Power Pipeline Dashboard', emailHtml);
     }
 
     await client.query('COMMIT');
@@ -1194,13 +1182,12 @@ app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, 
         status: 'active'
       }
     });
-
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Approve user error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to approve user' 
+    res.status(500).json({
+      success: false,
+      message: 'Failed to approve user'
     });
   } finally {
     client.release();
@@ -1209,7 +1196,7 @@ app.post('/api/admin/approve-user/:id', authenticateToken, isAdmin, async (req, 
 
 app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
     const { id } = req.params;
     const { reason = '' } = req.body;
@@ -1218,16 +1205,16 @@ app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, r
     await client.query('BEGIN');
 
     const userQuery = await client.query(
-      `SELECT id, username, email, status FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
+      `SELECT id, username, email, status FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
        WHERE id = $1`,
       [id]
     );
 
     if (userQuery.rows.length === 0) {
       await client.query('ROLLBACK');
-      return res.status(404).json({ 
-        success: false, 
-        message: 'User not found' 
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
       });
     }
 
@@ -1235,14 +1222,14 @@ app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, r
 
     if (user.status !== 'pending_approval') {
       await client.query('ROLLBACK');
-      return res.status(400).json({ 
-        success: false, 
-        message: `User is not pending approval (current status: ${user.status})` 
+      return res.status(400).json({
+        success: false,
+        message: `User is not pending approval (current status: ${user.status})`
       });
     }
 
     await client.query(
-      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
        SET status = 'rejected',
            rejection_reason = $1,
            is_active = false
@@ -1251,8 +1238,8 @@ app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, r
     );
 
     await client.query(
-      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.admin_actions 
-        (admin_id, target_user_id, action_type, previous_status, new_status, notes) 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.admin_actions
+        (admin_id, target_user_id, action_type, previous_status, new_status, notes)
        VALUES ($1, $2, 'reject', $3, 'rejected', $4)`,
       [adminId, id, user.status, reason]
     );
@@ -1261,21 +1248,17 @@ app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, r
       const emailHtml = `
         <h2>Registration Update</h2>
         <p>Your registration for Power Pipeline Dashboard has been reviewed.</p>
-        
+
         <div style="background:#f8d7da;padding:15px;border-radius:8px;margin:20px 0;">
           <h3 style="color:#721c24;">Status: Not Approved</h3>
           ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
           <p>Your account registration has not been approved at this time.</p>
         </div>
-        
+
         <p>If you believe this is an error, please contact the system administrator.</p>
       `;
-      
-      await emailService.sendEmail(
-        user.email,
-        'Registration Status - Power Pipeline Dashboard',
-        emailHtml
-      );
+
+      await emailService.sendEmail(user.email, 'Registration Status - Power Pipeline Dashboard', emailHtml);
     }
 
     await client.query('COMMIT');
@@ -1290,13 +1273,12 @@ app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, r
         status: 'rejected'
       }
     });
-
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Reject user error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to reject user' 
+    res.status(500).json({
+      success: false,
+      message: 'Failed to reject user'
     });
   } finally {
     client.release();
@@ -1305,46 +1287,46 @@ app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, r
 
 app.get('/api/admin/approve/:token', async (req, res) => {
   const client = await pool.connect();
-  
+
   try {
     const { token } = req.params;
-    
+
     const tokenQuery = await client.query(
-      `SELECT at.*, u.username, u.email, u.full_name, u.status 
+      `SELECT at.*, u.username, u.email, u.full_name, u.status
        FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.approval_tokens at
        JOIN ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users u ON at.user_id = u.id
-       WHERE at.token = $1 AND at.token_type = 'admin_approval' 
+       WHERE at.token = $1 AND at.token_type = 'admin_approval'
        AND at.expires_at > NOW() AND at.used = false`,
       [token]
     );
-    
+
     if (tokenQuery.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Invalid or expired approval token' 
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired approval token'
       });
     }
-    
+
     const tokenData = tokenQuery.rows[0];
-    
+
     if (tokenData.status !== 'pending_approval') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'User is not pending approval' 
+      return res.status(400).json({
+        success: false,
+        message: 'User is not pending approval'
       });
     }
-    
+
     await client.query('BEGIN');
-    
+
     const adminQuery = await client.query(
       `SELECT id FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users WHERE role = 'admin' AND status = 'active' LIMIT 1`
     );
-    
+
     const adminId = adminQuery.rows[0]?.id || 1;
-    
+
     await client.query(
-      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
-       SET status = 'active', 
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
+       SET status = 'active',
            role = 'operator',
            approved_by = $1,
            approved_at = NOW(),
@@ -1352,26 +1334,26 @@ app.get('/api/admin/approve/:token', async (req, res) => {
        WHERE id = $2`,
       [adminId, tokenData.user_id]
     );
-    
+
     await client.query(
-      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.approval_tokens 
-       SET used = true, used_at = NOW() 
+      `UPDATE ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.approval_tokens
+       SET used = true, used_at = NOW()
        WHERE id = $1`,
       [tokenData.id]
     );
-    
+
     await client.query(
-      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.admin_actions 
-        (admin_id, target_user_id, action_type, previous_status, new_status, previous_role, new_role) 
+      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.admin_actions
+        (admin_id, target_user_id, action_type, previous_status, new_status, previous_role, new_role)
        VALUES ($1, $2, 'approve', 'pending_approval', 'active', 'pending', 'operator')`,
       [adminId, tokenData.user_id]
     );
-    
+
     if (emailServiceReady) {
       const emailHtml = `
         <h2>Your Account Has Been Approved!</h2>
         <p>Good news! Your Power Pipeline Dashboard account has been approved.</p>
-        
+
         <div style="background:#d4edda;padding:15px;border-radius:8px;margin:20px 0;">
           <h3 style="color:#155724;">✅ Account Details:</h3>
           <ul>
@@ -1382,33 +1364,30 @@ app.get('/api/admin/approve/:token', async (req, res) => {
             <li><strong>Approval Date:</strong> ${new Date().toLocaleDateString()}</li>
           </ul>
         </div>
-        
-        <p><a href="${FRONTEND_URL}/login" 
+
+        <p><a href="${FRONTEND_URL}/login"
            style="background:#28a745;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">
           Log In Now
         </a></p>
       `;
-      
-      await emailService.sendEmail(
-        tokenData.email,
-        'Account Approved - Power Pipeline Dashboard',
-        emailHtml
-      );
+
+      await emailService.sendEmail(tokenData.email, 'Account Approved - Power Pipeline Dashboard', emailHtml);
     }
-    
+
     await client.query('COMMIT');
-    
-    const successUrl = `${FRONTEND_URL}/login?message=User+${encodeURIComponent(tokenData.username)}+has+been+approved`;
-    
+
+    const successUrl = `${FRONTEND_URL}/login?message=User+${encodeURIComponent(
+      tokenData.username
+    )}+has+been+approved`;
+
     res.redirect(successUrl);
-    
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Admin approval error:', error);
-    
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to process approval' 
+
+    res.status(500).json({
+      success: false,
+      message: 'Failed to process approval'
     });
   } finally {
     client.release();
@@ -1419,41 +1398,41 @@ app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
   try {
     const { page = 1, limit = 20, status, role, search } = req.query;
     const offset = (page - 1) * limit;
-    
+
     let query = `
-      SELECT id, username, email, full_name, role, status, 
+      SELECT id, username, email, full_name, role, status,
              approved_at, last_login, login_count, created_at,
              (SELECT COUNT(*) FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users) as total_count
       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
       WHERE 1=1
     `;
-    
+
     const params = [];
     let paramCount = 0;
-    
+
     if (status) {
       paramCount++;
       query += ` AND status = $${paramCount}`;
       params.push(status);
     }
-    
+
     if (role) {
       paramCount++;
       query += ` AND role = $${paramCount}`;
       params.push(role);
     }
-    
+
     if (search) {
       paramCount++;
       query += ` AND (username ILIKE $${paramCount} OR email ILIKE $${paramCount} OR full_name ILIKE $${paramCount})`;
       params.push(`%${search}%`);
     }
-    
+
     query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`;
     params.push(limit, offset);
-    
+
     const result = await pool.query(query, params);
-    
+
     res.json({
       success: true,
       users: result.rows,
@@ -1464,12 +1443,11 @@ app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
         totalPages: Math.ceil((result.rows[0]?.total_count || 0) / limit)
       }
     });
-    
   } catch (error) {
     console.error('Get users error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to fetch users' 
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch users'
     });
   }
 });
@@ -1477,33 +1455,32 @@ app.get('/api/admin/users', authenticateToken, isAdmin, async (req, res) => {
 app.get('/api/auth/registration-status/:email', async (req, res) => {
   try {
     const { email } = req.params;
-    
+
     const query = await pool.query(
-      `SELECT status, approved_at, rejection_reason 
-       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users 
+      `SELECT status, approved_at, rejection_reason
+       FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
        WHERE email = $1`,
       [email]
     );
-    
+
     if (query.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'No registration found with this email' 
+      return res.status(404).json({
+        success: false,
+        message: 'No registration found with this email'
       });
     }
-    
+
     res.json({
       success: true,
       status: query.rows[0].status,
       approved_at: query.rows[0].approved_at,
       rejection_reason: query.rows[0].rejection_reason
     });
-    
   } catch (error) {
     console.error('Registration status error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to check registration status' 
+    res.status(500).json({
+      success: false,
+      message: 'Failed to check registration status'
     });
   }
 });
@@ -1511,12 +1488,12 @@ app.get('/api/auth/registration-status/:email', async (req, res) => {
 app.get('/api/test-email', async (req, res) => {
   try {
     if (!emailServiceReady) {
-      return res.json({ 
-        success: false, 
-        message: 'Email service not initialized' 
+      return res.json({
+        success: false,
+        message: 'Email service not initialized'
       });
     }
-    
+
     const testHtml = `
       <h2>Test Email</h2>
       <p>This is a test email from Power Pipeline Dashboard.</p>
@@ -1524,13 +1501,9 @@ app.get('/api/test-email', async (req, res) => {
       <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
       <p><strong>Debug Mode:</strong> ${DEBUG_MODE ? 'ENABLED' : 'DISABLED'}</p>
     `;
-    
-    const result = await emailService.sendEmail(
-      ADMIN_EMAIL,
-      'Power Pipeline - Email Service Test',
-      testHtml
-    );
-    
+
+    const result = await emailService.sendEmail(ADMIN_EMAIL, 'Power Pipeline - Email Service Test', testHtml);
+
     res.json({
       success: result.success,
       message: result.success ? 'Test email sent' : 'Test email failed',
@@ -1542,16 +1515,17 @@ app.get('/api/test-email', async (req, res) => {
         error: result.error,
         debug: result.debug || false
       },
-      note: DEBUG_MODE ? 'Debug mode - emails logged to console' : 
-            emailService.mode === 'ethereal' ? 'Using temporary service. Office 365 pending IT fix.' : 
-            'Using Office 365 SMTP'
+      note: DEBUG_MODE
+        ? 'Debug mode - emails logged to console'
+        : emailService.mode === 'ethereal'
+        ? 'Using temporary service. Office 365 pending IT fix.'
+        : 'Using Office 365 SMTP'
     });
-    
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      message: 'Test failed', 
-      error: error.message 
+    res.status(500).json({
+      success: false,
+      message: 'Test failed',
+      error: error.message
     });
   }
 });
@@ -1607,21 +1581,16 @@ app.listen(PORT, () => {
   console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
   console.log(`📧 Email mode: ${emailServiceReady ? `Active (${emailService.mode})` : 'Inactive'}`);
   console.log(`🔧 Debug mode: ${DEBUG_MODE ? 'ENABLED' : 'DISABLED'}`);
-  console.log(`🌐 CORS Allowed Origins:`);
-  console.log(`   - https://lively-water-022a59110.6.azurestaticapps.net`);
-  console.log(`   - http://localhost:5173`);
-  console.log(`   - http://localhost:3000`);
-  
+
   if (emailService.mode === 'ethereal') {
     console.log(`📧 View sent emails at: https://ethereal.email/`);
     console.log(`💡 Temporary service active while waiting for Office 365 SMTP fix`);
   }
-  
+
   console.log('='.repeat(70));
   console.log('📋 Available Endpoints:');
   console.log('- GET  /health - Server health check');
   console.log('- GET  /api/test - Server status');
-  console.log('- GET  /api/cors-test - CORS test endpoint');
   console.log('- POST /api/auth/register - Register new user (with email)');
   console.log('- POST /api/auth/login - Login (approved users only)');
   console.log('- POST /api/auth/forgot-password - Request password reset');
