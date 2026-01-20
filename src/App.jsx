@@ -10,6 +10,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
 import ApprovalSuccess from './components/ApprovalSuccess';
 import AdminApproval from './components/AdminApproval';
+import ReactDOM from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
