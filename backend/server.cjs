@@ -288,17 +288,29 @@ app.use(helmet());
 // CORS configuration - UPDATED: Added Azure Static Web App URL
 app.use(cors({
   origin: [
+    'https://lively-water-022a59110.6.azurestaticapps.net',
     'http://localhost:5173',
-    'http://localhost:5174', 
-    'http://localhost:5175', 
     'http://localhost:3000',
-    process.env.FRONTEND_URL || 'http://localhost:3000',
-    'https://lively-water-022a59110.6.azurestaticapps.net'  // ADDED: Your Static Web App
+    'http://localhost:5174',
+    'http://localhost:5175',
+    process.env.FRONTEND_URL || 'http://localhost:3000'
   ],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+// Add CORS headers BEFORE other middleware:
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://lively-water-022a59110.6.azurestaticapps.net');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // Rate limiting
 const limiter = rateLimit({
