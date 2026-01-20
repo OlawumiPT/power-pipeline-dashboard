@@ -10,6 +10,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
 import ApprovalSuccess from './components/ApprovalSuccess';
 import AdminApproval from './components/AdminApproval';
+import { HashRouter } from 'react-router-dom';
 
 // Main App component
 function App() {
