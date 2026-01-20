@@ -1,4 +1,4 @@
-import React from 'react';
+//import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import Login from './components/Login';
@@ -10,15 +10,20 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
 import ApprovalSuccess from './components/ApprovalSuccess';
 import AdminApproval from './components/AdminApproval';
-import ReactDOM from 'react-dom/client';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 import { HashRouter } from 'react-router-dom';
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
+// Create root and render
+const container = document.getElementById('root');
+const root = createRoot(container);
+
+root.render(
+  <StrictMode>
     <HashRouter>
       <App />
     </HashRouter>
-  </React.StrictMode>,
+  </StrictMode>
 );
 
 // Main App component
