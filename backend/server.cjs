@@ -14,9 +14,9 @@ const projectRoutes = require('./routes/projects');
 
 // Create Express app
 const app = express();
-const PORT = process.env.PORT || 8080;  // FIXED: Azure uses 8080, not 5000
+const PORT = process.env.PORT || 8080;
 
-// Database connection - FIXED: No defaults, added SSL for Azure
+// Database connection
 const pool = new Pool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT || 5432,
@@ -26,7 +26,7 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
-// Set schema for all connections - FIXED: Use environment variable
+// Set schema for all connections
 pool.on('connect', (client) => {
   client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}`);
 });
@@ -282,11 +282,8 @@ if (DEBUG_MODE) {
 
 // ========== MIDDLEWARE SETUP ==========
 
-// Security headers
-app.use(helmet());
-
-// CORS configuration - UPDATED: Added Azure Static Web App URL
-app.use(cors({
+// CORS configuration - FIXED
+const corsOptions = {
   origin: [
     'https://lively-water-022a59110.6.azurestaticapps.net',
     'http://localhost:5173',
@@ -297,13 +294,27 @@ app.use(cors({
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Range', 'X-Content-Range'],
+  maxAge: 86400
+};
+
+// Security headers - adjusted for CORS
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false
 }));
+
+// Use CORS middleware
+app.use(cors(corsOptions));
+
+// Handle preflight requests globally - FIX FOR CORS ERROR
+app.options('*', cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
   message: {
     success: false,
     error: 'Too many requests from this IP, please try again later.'
@@ -496,8 +507,29 @@ app.get('/api/debug/all-users', async (req, res) => {
 });
 
 // ============================================
+// CORS TEST ENDPOINT
+// ============================================
+app.get('/api/cors-test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'CORS test successful',
+    timestamp: new Date().toISOString(),
+    origin: req.headers.origin,
+    corsConfigured: true,
+    allowedOrigins: [
+      'https://lively-water-022a59110.6.azurestaticapps.net',
+      'http://localhost:5173',
+      'http://localhost:3000'
+    ]
+  });
+});
+
+// ============================================
 // AUTH ROUTES
 // ============================================
+
+// Explicit preflight for login
+app.options('/api/auth/login', cors(corsOptions));
 
 // REGISTER NEW USER
 app.post('/api/auth/register', async (req, res) => {
@@ -1575,6 +1607,10 @@ app.listen(PORT, () => {
   console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
   console.log(`📧 Email mode: ${emailServiceReady ? `Active (${emailService.mode})` : 'Inactive'}`);
   console.log(`🔧 Debug mode: ${DEBUG_MODE ? 'ENABLED' : 'DISABLED'}`);
+  console.log(`🌐 CORS Allowed Origins:`);
+  console.log(`   - https://lively-water-022a59110.6.azurestaticapps.net`);
+  console.log(`   - http://localhost:5173`);
+  console.log(`   - http://localhost:3000`);
   
   if (emailService.mode === 'ethereal') {
     console.log(`📧 View sent emails at: https://ethereal.email/`);
@@ -1585,6 +1621,7 @@ app.listen(PORT, () => {
   console.log('📋 Available Endpoints:');
   console.log('- GET  /health - Server health check');
   console.log('- GET  /api/test - Server status');
+  console.log('- GET  /api/cors-test - CORS test endpoint');
   console.log('- POST /api/auth/register - Register new user (with email)');
   console.log('- POST /api/auth/login - Login (approved users only)');
   console.log('- POST /api/auth/forgot-password - Request password reset');
