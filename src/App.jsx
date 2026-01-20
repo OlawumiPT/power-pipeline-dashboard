@@ -9,21 +9,20 @@ import DashboardContent from './DashboardContent';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
 import ApprovalSuccess from './components/ApprovalSuccess';
-import AdminApproval from './components/AdminApproval';
-import { createRoot } from 'react-dom/client';
+import AdminApproval from './components/AdminApproval';;
+import ReactDOM from 'react-dom';
 import { HashRouter } from 'react-router-dom';
-import App from './App.jsx';
+import App from './App';
 import './index.css';
 
-const container = document.getElementById('root');
-const root = createRoot(container);
-
-root.render(
+ReactDOM.render(
   <React.StrictMode>
     <HashRouter>
       <App />
     </HashRouter>
-  </React.StrictMode>
+  </React.StrictMode>,
+  document.getElementById('root')
+);
 
 // Main App component
 function App() {
