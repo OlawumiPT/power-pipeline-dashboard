@@ -32,6 +32,10 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
+if (process.env.NODE_ENV !== "production") {
+  require("dotenv").config();
+}
+
 // Set schema for all connections
 pool.on('connect', (client) => {
   client.query(`SET search_path TO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}`);
