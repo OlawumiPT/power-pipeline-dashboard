@@ -21,8 +21,7 @@ createRoot(document.getElementById("root")).render(
     </HashRouter>
   </React.StrictMode>
 );
-// Ma
-in App component
+// Main App component
 function App() {
   return (
     <Router>
