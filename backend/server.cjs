@@ -21,6 +21,7 @@ const projectRoutes = require('./routes/projects');
 // Create Express app
 const app = express();
 const PORT = process.env.PORT || 8080; // Azure commonly uses 8080
+app.listener(PORT, () => console.log('API is running on port ${PORT}'));
 
 // Database connection
 const pool = new Pool({
