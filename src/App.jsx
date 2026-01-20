@@ -12,7 +12,6 @@ import ApprovalSuccess from './components/ApprovalSuccess';
 import AdminApproval from './components/AdminApproval';;
 import ReactDOM from 'react-dom';
 import { HashRouter } from 'react-router-dom';
-import App from './App';
 import './index.css';
 
 ReactDOM.render(
