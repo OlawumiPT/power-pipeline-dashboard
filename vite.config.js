@@ -3,14 +3,7 @@ export default defineConfig(({ mode }) => ({
 
   server: {
     port: 5173,
-    // Only proxy in development mode
-    proxy: mode === 'development' ? {
-      "/api": {
-        target: "http://localhost:8080",
-        changeOrigin: true,
-        secure: false,
-      },
-    } : undefined,
+    // REMOVE the proxy section entirely for production
   },
 
   build: {
