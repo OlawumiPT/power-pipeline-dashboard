@@ -1,29 +1,28 @@
-import React from 'react';
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-import LoadingScreen from './LoadingScreen';
+import React from "react";
+import { Navigate, useLocation } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+import LoadingScreen from "./LoadingScreen";
 
 const ProtectedRoute = ({ children, requireAdmin = false }) => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
-  if (loading) {
-    return <LoadingScreen />;
-  }
+  // Still loading auth state
+  if (loading) return <LoadingScreen />;
 
+  // Not logged in: send to login and remember where user was going
   if (!user) {
-    // Redirect to login if not authenticated
-    console.log('ProtectedRoute: No user, redirecting to login');
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  // Check if admin access is required
-  if (requireAdmin && user.role !== 'admin') {
-    console.log(`ProtectedRoute: User role ${user.role} is not admin, redirecting to dashboard`);
+  // Admin check (safe even if role is missing)
+  const role = user?.role || user?.user?.role || user?.data?.role;
+
+  if (requireAdmin && role !== "admin") {
     return <Navigate to="/dashboard" replace />;
   }
 
-  console.log(`ProtectedRoute: User authenticated (${user.role}), showing page`);
-  return children;
+  return <>{children}</>;
 };
 
 export default ProtectedRoute;
