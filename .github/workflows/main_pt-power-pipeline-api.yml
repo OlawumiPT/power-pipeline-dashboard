@@ -1,31 +1,30 @@
-name: Build and deploy Node.js app to Azure Web App
+name: build-and-deploy
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
+    branches: [ "main" ]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Use Node.js 18
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: 18
 
       - name: Install backend dependencies
         working-directory: backend
-        run: npm install
+        run: npm ci --omit=dev
 
-      - name: Zip backend for deployment
+      - name: Zip backend for deployment (includes node_modules)
         run: |
           cd backend
-          zip -r ../backend.zip .
+          zip -r ../backend.zip . -x "*.git*"
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
