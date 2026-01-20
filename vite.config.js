@@ -27,11 +27,5 @@ export default defineConfig({
       }
     }
   },
-  
-  // For client-side routing in Azure
-  base: './',
-
-  define: {
-    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'production')
-  }
+   base: './',
 })
