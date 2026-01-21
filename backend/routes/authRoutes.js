@@ -6,7 +6,162 @@ const crypto = require('crypto');
 const { pool } = require('../config/database');
 const emailService = require('../services/emailService');
 
-// Registration endpoint with email validation
+// ========== EMAIL APPROVAL ENDPOINT (FOR EMAIL LINKS) ==========
+// This handles the email links that admins click to approve users
+router.get('/api/approve/:token', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const { token } = req.params;
+    console.log(`📧 Email approval link clicked for token: ${token}`);
+    
+    // Find user by approval token
+    const userResult = await client.query(
+      `SELECT id, username, email, full_name, status 
+       FROM pipeline_dashboard.users 
+       WHERE approval_token = $1 AND status = 'pending_approval'`,
+      [token]
+    );
+    
+    if (userResult.rows.length === 0) {
+      // Show nice HTML error page
+      return res.status(404).send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Invalid Approval Link</title>
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+            .error { background: #f8d7da; color: #721c24; padding: 30px; border-radius: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="error">
+            <h1>❌ Invalid Approval Link</h1>
+            <p>This approval link is invalid, has expired, or the user has already been approved.</p>
+            <p>Please contact the administrator if you believe this is an error.</p>
+            <br>
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" 
+               style="background:#6c757d;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;">
+              Go to Login
+            </a>
+          </div>
+        </body>
+        </html>
+      `);
+    }
+    
+    const user = userResult.rows[0];
+    
+    // Start transaction
+    await client.query('BEGIN');
+    
+    // Update user status to active
+    await client.query(
+      `UPDATE pipeline_dashboard.users 
+       SET status = 'active', 
+           approval_token = NULL,
+           approved_at = NOW(),
+           approved_by = 'email_link'
+       WHERE id = $1`,
+      [user.id]
+    );
+    
+    // Insert audit log
+    await client.query(
+      `INSERT INTO pipeline_dashboard.audit_logs 
+       (user_id, action, details, ip_address, user_agent)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        user.id,
+        'account_approved',
+        JSON.stringify({ 
+          approved_by: 'email_link', 
+          approval_method: 'email_token',
+          token_used: token.substring(0, 8) + '...'
+        }),
+        req.ip || req.connection.remoteAddress,
+        req.get('User-Agent') || 'unknown'
+      ]
+    );
+    
+    // Commit transaction
+    await client.query('COMMIT');
+    
+    // Send approval email to user
+    await emailService.sendApprovalEmail({
+      username: user.username,
+      email: user.email,
+      full_name: user.full_name || user.username,
+      role: 'user',
+      approval_date: new Date().toLocaleDateString()
+    });
+    
+    // Show success page
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Account Approved - Power Pipeline</title>
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; text-align: center; padding: 50px; }
+          .success { background: #d4edda; color: #155724; padding: 40px; border-radius: 15px; max-width: 600px; margin: 0 auto; }
+          .user-info { background: white; padding: 20px; margin: 25px 0; border-radius: 10px; text-align: left; }
+          .button { display: inline-block; background: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px; }
+        </style>
+      </head>
+      <body>
+        <div class="success">
+          <h1 style="margin-top: 0;">✅ Account Approved Successfully!</h1>
+          
+          <div class="user-info">
+            <h3 style="margin-top: 0; color: #333;">User Details:</h3>
+            <p><strong>Username:</strong> ${user.username}</p>
+            <p><strong>Email:</strong> ${user.email}</p>
+            <p><strong>Full Name:</strong> ${user.full_name || 'Not provided'}</p>
+            <p><strong>Status:</strong> <span style="color: #28a745; font-weight: bold;">Active</span></p>
+            <p><strong>Approved:</strong> ${new Date().toLocaleString()}</p>
+          </div>
+          
+          <p>✅ An approval email has been sent to: <strong>${user.email}</strong></p>
+          <p>✅ The user can now login to the Power Pipeline Dashboard.</p>
+          
+          <br>
+          <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">
+            Go to Login Page
+          </a>
+          
+          <p style="margin-top: 30px; font-size: 14px; color: #666;">
+            <em>Power Pipeline Dashboard - Account Approval System</em>
+          </p>
+        </div>
+      </body>
+      </html>
+    `);
+    
+    console.log(`✅ User ${user.username} (${user.email}) approved via email link`);
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Email approval error:', error);
+    
+    // Show error page
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+      <body style="text-align:center;padding:50px;font-family:Arial;">
+        <h1 style="color:#dc3545;">⚠️ Server Error</h1>
+        <p>An error occurred while processing the approval.</p>
+        <p>Please try again or contact the administrator.</p>
+      </body>
+      </html>
+    `);
+  } finally {
+    client.release();
+  }
+});
+
+// ========== REGISTRATION ENDPOINT ==========
 router.post('/register', async (req, res) => {
   const client = await pool.connect();
   
@@ -100,9 +255,14 @@ router.post('/register', async (req, res) => {
       full_name: newUser.full_name
     });
     
-    // Send admin notification
-    const approvalLink = `${process.env.FRONTEND_URL}/admin/approve/${approvalToken}?user=${encodeURIComponent(newUser.username)}`;
-    await emailService.sendAdminNotification(newUser, approvalLink);
+    // Send admin notification with CORRECT LINK
+    const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'https://pt-power-pipeline-dashboard.azurestaticapps.net';
+    const approvalLink = `${backendUrl}/api/approve/${approvalToken}`;
+    
+    await emailService.sendAdminNotification(
+      newUser, 
+      approvalLink  // This is the FIXED link that will work
+    );
     
     res.status(201).json({
       success: true,
@@ -113,7 +273,12 @@ router.post('/register', async (req, res) => {
         email: newUser.email,
         status: newUser.status
       },
-      emailSent: emailResult.success
+      emailSent: emailResult.success,
+      debug: process.env.NODE_ENV === 'development' ? {
+        approvalToken: approvalToken,
+        approvalLink: approvalLink,
+        note: 'In production, admin receives email with this link'
+      } : undefined
     });
     
   } catch (error) {
@@ -128,91 +293,20 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Admin approval endpoint
+// ========== REDIRECT FOR OLD EMAIL LINKS (Backward Compatibility) ==========
+// If someone has an old email with the wrong link, redirect them
 router.get('/admin/approve/:token', async (req, res) => {
-  const client = await pool.connect();
+  const { token } = req.params;
+  const user = req.query.user || '';
   
-  try {
-    const { token } = req.params;
-    
-    // Find user by approval token
-    const userResult = await client.query(
-      `SELECT id, username, email, full_name, status 
-       FROM pipeline_dashboard.users 
-       WHERE approval_token = $1 AND status = 'pending_approval'`,
-      [token]
-    );
-    
-    if (userResult.rows.length === 0) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Invalid or expired approval token' 
-      });
-    }
-    
-    const user = userResult.rows[0];
-    
-    // Start transaction
-    await client.query('BEGIN');
-    
-    // Update user status to active
-    await client.query(
-      `UPDATE pipeline_dashboard.users 
-       SET status = 'active', 
-           approval_token = NULL,
-           approved_at = NOW(),
-           approved_by = 'system'
-       WHERE id = $1`,
-      [user.id]
-    );
-    
-    // Insert audit log
-    await client.query(
-      `INSERT INTO pipeline_dashboard.audit_logs 
-       (user_id, action, details, ip_address, user_agent)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        user.id,
-        'account_approved',
-        JSON.stringify({ 
-          approved_by: 'system', 
-          approval_method: 'token_link' 
-        }),
-        req.ip || req.connection.remoteAddress,
-        req.get('User-Agent') || 'unknown'
-      ]
-    );
-    
-    // Commit transaction
-    await client.query('COMMIT');
-    
-    // Send approval email to user
-    await emailService.sendApprovalEmail({
-      username: user.username,
-      email: user.email,
-      full_name: user.full_name,
-      role: 'user'
-    });
-    
-    // Get the username for the success page
-    const username = req.query.user || user.username;
-    
-    // Redirect to frontend success page
-    res.redirect(`${process.env.FRONTEND_URL}/approval-success?user=${encodeURIComponent(username)}`);
-    
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Approval error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error during approval' 
-    });
-  } finally {
-    client.release();
-  }
+  // Redirect to the correct API endpoint
+  const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'https://pt-power-pipeline-dashboard.azurestaticapps.net';
+  const redirectUrl = `${backendUrl}/api/approve/${token}${user ? `?user=${encodeURIComponent(user)}` : ''}`;
+  
+  res.redirect(redirectUrl);
 });
 
-// Forgot password endpoint with email
+// ========== FORGOT PASSWORD ENDPOINT ==========
 router.post('/forgot-password', async (req, res) => {
   const client = await pool.connect();
   
@@ -297,7 +391,7 @@ router.post('/forgot-password', async (req, res) => {
   }
 });
 
-// Get pending approvals (for admin panel)
+// ========== GET PENDING APPROVALS (FOR ADMIN PANEL) ==========
 router.get('/admin/pending-approvals', async (req, res) => {
   const client = await pool.connect();
   
@@ -344,6 +438,21 @@ router.get('/admin/pending-approvals', async (req, res) => {
   } finally {
     client.release();
   }
+});
+
+// ========== TEST ENDPOINT ==========
+router.get('/test-approval', async (req, res) => {
+  res.json({
+    success: true,
+    message: 'Auth routes are working',
+    endpoints: {
+      register: 'POST /auth/register',
+      emailApproval: 'GET /api/approve/:token',
+      forgotPassword: 'POST /auth/forgot-password',
+      pendingApprovals: 'GET /auth/admin/pending-approvals (admin only)'
+    },
+    note: 'Email links should go to: /api/approve/{token}'
+  });
 });
 
 module.exports = router;
