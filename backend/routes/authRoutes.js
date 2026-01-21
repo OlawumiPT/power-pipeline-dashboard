@@ -256,7 +256,9 @@ router.post('/register', async (req, res) => {
     });
     
     // Send admin notification with CORRECT LINK
-    const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'https://pt-power-pipeline-dashboard.azurestaticapps.net';
+    const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
+    
+    //const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'https://pt-power-pipeline-dashboard.azurestaticapps.net';
     const approvalLink = `${backendUrl}/api/approve/${approvalToken}`;
     
     await emailService.sendAdminNotification(
@@ -439,6 +441,94 @@ router.get('/admin/pending-approvals', async (req, res) => {
     client.release();
   }
 });
+
+// ========== APPROVAL ENDPOINT (MISSING - ADD THIS) ==========
+router.get('/api/approve/:token', async (req, res) => {
+  const client = await pool.connect();
+  
+  try {
+    const { token } = req.params;
+    console.log(`📧 Approval request for token: ${token}`);
+    
+    // Find user by approval token
+    const userResult = await client.query(
+      `SELECT u.id, u.username, u.email, u.status, t.token
+       FROM pipeline_dashboard.users u
+       JOIN pipeline_dashboard.approval_tokens t ON u.id = t.user_id
+       WHERE t.token = $1 AND u.status = 'pending_approval'`,
+      [token]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired approval token'
+      });
+    }
+    
+    const user = userResult.rows[0];
+    
+    // Start transaction
+    await client.query('BEGIN');
+    
+    // Update user status to active
+    await client.query(
+      `UPDATE pipeline_dashboard.users 
+       SET status = 'active', 
+           approved_at = NOW(),
+           approved_by = 'system'
+       WHERE id = $1`,
+      [user.id]
+    );
+    
+    // Remove used token
+    await client.query(
+      `DELETE FROM pipeline_dashboard.approval_tokens 
+       WHERE token = $1`,
+      [token]
+    );
+    
+    // Insert audit log
+    await client.query(
+      `INSERT INTO pipeline_dashboard.audit_logs 
+       (user_id, action, details)
+       VALUES ($1, 'account_approved', $2)`,
+      [user.id, JSON.stringify({ method: 'email_token', token: token.substring(0, 10) + '...' })]
+    );
+    
+    await client.query('COMMIT');
+    
+    // Send approval email
+    await emailService.sendApprovalEmail({
+      username: user.username,
+      email: user.email,
+      role: 'user'
+    });
+    
+    // Return success
+    res.json({
+      success: true,
+      message: `User ${user.username} approved successfully`,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        status: 'active'
+      }
+    });
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Approval error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error during approval'
+    });
+  } finally {
+    client.release();
+  }
+});
+
 
 // ========== TEST ENDPOINT ==========
 router.get('/test-approval', async (req, res) => {
