@@ -1,81 +1,110 @@
-// backend/db.js
+
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Determine if we're in production (Azure) or development (local)
-const isProduction = process.env.NODE_ENV === 'production';
-
-// Database configuration for different environments
-const dbConfig = isProduction ? {
-  // 🚀 AZURE POSTGRESQL (PRODUCTION)
-  host: process.env.DB_HOST || 'pt-power-pipeline-db.postgres.database.azure.com',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'pt_power_pipeline',
-  user: process.env.DB_USER || 'pt_admin',
-  password: process.env.DB_PASSWORD,  // REQUIRED for Azure - don't set default
-  ssl: {
-    rejectUnauthorized: false,  // Required for Azure PostgreSQL
-    ca: process.env.DB_SSL_CA   // Optional: SSL certificate if needed
-  },
-  connectionTimeoutMillis: 5000,
-  idleTimeoutMillis: 30000,
-  max: 20
-} : {
-  // 💻 LOCAL POSTGRESQL (DEVELOPMENT)
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'pipeline_dashboard',
-  user: process.env.DB_USER || 'dashboard_admin',
-  password: process.env.DB_PASSWORD || 'powertransition',
-  ssl: false,  // SSL usually not needed for local development
-  connectionTimeoutMillis: 5000,
-  idleTimeoutMillis: 30000,
-  max: 10
-};
-
-console.log(`🔗 Connecting to ${isProduction ? 'Azure PostgreSQL (Production)' : 'Local PostgreSQL (Development)'}`);
-console.log(`📁 Database: ${dbConfig.database}`);
-
-// Create the connection pool
-const pool = new Pool(dbConfig);
-
-// Set schema for all connections (if needed)
-pool.on('connect', (client) => {
-  const schema = isProduction ? 'public' : 'pipeline_dashboard';
-  client.query(`SET search_path TO ${schema}`);
-  console.log(`📊 Schema set to: ${schema}`);
-});
-
-// Test the connection
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('❌ Database connection error:', err.message);
-    if (isProduction) {
-      console.error('💡 Azure PostgreSQL troubleshooting:');
-      console.error('1. Check if database exists: pt_power_pipeline');
-      console.error('2. Verify username: pt_admin');
-      console.error('3. Ensure DB_PASSWORD is set in Azure environment variables');
-      console.error('4. Check firewall rules allow Azure services');
-      console.error('5. Verify SSL connection: sslmode=require');
-    }
-  } else {
-    console.log('✅ Database connected successfully:', res.rows[0].now);
-    console.log('📍 Host:', dbConfig.host);
+class DatabaseConfig {
+  constructor() {
+    this.validateEnvironment();
+    this.pool = this.createPool();
+    this.setupEventListeners();
   }
-});
 
-// Handle pool errors
-pool.on('error', (err, client) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
-});
+  validateEnvironment() {
+    // Always require NODE_ENV
+    if (!process.env.NODE_ENV) {
+      throw new Error('NODE_ENV environment variable is required');
+    }
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('🛑 Closing database connections...');
-  await pool.end();
-  console.log('✅ Database connections closed');
-  process.exit(0);
-});
+    // In production, require DATABASE_URL
+    if (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL environment variable is required in production');
+    }
 
-module.exports = pool;
+    // In development, require individual DB vars if no DATABASE_URL
+    if (process.env.NODE_ENV === 'development' && !process.env.DATABASE_URL) {
+      const devVars = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASSWORD'];
+      const missing = devVars.filter(v => !process.env[v]);
+      if (missing.length > 0) {
+        throw new Error(`Missing database configuration for development: ${missing.join(', ')}`);
+      }
+    }
+  }
+
+  createPool() {
+    console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
+    
+    // Option 1: Use DATABASE_URL (recommended for both dev and prod)
+    if (process.env.DATABASE_URL) {
+      console.log('🔗 Database: Using DATABASE_URL from environment');
+      
+      const sslConfig = process.env.NODE_ENV === 'production' ? {
+        rejectUnauthorized: false,  
+        require: true              
+      } : false;
+
+      return new Pool({
+        connectionString: process.env.DATABASE_URL,
+        ssl: sslConfig,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
+      });
+    }
+
+    console.log('🔗 Database: Using development configuration');
+    
+    return new Pool({
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT),
+      database: process.env.DB_NAME,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD,
+      ssl: false,  // Local PostgreSQL usually doesn't need SSL
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    });
+  }
+
+  setupEventListeners() {
+    this.pool.on('connect', () => {
+      console.log('✅ Database connection established');
+    });
+
+    this.pool.on('error', (err) => {
+      console.error('❌ Database connection error:', err.message);
+    });
+  }
+
+  getPool() {
+    return this.pool;
+  }
+
+  async testConnection() {
+    try {
+      const result = await this.pool.query('SELECT NOW() as current_time, version() as db_version');
+      return {
+        connected: true,
+        timestamp: result.rows[0].current_time,
+        version: result.rows[0].db_version,
+        environment: process.env.NODE_ENV
+      };
+    } catch (error) {
+      console.error('❌ Database connection test failed:', error.message);
+      return {
+        connected: false,
+        error: error.message,
+        environment: process.env.NODE_ENV
+      };
+    }
+  }
+
+  async close() {
+    await this.pool.end();
+    console.log('🔌 Database connection pool closed');
+  }
+}
+
+// Create and export singleton instance
+const database = new DatabaseConfig();
+module.exports = database;
