@@ -1,33 +1,18 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/api/*", "/auth/*", "/approve/*", "*.{css,js,json,png,jpg,gif,svg,ico,txt}"]
+    "exclude": ["/api/*", "/auth/*", "*.{css,js,json,png,jpg,gif,svg,ico,txt}"]
   },
   "routes": [
     {
-      "route": "/api/projects*",
+      "route": "/api/*",
       "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
       "allowedRoles": ["anonymous"]
     },
     {
-      "route": "/auth/register",
-      "methods": ["POST"],
+      "route": "/auth/*",
+      "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
       "allowedRoles": ["anonymous"]
-    },
-    {
-      "route": "/auth/forgot-password",
-      "methods": ["POST"],
-      "allowedRoles": ["anonymous"]
-    },
-    {
-      "route": "/api/approve/*",
-      "methods": ["GET"],
-      "allowedRoles": ["anonymous"]
-    },
-    {
-      "route": "/auth/admin/pending-approvals",
-      "methods": ["GET"],
-      "allowedRoles": ["authenticated"]
     },
     {
       "route": "/*",
@@ -39,7 +24,7 @@
     "404": {
       "rewrite": "/index.html",
       "statusCode": 200,
-      "exclude": ["/api/*", "/auth/*", "/approve/*"]
+      "exclude": ["/api/*", "/auth/*"]
     }
   },
   "globalHeaders": {
