@@ -1,25 +1,5 @@
-const { Pool } = require('pg');
-require('dotenv').config();
-
-// Create PostgreSQL connection pool
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT) || 5432,
-  database: process.env.DB_NAME || 'pipeline_dashboard',
-  user: process.env.DB_USER || 'dashboard_admin',
-  password: process.env.DB_PASSWORD || 'powertransition',
-  max: 20,
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000,
-});
-
-pool.on('connect', () => {
-  console.log('✅ Database connection established');
-});
-
-pool.on('error', (err) => {
-  console.error('❌ Database connection error:', err);
-});
+const database = require('../utils/db');
+const pool = database.getPool();
 
 // ========== PROJECT DATA OPERATIONS ==========
 
@@ -39,6 +19,9 @@ const getAllProjects = async (filters = {}) => {
   } = filters;
 
   try {
+    // Use schema from environment or default to pipeline_dashboard
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
+    
     let query = `
       SELECT 
         p.id,
@@ -107,8 +90,8 @@ const getAllProjects = async (filters = {}) => {
         p.is_active,
         mt.tier_name as ma_tier_name,
         mt.color_hex as ma_tier_color
-      FROM pipeline_dashboard.projects p
-      LEFT JOIN pipeline_dashboard.ma_tiers mt ON p.ma_tier_id = mt.id
+      FROM ${schema}.projects p
+      LEFT JOIN ${schema}.ma_tiers mt ON p.ma_tier_id = mt.id
       WHERE p.is_active = true
     `;
     
@@ -189,13 +172,15 @@ const getAllProjects = async (filters = {}) => {
 
 const getProjectById = async (id) => {
   try {
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
+    
     const query = `
       SELECT 
         p.*,
         mt.tier_name as ma_tier_name,
         mt.color_hex as ma_tier_color
-      FROM pipeline_dashboard.projects p
-      LEFT JOIN pipeline_dashboard.ma_tiers mt ON p.ma_tier_id = mt.id
+      FROM ${schema}.projects p
+      LEFT JOIN ${schema}.ma_tiers mt ON p.ma_tier_id = mt.id
       WHERE p.id = $1 AND p.is_active = true
       LIMIT 1
     `;
@@ -215,13 +200,15 @@ const getProjectById = async (id) => {
 
 const getProjectByName = async (name) => {
   try {
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
+    
     const query = `
       SELECT 
         p.*,
         mt.tier_name as ma_tier_name,
         mt.color_hex as ma_tier_color
-      FROM pipeline_dashboard.projects p
-      LEFT JOIN pipeline_dashboard.ma_tiers mt ON p.ma_tier_id = mt.id
+      FROM ${schema}.projects p
+      LEFT JOIN ${schema}.ma_tiers mt ON p.ma_tier_id = mt.id
       WHERE (p.project_name = $1 OR p.project_codename = $1) 
       AND p.is_active = true
       LIMIT 1
@@ -310,8 +297,9 @@ const createProject = async (projectData) => {
     values.push('system', 'system', true);
     paramCount += 3;
 
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
     const query = `
-      INSERT INTO pipeline_dashboard.projects (${columns.join(', ')})
+      INSERT INTO ${schema}.projects (${columns.join(', ')})
       VALUES (${placeholders.join(', ')})
       RETURNING *
     `;
@@ -340,7 +328,8 @@ const updateProject = async (id, updates) => {
   try {
     await client.query('BEGIN');
     
-    const checkQuery = `SELECT id FROM pipeline_dashboard.projects WHERE id = $1 AND is_active = true`;
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
+    const checkQuery = `SELECT id FROM ${schema}.projects WHERE id = $1 AND is_active = true`;
     const checkResult = await client.query(checkQuery, [id]);
     
     if (checkResult.rows.length === 0) {
@@ -422,7 +411,7 @@ const updateProject = async (id, updates) => {
     values.push(id);
     
     const query = `
-      UPDATE pipeline_dashboard.projects
+      UPDATE ${schema}.projects
       SET ${setClauses.join(', ')}
       WHERE id = $${paramCount}
       RETURNING *
@@ -452,8 +441,9 @@ const deleteProject = async (id) => {
   try {
     await client.query('BEGIN');
     
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
     const query = `
-      UPDATE pipeline_dashboard.projects
+      UPDATE ${schema}.projects
       SET is_active = false, updated_at = NOW(), updated_by = 'api'
       WHERE id = $1
       RETURNING id, project_name
@@ -480,26 +470,27 @@ const deleteProject = async (id) => {
 
 const getDashboardStats = async () => {
   try {
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
+    
     const queries = {
       totalProjects: {
-        text: `SELECT COUNT(*) as count FROM pipeline_dashboard.projects WHERE is_active = true`,
+        text: `SELECT COUNT(*) as count FROM ${schema}.projects WHERE is_active = true`,
       },
       
       isoDistribution: {
-        text: `SELECT iso, COUNT(*) as count FROM pipeline_dashboard.projects WHERE is_active = true AND iso IS NOT NULL GROUP BY iso ORDER BY count DESC`,
+        text: `SELECT iso, COUNT(*) as count FROM ${schema}.projects WHERE is_active = true AND iso IS NOT NULL GROUP BY iso ORDER BY count DESC`,
       },
       
       techDistribution: {
-        text: `SELECT tech, COUNT(*) as count FROM pipeline_dashboard.projects WHERE is_active = true AND tech IS NOT NULL GROUP BY tech ORDER BY count DESC LIMIT 10`,
+        text: `SELECT tech, COUNT(*) as count FROM ${schema}.projects WHERE is_active = true AND tech IS NOT NULL GROUP BY tech ORDER BY count DESC LIMIT 10`,
       },
       
       statusDistribution: {
-        text: `SELECT status, COUNT(*) as count FROM pipeline_dashboard.projects WHERE is_active = true AND status IS NOT NULL GROUP BY status ORDER BY count DESC`,
+        text: `SELECT status, COUNT(*) as count FROM ${schema}.projects WHERE is_active = true AND status IS NOT NULL GROUP BY status ORDER BY count DESC`,
       },
       
-      // FIXED: No FIELD() function here
       maTierDistribution: {
-        text: `SELECT ma_tier, COUNT(*) as count FROM pipeline_dashboard.projects WHERE is_active = true AND ma_tier IS NOT NULL GROUP BY ma_tier ORDER BY 
+        text: `SELECT ma_tier, COUNT(*) as count FROM ${schema}.projects WHERE is_active = true AND ma_tier IS NOT NULL GROUP BY ma_tier ORDER BY 
           CASE ma_tier
             WHEN 'Owned' THEN 1
             WHEN 'Exclusivity' THEN 2
@@ -512,11 +503,11 @@ const getDashboardStats = async () => {
       },
       
       ownerDistribution: {
-        text: `SELECT plant_owner, COUNT(*) as count FROM pipeline_dashboard.projects WHERE is_active = true AND plant_owner IS NOT NULL GROUP BY plant_owner ORDER BY count DESC LIMIT 10`,
+        text: `SELECT plant_owner, COUNT(*) as count FROM ${schema}.projects WHERE is_active = true AND plant_owner IS NOT NULL GROUP BY plant_owner ORDER BY count DESC LIMIT 10`,
       },
       
       poiVoltageDistribution: {
-        text: `SELECT poi_voltage_kv, COUNT(*) as count FROM pipeline_dashboard.projects WHERE is_active = true AND poi_voltage_kv IS NOT NULL GROUP BY poi_voltage_kv ORDER BY count DESC LIMIT 10`,
+        text: `SELECT poi_voltage_kv, COUNT(*) as count FROM ${schema}.projects WHERE is_active = true AND poi_voltage_kv IS NOT NULL GROUP BY poi_voltage_kv ORDER BY count DESC LIMIT 10`,
       },
       
       scoreStats: {
@@ -527,7 +518,7 @@ const getDashboardStats = async () => {
           ROUND(SUM(CAST(NULLIF(mw, '') AS NUMERIC))::numeric, 2) as total_mw,
           ROUND(AVG(CAST(NULLIF(poi_voltage_kv, '') AS NUMERIC))::numeric, 2) as avg_poi_voltage,
           COUNT(*) as total_projects
-        FROM pipeline_dashboard.projects WHERE is_active = true`,
+        FROM ${schema}.projects WHERE is_active = true`,
       },
       
       redevDistribution: {
@@ -535,7 +526,7 @@ const getDashboardStats = async () => {
           redev_tech,
           COUNT(*) as count,
           ROUND(SUM(CAST(NULLIF(redev_capacity_mw, '') AS NUMERIC))::numeric, 2) as total_capacity
-        FROM pipeline_dashboard.projects 
+        FROM ${schema}.projects 
         WHERE is_active = true AND redev_tech IS NOT NULL
         GROUP BY redev_tech 
         ORDER BY count DESC
@@ -565,26 +556,27 @@ const getDashboardStats = async () => {
 
 const getFilterOptions = async () => {
   try {
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
+    
     const queries = {
       isos: {
-        text: `SELECT DISTINCT iso as value FROM pipeline_dashboard.projects WHERE is_active = true AND iso IS NOT NULL AND iso != '' ORDER BY iso`,
+        text: `SELECT DISTINCT iso as value FROM ${schema}.projects WHERE is_active = true AND iso IS NOT NULL AND iso != '' ORDER BY iso`,
       },
       
       owners: {
-        text: `SELECT DISTINCT plant_owner as value FROM pipeline_dashboard.projects WHERE is_active = true AND plant_owner IS NOT NULL AND plant_owner != '' ORDER BY plant_owner`,
+        text: `SELECT DISTINCT plant_owner as value FROM ${schema}.projects WHERE is_active = true AND plant_owner IS NOT NULL AND plant_owner != '' ORDER BY plant_owner`,
       },
       
       techs: {
-        text: `SELECT DISTINCT tech as value FROM pipeline_dashboard.projects WHERE is_active = true AND tech IS NOT NULL AND tech != '' ORDER BY tech`,
+        text: `SELECT DISTINCT tech as value FROM ${schema}.projects WHERE is_active = true AND tech IS NOT NULL AND tech != '' ORDER BY tech`,
       },
       
       statuses: {
-        text: `SELECT DISTINCT status as value FROM pipeline_dashboard.projects WHERE is_active = true AND status IS NOT NULL AND status != '' ORDER BY status`,
+        text: `SELECT DISTINCT status as value FROM ${schema}.projects WHERE is_active = true AND status IS NOT NULL AND status != '' ORDER BY status`,
       },
       
-      // FIXED: No FIELD() function here
       maTiers: {
-        text: `SELECT DISTINCT ma_tier as value FROM pipeline_dashboard.projects WHERE is_active = true AND ma_tier IS NOT NULL AND ma_tier != '' ORDER BY 
+        text: `SELECT DISTINCT ma_tier as value FROM ${schema}.projects WHERE is_active = true AND ma_tier IS NOT NULL AND ma_tier != '' ORDER BY 
           CASE ma_tier
             WHEN 'Owned' THEN 1
             WHEN 'Exclusivity' THEN 2
@@ -597,39 +589,39 @@ const getFilterOptions = async () => {
       },
       
       projectTypes: {
-        text: `SELECT DISTINCT project_type as value FROM pipeline_dashboard.projects WHERE is_active = true AND project_type IS NOT NULL AND project_type != '' ORDER BY project_type`,
+        text: `SELECT DISTINCT project_type as value FROM ${schema}.projects WHERE is_active = true AND project_type IS NOT NULL AND project_type != '' ORDER BY project_type`,
       },
       
       processTypes: {
-        text: `SELECT DISTINCT process_type as value FROM pipeline_dashboard.projects WHERE is_active = true AND process_type IS NOT NULL AND process_type != '' ORDER BY process_type`,
+        text: `SELECT DISTINCT process_type as value FROM ${schema}.projects WHERE is_active = true AND process_type IS NOT NULL AND process_type != '' ORDER BY process_type`,
       },
       
       poiVoltages: {
-        text: `SELECT DISTINCT poi_voltage_kv as value FROM pipeline_dashboard.projects WHERE is_active = true AND poi_voltage_kv IS NOT NULL AND poi_voltage_kv != '' ORDER BY CAST(poi_voltage_kv AS NUMERIC)`,
+        text: `SELECT DISTINCT poi_voltage_kv as value FROM ${schema}.projects WHERE is_active = true AND poi_voltage_kv IS NOT NULL AND poi_voltage_kv != '' ORDER BY CAST(poi_voltage_kv AS NUMERIC)`,
       },
       
       maTierOptions: {
-        text: `SELECT tier_name as value, color_hex FROM pipeline_dashboard.ma_tiers WHERE is_active = true ORDER BY tier_order`,
+        text: `SELECT tier_name as value, color_hex FROM ${schema}.ma_tiers WHERE is_active = true ORDER BY tier_order`,
       },
       
       redevFuelOptions: {
-        text: `SELECT DISTINCT fuel_name as value FROM pipeline_dashboard.redev_fuels WHERE is_active = true ORDER BY fuel_name`,
+        text: `SELECT DISTINCT fuel_name as value FROM ${schema}.redev_fuels WHERE is_active = true ORDER BY fuel_name`,
       },
       
       redevelopmentBaseOptions: {
-        text: `SELECT DISTINCT base_case_name as value FROM pipeline_dashboard.redevelopment_base_cases WHERE is_active = true ORDER BY base_case_name`,
+        text: `SELECT DISTINCT base_case_name as value FROM ${schema}.redev_base_cases WHERE is_active = true ORDER BY base_case_name`,
       },
       
       redevLeadOptions: {
-        text: `SELECT DISTINCT lead_name as value FROM pipeline_dashboard.redev_leads WHERE is_active = true ORDER BY lead_name`,
+        text: `SELECT DISTINCT lead_name as value FROM ${schema}.redev_lead_options WHERE is_active = true ORDER BY lead_name`,
       },
       
       redevSupportOptions: {
-        text: `SELECT DISTINCT support_name as value FROM pipeline_dashboard.redev_support WHERE is_active = true ORDER BY support_name`,
+        text: `SELECT DISTINCT support_name as value FROM ${schema}.redev_support_options WHERE is_active = true ORDER BY support_name`,
       },
       
       coLocateRepowerOptions: {
-        text: `SELECT DISTINCT option_name as value FROM pipeline_dashboard.co_locate_repower WHERE is_active = true ORDER BY option_name`,
+        text: `SELECT DISTINCT option_name as value FROM ${schema}.co_locate_repower_options WHERE is_active = true ORDER BY option_name`,
       }
     };
 
@@ -677,7 +669,9 @@ const getFilterOptions = async () => {
 
 const getProjectsCount = async (filters = {}) => {
   try {
-    let query = `SELECT COUNT(*) as total FROM pipeline_dashboard.projects WHERE is_active = true`;
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
+    
+    let query = `SELECT COUNT(*) as total FROM ${schema}.projects WHERE is_active = true`;
     
     const values = [];
     let paramCount = 1;
@@ -719,19 +713,5 @@ module.exports = {
   getFilterOptions,
   getProjectsCount,
   
-  testConnection: async () => {
-    try {
-      const result = await pool.query('SELECT NOW() as current_time, version() as db_version');
-      return {
-        connected: true,
-        timestamp: result.rows[0].current_time,
-        version: result.rows[0].db_version
-      };
-    } catch (error) {
-      return {
-        connected: false,
-        error: error.message
-      };
-    }
-  }
+  testConnection: database.testConnection.bind(database)
 };
