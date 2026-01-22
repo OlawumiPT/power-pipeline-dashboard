@@ -586,7 +586,7 @@ function DashboardContent() {
 const handleUpdateProject = async (updatedData) => {
   console.log('🔄 handleUpdateProject called with:', updatedData);
   
-  // FIXED: Get projectId from multiple possible sources
+  // Get projectId from multiple possible sources
   const projectId = updatedData.id || updatedData.project_id || updatedData.detailData?.id;
   
   if (!projectId) {
@@ -612,7 +612,7 @@ const handleUpdateProject = async (updatedData) => {
       location: updatedData["Location"] || updatedData.location || null,
       site_acreage: updatedData["Site Acreage"] || updatedData.site_acreage || null,
       status: updatedData["Status"] || updatedData.status || null,
-      ma_tier: updatedData["M&A Tier"] || updatedData.ma_tier || null, // NEW: M&A Tier
+      ma_tier: updatedData["M&A Tier"] || updatedData.ma_tier || null,
       
       // Technical Details
       legacy_nameplate_capacity_mw: updatedData["Legacy Nameplate Capacity (MW)"] || updatedData.mw || null,
@@ -725,50 +725,22 @@ const handleUpdateProject = async (updatedData) => {
     const updatedProject = await response.json();
     console.log('✅ Update response:', updatedProject);
     
-    // Update local state with the response from backend
-    const updatedAllData = allData.map(row => {
-      if (row.id === projectId || row.project_id === projectId) {
-        const mergedProject = {
-          ...row,
-          ...updatedProject,
-          // Preserve original Excel row mapping if it exists
-          excel_row_id: row.excel_row_id || updatedProject.excel_row_id,
-        };
-        return mergedProject;
-      }
-      return row;
-    });
-    
-    // IMPORTANT: Update allData first
-    setAllData(updatedAllData);
-    
-    // SHOW WINDOW ALERT HERE - This will pop up immediately
+    // 🔥 CRITICAL FIX: Show immediate success alert
     window.alert(`✅ Project "${updatedProject.project_name || updatedData["Project Name"]}" has been successfully updated!`);
     
     setShowEditModal(false);
     setEditingProject(null);
     
-    // Show success notification (if you still want the in-app notification too)
+    // 🔥 CRITICAL FIX: RE-FETCH ALL DATA FROM BACKEND
+    // This ensures the table updates automatically without browser refresh
+    await fetchData();
+    
+    // Show success notification
     setNotification({
       show: true,
       message: `Project "${updatedProject.project_name || updatedData["Project Name"]}" updated successfully!`,
       type: 'success'
     });
-    
-    // CRITICAL FIX: Recalculate ALL data including pipeline rows
-    // This ensures filters, sorting, and transformations are applied
-    const headers = Object.keys(updatedAllData[0] || {});
-    calculateAllData(updatedAllData, headers, {
-      setKpiRow1, setKpiRow2, setIsoData, setTechData, 
-      setRedevelopmentTypes, setCounterparties, 
-      setPipelineRows  // IMPORTANT: Let calculateAllData update pipelineRows
-    });
-    
-    // After calculateAllData runs, it will update pipelineRows
-    // Then apply automatic sorting to those updated rows
-    setTimeout(() => {
-      applyAutomaticSorting(pipelineRows);
-    }, 100);
     
   } catch (error) {
     console.error('❌ Update project error:', error);
