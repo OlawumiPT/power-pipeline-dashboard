@@ -804,12 +804,11 @@ function DashboardContent() {
         type: 'success'
       });
       
-      // FIXED: Recalculate only the charts, NOT the pipeline rows
+      // Recalculate data
       const headers = Object.keys(updatedAllData[0] || {});
       calculateAllData(updatedAllData, headers, {
         setKpiRow1, setKpiRow2, setIsoData, setTechData, 
-        setRedevelopmentTypes, setCounterparties, 
-        setPipelineRows: () => {}  // DON'T update pipeline rows - we already did
+        setRedevelopmentTypes, setCounterparties, setPipelineRows: () => {}
       });
       
       applyAutomaticSorting(updatedPipelineRows);
