@@ -611,8 +611,8 @@ class EmailService {
   }
 
   async sendAdminNotification(userData, approvalToken) {
-    const approvalLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin/approve/${approvalToken}?user=${encodeURIComponent(userData.username)}`;
-    
+    // const approvalLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin/approve/${approvalToken}?user=${encodeURIComponent(userData.username)}`;
+  const approvalLink = `${process.env.BACKEND_URL || 'https://pt-power-pipeline-api.azurewebsites.net'}/api/admin/approve/${approvalToken}`;
     return this.sendEmail(
       process.env.ADMIN_EMAIL || 'ababalola@power-transitions.com',
       'URGENT: New User Registration Requires Approval',
