@@ -1169,7 +1169,8 @@ function DashboardContent() {
   // Fetch dropdown options from database
   const fetchDropdownOptions = async () => {
     try {
-      const response = await fetch("/api/dropdown-options", {
+      //const response = await fetch("/api/dropdown-options", {
+        const response = await fetch(`${API_BASE_URL}/api/dropdown-options`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1278,9 +1279,18 @@ function DashboardContent() {
     
     try {
       // Fetch projects data
-      const response = await fetch("/api/projects", {
+    //  const response = await fetch("/api/projects", {
+      //  headers: {
+       //   'Authorization': `Bearer ${token}`
+      //  }
+    //  });
+
+      // Fetch projects data - FIXED: Use full URL
+      const API_BASE_URL = "https://pt-power-pipeline-api.azurewebsites.net";
+      const response = await fetch(`${API_BASE_URL}/api/projects`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         }
       });
       
