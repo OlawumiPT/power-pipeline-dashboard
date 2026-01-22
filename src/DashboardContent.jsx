@@ -497,7 +497,7 @@ function DashboardContent() {
     
     if (window.confirm(`Are you sure you want to delete "${projectName}"? This action cannot be undone.`)) {
       try {
-        const response = await fetch(`/api/projects/${projectId}`, {
+        const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/projects/${projectId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -692,9 +692,9 @@ function DashboardContent() {
       
       console.log('🔄 Sending to backend:', cleanData);
       console.log('📊 Field count:', Object.keys(cleanData).length);
-      console.log('🚀 PUT request to:', `/api/projects/${projectId}`);
+      console.log('🚀 PUT request to:', `https://pt-power-pipeline-api.azurewebsites.net/api/projects/${projectId}`);
       
-      const response = await fetch(`/api/projects/${projectId}`, {
+      const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/projects/${projectId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1124,7 +1124,7 @@ function DashboardContent() {
       
       console.log("📤 Cleaned data being sent to API:", cleanSiteData);
       
-      const response = await fetch('/api/projects', {
+      const response = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/projects', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1170,10 +1170,13 @@ function DashboardContent() {
   // Fetch dropdown options from database
   const fetchDropdownOptions = async () => {
     try {
-      //const response = await fetch("/api/dropdown-options", {
+      const API_BASE_URL = "https://pt-power-pipeline-api.azurewebsites.net";
+      console.log('🔧 [DEBUG] Fetching dropdown options from:', `${API_BASE_URL}/api/dropdown-options`);
+      
       const response = await fetch(`${API_BASE_URL}/api/dropdown-options`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
         }
       });
       
@@ -1181,19 +1184,18 @@ function DashboardContent() {
         const contentType = response.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           const options = await response.json();
-          console.log('✅ Fetched dropdown options from API:', options);
+          console.log('✅ [DEBUG] Dropdown options received:', options);
           setDropdownOptions(options);
         } else {
-          console.warn('Dropdown options API returned non-JSON response');
-          // Still extract from data as fallback
+          console.warn('⚠️ [DEBUG] Dropdown options API returned non-JSON response');
           extractDropdownOptionsFromData();
         }
       } else {
-        console.warn('Dropdown options API failed, extracting from data');
+        console.warn('⚠️ [DEBUG] Dropdown options API failed:', response.status);
         extractDropdownOptionsFromData();
       }
     } catch (error) {
-      console.error("Error fetching dropdown options:", error);
+      console.error("❌ [DEBUG] Error fetching dropdown options:", error);
       extractDropdownOptionsFromData();
     }
   };
@@ -1279,90 +1281,94 @@ function DashboardContent() {
     setError(null);
     
     try {
-      // Fetch projects data
-    //  const response = await fetch("/api/projects", {
-      //  headers: {
-       //   'Authorization': `Bearer ${token}`
-       // }
-    //  });
-
-       const API_BASE_URL = "https://pt-power-pipeline-api.azurewebsites.net";
-     const response = await fetch(`${API_BASE_URL}/api/projects`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      }
-    });
-
-     if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Server response:', errorText);
-        
-        // Check if response is HTML (likely a 404 or 500 error page)
-        if (errorText.trim().startsWith('<!DOCTYPE') || errorText.trim().startsWith('<!doctype')) {
-          throw new Error(`API endpoint not found or server error. Please check your backend server. Received HTML instead of JSON. Status: ${response.status}`);
-        }
-        
-        throw new Error(`Failed to fetch projects: ${response.status} ${response.statusText}`);
-      }
+      const API_BASE_URL = "https://pt-power-pipeline-api.azurewebsites.net";
+      const endpoint = `${API_BASE_URL}/api/projects`;
+      console.log('🔧 [DEBUG] Fetching from:', endpoint);
+      console.log('🔧 [DEBUG] Token exists:', !!token);
       
-      // Check content type to ensure we're getting JSON
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const text = await response.text();
-        console.error('Non-JSON response:', text.substring(0, 200));
-        throw new Error(`Server returned non-JSON response. Content-Type: ${contentType}`);
+      const response = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log('📡 [DEBUG] Response status:', response.status, response.statusText);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ [DEBUG] Error response:', errorText.substring(0, 200));
+        throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
       }
       
       const data = await response.json();
+      console.log('✅ [DEBUG] Data received:', data);
+      console.log('✅ [DEBUG] Data type:', typeof data);
+      console.log('✅ [DEBUG] Is array?:', Array.isArray(data));
+      console.log('✅ [DEBUG] Data length:', Array.isArray(data) ? data.length : 'Not an array');
       
-      // FIX: Check if data is an array, if not, try to extract projects from it
+      if (Array.isArray(data) && data.length === 0) {
+        console.warn('⚠️ [DEBUG] Empty array received from API');
+      }
+      
+      // Process the data
       let projectsData = data;
       
-      // Handle different possible response structures
+      // Handle if data is not an array
       if (!Array.isArray(data)) {
+        console.log('⚠️ [DEBUG] Data is not an array, checking structure...');
+        console.log('⚠️ [DEBUG] Data keys:', Object.keys(data));
+        
         if (data.projects && Array.isArray(data.projects)) {
           projectsData = data.projects;
+          console.log('✅ [DEBUG] Found projects array in data.projects');
         } else if (data.data && Array.isArray(data.data)) {
           projectsData = data.data;
+          console.log('✅ [DEBUG] Found projects array in data.data');
         } else if (data.results && Array.isArray(data.results)) {
           projectsData = data.results;
+          console.log('✅ [DEBUG] Found projects array in data.results');
         } else {
-          // If it's an object with numeric keys, convert to array
-          if (typeof data === 'object' && data !== null) {
-            const values = Object.values(data);
-            if (values.every(item => typeof item === 'object')) {
-              projectsData = values;
-            } else {
-              // Single project or empty response
-              projectsData = data ? [data] : [];
-            }
+          // Try to extract any array from the object
+          const arrays = Object.values(data).filter(item => Array.isArray(item));
+          if (arrays.length > 0) {
+            projectsData = arrays[0];
+            console.log('✅ [DEBUG] Found array in data values');
           } else {
+            console.error('❌ [DEBUG] Could not find any array in response');
             projectsData = [];
           }
         }
       }
       
-      // Ensure projectsData is an array before proceeding
-      if (!Array.isArray(projectsData)) {
-        console.error('projectsData is not an array:', projectsData);
-        projectsData = [];
+      console.log('✅ [DEBUG] Final projectsData:', projectsData);
+      console.log('✅ [DEBUG] Final projectsData length:', projectsData.length);
+      
+      if (projectsData.length === 0) {
+        console.warn('⚠️ [DEBUG] No projects found in the response');
+        // Still set empty arrays to show UI properly
+        setAllData([]);
+        setPipelineRows([]);
+        setKpiRow1([]);
+        setKpiRow2([]);
+        setIsoData([]);
+        setTechData([]);
+        setRedevelopmentTypes([]);
+        setCounterparties([]);
+        setLoading(false);
+        return;
       }
       
-      // FIXED: Ensure each project has a sequential ID for display
+      // Transform data
       const transformedData = projectsData.map((project, index) => {
-        // Ensure the project has a display ID
         const displayId = index + 1;
         
         return {
-          // Keep all original database fields for reference
           ...project,
-          
-          // Ensure we have a display ID
           id: project.id || project.project_id || displayId,
-          displayId: displayId, // Add sequential display ID
-          
-          // Map database fields to Excel-like structure for calculations
+          displayId: displayId,
           "Project Name": project.project_name || "",
           "Project Codename": project.project_codename || "",
           "Plant Owner": project.plant_owner || "",
@@ -1394,11 +1400,9 @@ function DashboardContent() {
           "Number of Sites": project.number_of_sites || "",
           "Infra": project.infra || "",
           "IX": project.ix || "",
-          "Transactibility": project.transactability || "", // Note: this might be a typo in the original
+          "Transactibility": project.transactability || "",
           "Plant COD": project.plant_cod || "",
           "Capacity Factor": project.capacity_factor || "",
-          
-          // Redevelopment fields
           "Redev Tier": project.redev_tier || "",
           "Redev Capacity (MW)": project.redev_capacity_mw || "",
           "Redev Tech": project.redev_tech || "",
@@ -1408,7 +1412,6 @@ function DashboardContent() {
           "Redev Stage Gate": project.redev_stage_gate || "",
           "Redev Lead": project.redev_lead || "",
           "Redev Support": project.redev_support || "",
-          // NEW: M&A Tier field
           "M&A Tier": project.ma_tier || "",
           "Project Type": project.project_type || "",
           "Status": project.status || "",
@@ -1418,9 +1421,11 @@ function DashboardContent() {
         };
       });
       
+      console.log('✅ [DEBUG] Transformed data first item:', transformedData[0]);
+      
       setAllData(transformedData);
       
-      // Extract owners for dropdown
+      // Extract owners
       const ownersSet = new Set();
       transformedData.forEach(row => {
         const owner = row["Plant Owner"];
@@ -1430,21 +1435,30 @@ function DashboardContent() {
       });
       const uniqueOwners = ["All", ...Array.from(ownersSet).sort()];
       setAllOwners(uniqueOwners);
+      console.log('✅ [DEBUG] Unique owners:', uniqueOwners);
       
       // Fetch dropdown options
-      fetchDropdownOptions();
+      await fetchDropdownOptions();
       
-      // Calculate initial data - FIXED: Now passes all transformed data with new fields
-      const headers = Object.keys(transformedData[0] || {});
-      calculateAllData(transformedData, headers, {
-        setKpiRow1, setKpiRow2, setIsoData, setTechData, 
-        setRedevelopmentTypes, setCounterparties, setPipelineRows
-      });
+      // Calculate all data
+      if (transformedData.length > 0) {
+        const headers = Object.keys(transformedData[0] || {});
+        console.log('✅ [DEBUG] Headers for calculation:', headers);
+        
+        calculateAllData(transformedData, headers, {
+          setKpiRow1, setKpiRow2, setIsoData, setTechData, 
+          setRedevelopmentTypes, setCounterparties, setPipelineRows
+        });
+        
+        console.log('✅ [DEBUG] Data calculation completed');
+      } else {
+        console.warn('⚠️ [DEBUG] No data to calculate');
+      }
       
       setLoading(false);
       
     } catch (error) {
-      console.error("Error fetching data from database:", error);
+      console.error("❌ [DEBUG] Error fetching data:", error);
       setError(error.message);
       setLoading(false);
     }
@@ -2067,6 +2081,36 @@ function DashboardContent() {
             setShowProjectDetail={setShowProjectDetail}
           />
         )}
+        
+        {/* Temporary test button - remove after debugging */}
+        <button onClick={() => {
+          fetch('https://pt-power-pipeline-api.azurewebsites.net/api/projects', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          })
+          .then(r => r.text())
+          .then(text => {
+            console.log('RAW RESPONSE:', text.substring(0, 500));
+            try {
+              const json = JSON.parse(text);
+              console.log('PARSED JSON:', json);
+            } catch(e) {
+              console.error('Failed to parse JSON:', e);
+            }
+          });
+        }} style={{
+          position: 'fixed',
+          bottom: '10px',
+          right: '10px',
+          zIndex: 9999,
+          padding: '5px 10px',
+          background: '#3b82f6',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer'
+        }}>
+          Test API
+        </button>
       </div>
     </ActivityLogProvider>
   );
