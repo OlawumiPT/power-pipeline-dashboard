@@ -684,7 +684,10 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     if (emailServiceReady) {
-      const approvalLink = `${FRONTEND_URL}/admin/approve/${approvalToken}`;
+     // const approvalLink = `${FRONTEND_URL}/admin/approve/${approvalToken}`;
+
+      const backendUrl = process.env.BACKEND_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
+const approvalLink = `${backendUrl}/api/admin/approve/${approvalToken}`;
 
       const adminEmailHtml = `
         <h2>New User Registration Requires Approval</h2>
