@@ -22,9 +22,6 @@ import { ISO_COLORS, TECH_COLORS } from './constants/colors';
 import ApprovalSuccess from './components/ApprovalSuccess';
 import { useAuth } from './contexts/AuthContext';
 
-// FIXED: Add API base URL constant
-const API_BASE_URL = "https://pt-power-pipeline-api.azurewebsites.net";
-
 function DashboardContent() {
   // Data states
   const [kpiRow1, setKpiRow1] = useState([]);
@@ -500,8 +497,7 @@ function DashboardContent() {
     
     if (window.confirm(`Are you sure you want to delete "${projectName}"? This action cannot be undone.`)) {
       try {
-        // FIXED: Add API base URL
-        const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}`, {
+        const response = await fetch(`/api/projects/${projectId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -696,10 +692,9 @@ function DashboardContent() {
       
       console.log('🔄 Sending to backend:', cleanData);
       console.log('📊 Field count:', Object.keys(cleanData).length);
-      console.log('🚀 PUT request to:', `${API_BASE_URL}/api/projects/${projectId}`);
+      console.log('🚀 PUT request to:', `/api/projects/${projectId}`);
       
-      // FIXED: Add API base URL
-      const response = await fetch(`${API_BASE_URL}/api/projects/${projectId}`, {
+      const response = await fetch(`/api/projects/${projectId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -809,11 +804,12 @@ function DashboardContent() {
         type: 'success'
       });
       
-      // Recalculate data
+      // FIXED: Recalculate only the charts, NOT the pipeline rows
       const headers = Object.keys(updatedAllData[0] || {});
       calculateAllData(updatedAllData, headers, {
         setKpiRow1, setKpiRow2, setIsoData, setTechData, 
-        setRedevelopmentTypes, setCounterparties, setPipelineRows: () => {}
+        setRedevelopmentTypes, setCounterparties, 
+        setPipelineRows: () => {}  // DON'T update pipeline rows - we already did
       });
       
       applyAutomaticSorting(updatedPipelineRows);
@@ -1128,8 +1124,7 @@ function DashboardContent() {
       
       console.log("📤 Cleaned data being sent to API:", cleanSiteData);
       
-      // FIXED: Add API base URL
-      const response = await fetch(`${API_BASE_URL}/api/projects`, {
+      const response = await fetch('/api/projects', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1175,8 +1170,7 @@ function DashboardContent() {
   // Fetch dropdown options from database
   const fetchDropdownOptions = async () => {
     try {
-      // FIXED: Add API base URL
-      const response = await fetch(`${API_BASE_URL}/api/dropdown-options`, {
+      const response = await fetch("/api/dropdown-options", {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1284,8 +1278,8 @@ function DashboardContent() {
     setError(null);
     
     try {
-      // FIXED: Add API base URL
-      const response = await fetch(`${API_BASE_URL}/api/projects`, {
+      // Fetch projects data
+      const response = await fetch("/api/projects", {
         headers: {
           'Authorization': `Bearer ${token}`
         }
