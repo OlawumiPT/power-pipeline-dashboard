@@ -583,250 +583,206 @@ function DashboardContent() {
     }, 3000);
   };
 
-  const handleUpdateProject = async (updatedData) => {
-    console.log('🔄 handleUpdateProject called with:', updatedData);
+const handleUpdateProject = async (updatedData) => {
+  console.log('🔄 handleUpdateProject called with:', updatedData);
+  
+  // FIXED: Get projectId from multiple possible sources
+  const projectId = updatedData.id || updatedData.project_id || updatedData.detailData?.id;
+  
+  if (!projectId) {
+    // Show error notification
+    setNotification({
+      show: true,
+      message: 'Project ID is required for update!',
+      type: 'error'
+    });
+    console.error('No project ID found in data:', updatedData);
+    return;
+  }
+  
+  console.log('Updating project ID:', projectId);
+  
+  try {
+    // Transform form data to match EXACT database schema
+    const backendData = {
+      // Basic Information (from database schema)
+      project_name: updatedData["Project Name"] || updatedData.project_name || null,
+      project_codename: updatedData["Project Codename"] || updatedData.project_codename || null,
+      plant_owner: updatedData["Plant Owner"] || updatedData.plant_owner || null,
+      location: updatedData["Location"] || updatedData.location || null,
+      site_acreage: updatedData["Site Acreage"] || updatedData.site_acreage || null,
+      status: updatedData["Status"] || updatedData.status || null,
+      ma_tier: updatedData["M&A Tier"] || updatedData.ma_tier || null, // NEW: M&A Tier
+      
+      // Technical Details
+      legacy_nameplate_capacity_mw: updatedData["Legacy Nameplate Capacity (MW)"] || updatedData.mw || null,
+      tech: updatedData["Tech"] || updatedData.tech || null,
+      heat_rate_btu_kwh: updatedData["Heat Rate (Btu/kWh)"] || updatedData.hr || null,
+      capacity_factor_2024: updatedData["2024 Capacity Factor"] || updatedData.cf || null,
+      legacy_cod: updatedData["Legacy COD"] || updatedData.cod || null,
+      fuel: updatedData["Fuel"] || updatedData.fuel || null,
+      
+      // Market Details
+      iso: updatedData["ISO"] || updatedData.mkt || null,
+      zone_submarket: updatedData["Zone/Submarket"] || updatedData.zone || null,
+      markets: updatedData["Markets"] || updatedData.markets || null,
+      process_type: updatedData["Process (P) or Bilateral (B)"] || updatedData.process || null,
+      gas_reference: updatedData["Gas Reference"] || updatedData.gas_reference || null,
+      transactability: updatedData["Transactability"] || updatedData.transactability || null,
+      
+      // Redevelopment Details
+      redev_tier: updatedData["Redev Tier"] || updatedData.redev_tier || null,
+      redevelopment_base_case: updatedData["Redevelopment Base Case"] || updatedData.redev_base_case || null,
+      redev_capacity_mw: updatedData["Redev Capacity (MW)"] || updatedData.redev_capacity || null,
+      redev_tech: updatedData["Redev Tech"] || updatedData.redev_tech || null,
+      redev_fuel: updatedData["Redev Fuel"] || updatedData.redev_fuel || null,
+      redev_heatrate_btu_kwh: updatedData["Redev Heatrate (Btu/kWh)"] || updatedData.redev_heatrate || null,
+      redev_cod: updatedData["Redev COD"] || updatedData.redev_cod || null,
+      redev_land_control: updatedData["Redev Land Control"] || updatedData.redev_land_control || null,
+      redev_stage_gate: updatedData["Redev Stage Gate"] || updatedData.redev_stage_gate || null,
+      redev_lead: updatedData["Redev Lead"] || updatedData.redev_lead || null,
+      redev_support: updatedData["Redev Support"] || updatedData.redev_support || null,
+      co_locate_repower: updatedData["Co-Locate/Repower"] || updatedData.co_locate_repower || null,
+      
+      // Additional Information
+      contact: updatedData["Contact"] || updatedData.contact || null,
+      project_type: updatedData["Project Type"] || updatedData.project_type || null,
+      
+      // Scores - ONLY include if they exist in form
+      overall_project_score: updatedData.overall_project_score || updatedData.overall || null,
+      thermal_operating_score: updatedData.thermal_operating_score || updatedData.thermal || null,
+      redevelopment_score: updatedData.redevelopment_score || updatedData.redev || null,
+    };
     
-    // FIXED: Get projectId from multiple possible sources
-    const projectId = updatedData.id || updatedData.project_id || updatedData.detailData?.id;
+    // Parse numeric fields properly
+    const parseNumericField = (value) => {
+      if (value === null || value === undefined || value === "") return null;
+      const num = parseFloat(value);
+      return isNaN(num) ? null : num;
+    };
     
-    if (!projectId) {
+    // Apply numeric parsing to specific fields
+    backendData.legacy_nameplate_capacity_mw = parseNumericField(backendData.legacy_nameplate_capacity_mw);
+    backendData.heat_rate_btu_kwh = parseNumericField(backendData.heat_rate_btu_kwh);
+    backendData.capacity_factor_2024 = parseNumericField(backendData.capacity_factor_2024);
+    backendData.redev_capacity_mw = parseNumericField(backendData.redev_capacity_mw);
+    backendData.redev_heatrate_btu_kwh = parseNumericField(backendData.redev_heatrate_btu_kwh);
+    backendData.overall_project_score = parseNumericField(backendData.overall_project_score);
+    backendData.thermal_operating_score = parseNumericField(backendData.thermal_operating_score);
+    backendData.redevelopment_score = parseNumericField(backendData.redevelopment_score);
+    
+    // Parse transactability as integer
+    if (backendData.transactability) {
+      const transactInt = parseInt(backendData.transactability);
+      backendData.transactability = isNaN(transactInt) ? null : transactInt;
+    }
+    
+    // Remove any fields that are explicitly null or undefined
+    const cleanData = {};
+    Object.keys(backendData).forEach(key => {
+      if (backendData[key] !== null && backendData[key] !== undefined) {
+        cleanData[key] = backendData[key];
+      }
+    });
+    
+    // CRITICAL: Remove the id field from the request body
+    // The id should only be in the URL, not the request body
+    delete cleanData.id;
+    delete cleanData.project_id;
+    
+    console.log('🔄 Sending to backend:', cleanData);
+    console.log('📊 Field count:', Object.keys(cleanData).length);
+    console.log('🚀 PUT request to:', `https://pt-power-pipeline-api.azurewebsites.net/api/projects/${projectId}`);
+    
+    const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/projects/${projectId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(cleanData)
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Server error response:', errorText);
+      
       // Show error notification
       setNotification({
         show: true,
-        message: 'Project ID is required for update!',
+        message: `Failed to update project: ${response.statusText}`,
         type: 'error'
       });
-      console.error('No project ID found in data:', updatedData);
-      return;
+      
+      try {
+        const errorJson = JSON.parse(errorText);
+        throw new Error(`Failed to update project: ${errorJson.message || response.statusText}`);
+      } catch (e) {
+        throw new Error(`Failed to update project: ${response.status} ${response.statusText}\n${errorText.substring(0, 200)}`);
+      }
     }
     
-    console.log('Updating project ID:', projectId);
+    const updatedProject = await response.json();
+    console.log('✅ Update response:', updatedProject);
     
-    try {
-      // Transform form data to match EXACT database schema
-      const backendData = {
-        // Basic Information (from database schema)
-        project_name: updatedData["Project Name"] || updatedData.project_name || null,
-        project_codename: updatedData["Project Codename"] || updatedData.project_codename || null,
-        plant_owner: updatedData["Plant Owner"] || updatedData.plant_owner || null,
-        location: updatedData["Location"] || updatedData.location || null,
-        site_acreage: updatedData["Site Acreage"] || updatedData.site_acreage || null,
-        status: updatedData["Status"] || updatedData.status || null,
-        ma_tier: updatedData["M&A Tier"] || updatedData.ma_tier || null, // NEW: M&A Tier
-        
-        // Technical Details
-        legacy_nameplate_capacity_mw: updatedData["Legacy Nameplate Capacity (MW)"] || updatedData.mw || null,
-        tech: updatedData["Tech"] || updatedData.tech || null,
-        heat_rate_btu_kwh: updatedData["Heat Rate (Btu/kWh)"] || updatedData.hr || null,
-        capacity_factor_2024: updatedData["2024 Capacity Factor"] || updatedData.cf || null,
-        legacy_cod: updatedData["Legacy COD"] || updatedData.cod || null,
-        fuel: updatedData["Fuel"] || updatedData.fuel || null,
-        
-        // Market Details
-        iso: updatedData["ISO"] || updatedData.mkt || null,
-        zone_submarket: updatedData["Zone/Submarket"] || updatedData.zone || null,
-        markets: updatedData["Markets"] || updatedData.markets || null,
-        process_type: updatedData["Process (P) or Bilateral (B)"] || updatedData.process || null,
-        gas_reference: updatedData["Gas Reference"] || updatedData.gas_reference || null,
-        transactability: updatedData["Transactability"] || updatedData.transactability || null,
-        
-        // Redevelopment Details
-        redev_tier: updatedData["Redev Tier"] || updatedData.redev_tier || null,
-        redevelopment_base_case: updatedData["Redevelopment Base Case"] || updatedData.redev_base_case || null,
-        redev_capacity_mw: updatedData["Redev Capacity (MW)"] || updatedData.redev_capacity || null,
-        redev_tech: updatedData["Redev Tech"] || updatedData.redev_tech || null,
-        redev_fuel: updatedData["Redev Fuel"] || updatedData.redev_fuel || null,
-        redev_heatrate_btu_kwh: updatedData["Redev Heatrate (Btu/kWh)"] || updatedData.redev_heatrate || null,
-        redev_cod: updatedData["Redev COD"] || updatedData.redev_cod || null,
-        redev_land_control: updatedData["Redev Land Control"] || updatedData.redev_land_control || null,
-        redev_stage_gate: updatedData["Redev Stage Gate"] || updatedData.redev_stage_gate || null,
-        redev_lead: updatedData["Redev Lead"] || updatedData.redev_lead || null,
-        redev_support: updatedData["Redev Support"] || updatedData.redev_support || null,
-        co_locate_repower: updatedData["Co-Locate/Repower"] || updatedData.co_locate_repower || null,
-        
-        // Additional Information
-        contact: updatedData["Contact"] || updatedData.contact || null,
-        project_type: updatedData["Project Type"] || updatedData.project_type || null,
-        
-        // Scores - ONLY include if they exist in form
-        overall_project_score: updatedData.overall_project_score || updatedData.overall || null,
-        thermal_operating_score: updatedData.thermal_operating_score || updatedData.thermal || null,
-        redevelopment_score: updatedData.redevelopment_score || updatedData.redev || null,
-      };
-      
-      // Parse numeric fields properly
-      const parseNumericField = (value) => {
-        if (value === null || value === undefined || value === "") return null;
-        const num = parseFloat(value);
-        return isNaN(num) ? null : num;
-      };
-      
-      // Apply numeric parsing to specific fields
-      backendData.legacy_nameplate_capacity_mw = parseNumericField(backendData.legacy_nameplate_capacity_mw);
-      backendData.heat_rate_btu_kwh = parseNumericField(backendData.heat_rate_btu_kwh);
-      backendData.capacity_factor_2024 = parseNumericField(backendData.capacity_factor_2024);
-      backendData.redev_capacity_mw = parseNumericField(backendData.redev_capacity_mw);
-      backendData.redev_heatrate_btu_kwh = parseNumericField(backendData.redev_heatrate_btu_kwh);
-      backendData.overall_project_score = parseNumericField(backendData.overall_project_score);
-      backendData.thermal_operating_score = parseNumericField(backendData.thermal_operating_score);
-      backendData.redevelopment_score = parseNumericField(backendData.redevelopment_score);
-      
-      // Parse transactability as integer
-      if (backendData.transactability) {
-        const transactInt = parseInt(backendData.transactability);
-        backendData.transactability = isNaN(transactInt) ? null : transactInt;
+    // Update local state with the response from backend
+    const updatedAllData = allData.map(row => {
+      if (row.id === projectId || row.project_id === projectId) {
+        const mergedProject = {
+          ...row,
+          ...updatedProject,
+          // Preserve original Excel row mapping if it exists
+          excel_row_id: row.excel_row_id || updatedProject.excel_row_id,
+        };
+        return mergedProject;
       }
-      
-      // Remove any fields that are explicitly null or undefined
-      const cleanData = {};
-      Object.keys(backendData).forEach(key => {
-        if (backendData[key] !== null && backendData[key] !== undefined) {
-          cleanData[key] = backendData[key];
-        }
-      });
-      
-      // CRITICAL: Remove the id field from the request body
-      // The id should only be in the URL, not the request body
-      delete cleanData.id;
-      delete cleanData.project_id;
-      
-      console.log('🔄 Sending to backend:', cleanData);
-      console.log('📊 Field count:', Object.keys(cleanData).length);
-      console.log('🚀 PUT request to:', `https://pt-power-pipeline-api.azurewebsites.net/api/projects/${projectId}`);
-      
-      const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/projects/${projectId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(cleanData)
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Server error response:', errorText);
-        
-        // Show error notification
-        setNotification({
-          show: true,
-          message: `Failed to update project: ${response.statusText}`,
-          type: 'error'
-        });
-        
-        try {
-          const errorJson = JSON.parse(errorText);
-          throw new Error(`Failed to update project: ${errorJson.message || response.statusText}`);
-        } catch (e) {
-          throw new Error(`Failed to update project: ${response.status} ${response.statusText}\n${errorText.substring(0, 200)}`);
-        }
-      }
-      
-      const updatedProject = await response.json();
-      console.log('✅ Update response:', updatedProject);
-      
-      // Update local state with the response from backend
-      const updatedAllData = allData.map(row => {
-        if (row.id === projectId || row.project_id === projectId) {
-          const mergedProject = {
-            ...row,
-            ...updatedProject,
-            // Preserve original Excel row mapping if it exists
-            excel_row_id: row.excel_row_id || updatedProject.excel_row_id,
-          };
-          return mergedProject;
-        }
-        return row;
-      });
-      
-      const updatedPipelineRows = pipelineRows.map(row => {
-        if (row.id === projectId) {
-          const updatedRow = {
-            ...row,
-            // Map database fields to pipeline table format
-            asset: updatedProject.project_name || row.asset,
-            location: updatedProject.location || row.location,
-            owner: updatedProject.plant_owner || row.owner,
-            overall: parseFloat(updatedProject.overall_project_score || row.overall || 0),
-            thermal: parseFloat(updatedProject.thermal_operating_score || row.thermal || 0),
-            redev: parseFloat(updatedProject.redevelopment_score || row.redev || 0),
-            mw: parseFloat(updatedProject.legacy_nameplate_capacity_mw || row.mw || 0),
-            tech: updatedProject.tech || row.tech,
-            hr: parseFloat(updatedProject.heat_rate_btu_kwh || row.hr || 0),
-            cf: parseFloat(updatedProject.capacity_factor_2024 || row.cf || 0),
-            cod: updatedProject.legacy_cod || row.cod,
-            mkt: updatedProject.iso || row.mkt,
-            zone: updatedProject.zone_submarket || row.zone,
-            // NEW: M&A Tier field
-            maTier: updatedProject.ma_tier || row.maTier,
-            // Redevelopment fields
-            redevBaseCase: updatedProject.redevelopment_base_case || row.redevBaseCase,
-            redevCapacity: updatedProject.redev_capacity_mw || row.redevCapacity,
-            redevTier: updatedProject.redev_tier || row.redevTier,
-            redevTech: updatedProject.redev_tech || row.redevTech,
-            redevFuel: updatedProject.redev_fuel || row.redevFuel,
-            redevHeatrate: updatedProject.redev_heatrate_btu_kwh || row.redevHeatrate,
-            redevCOD: updatedProject.redev_cod || row.redevCOD,
-            redevLandControl: updatedProject.redev_land_control || row.redevLandControl,
-            redevStageGate: updatedProject.redev_stage_gate || row.redevStageGate,
-            redevLead: updatedProject.redev_lead || row.redevLead,
-            redevSupport: updatedProject.redev_support || row.redevSupport,
-            projectType: updatedProject.project_type || row.projectType,
-            status: updatedProject.status || row.status || calculateStatusFromCODs(updatedProject.legacy_cod || row.cod, updatedProject.redev_cod || row.redevCOD),
-            transactabilityScore: updatedProject.transactability || row.transactabilityScore,
-            detailData: { 
-              ...(row.detailData || {}), 
-              ...updatedProject,
-              id: projectId
-            }
-          };
-          
-          console.log('Updated pipeline row:', updatedRow);
-          return updatedRow;
-        }
-        return row;
-      });
-      
-      // Update states
-      setAllData(updatedAllData);
-      setPipelineRows(updatedPipelineRows);
-      
-      // SHOW WINDOW ALERT HERE - This will pop up immediately
-      window.alert(`✅ Project "${updatedProject.project_name || updatedData["Project Name"]}" has been successfully updated!`);
-      
-      setShowEditModal(false);
-      setEditingProject(null);
-      
-      // Show success notification (if you still want the in-app notification too)
-      setNotification({
-        show: true,
-        message: `Project "${updatedProject.project_name || updatedData["Project Name"]}" updated successfully!`,
-        type: 'success'
-      });
-      
-      // FIXED: Recalculate only the charts, NOT the pipeline rows
-      const headers = Object.keys(updatedAllData[0] || {});
-      calculateAllData(updatedAllData, headers, {
-        setKpiRow1, setKpiRow2, setIsoData, setTechData, 
-        setRedevelopmentTypes, setCounterparties, 
-        setPipelineRows: () => {}  // DON'T update pipeline rows - we already did
-      });
-      
-      applyAutomaticSorting(updatedPipelineRows);
-      
-    } catch (error) {
-      console.error('❌ Update project error:', error);
-      
-      // Show error alert
-      window.alert(`❌ Failed to update project: ${error.message}`);
-      
-      setNotification({
-        show: true,
-        message: `Failed to update project: ${error.message}`,
-        type: 'error'
-      });
-    }
-  };
+      return row;
+    });
+    
+    // IMPORTANT: Update allData first
+    setAllData(updatedAllData);
+    
+    // SHOW WINDOW ALERT HERE - This will pop up immediately
+    window.alert(`✅ Project "${updatedProject.project_name || updatedData["Project Name"]}" has been successfully updated!`);
+    
+    setShowEditModal(false);
+    setEditingProject(null);
+    
+    // Show success notification (if you still want the in-app notification too)
+    setNotification({
+      show: true,
+      message: `Project "${updatedProject.project_name || updatedData["Project Name"]}" updated successfully!`,
+      type: 'success'
+    });
+    
+    // CRITICAL FIX: Recalculate ALL data including pipeline rows
+    // This ensures filters, sorting, and transformations are applied
+    const headers = Object.keys(updatedAllData[0] || {});
+    calculateAllData(updatedAllData, headers, {
+      setKpiRow1, setKpiRow2, setIsoData, setTechData, 
+      setRedevelopmentTypes, setCounterparties, 
+      setPipelineRows  // IMPORTANT: Let calculateAllData update pipelineRows
+    });
+    
+    // After calculateAllData runs, it will update pipelineRows
+    // Then apply automatic sorting to those updated rows
+    setTimeout(() => {
+      applyAutomaticSorting(pipelineRows);
+    }, 100);
+    
+  } catch (error) {
+    console.error('❌ Update project error:', error);
+    
+    // Show error alert
+    window.alert(`❌ Failed to update project: ${error.message}`);
+    
+    setNotification({
+      show: true,
+      message: `Failed to update project: ${error.message}`,
+      type: 'error'
+    });
+  }
+};
 
   const closeEditModal = () => {
     setShowEditModal(false);
@@ -2081,36 +2037,6 @@ function DashboardContent() {
             setShowProjectDetail={setShowProjectDetail}
           />
         )}
-        
-        {/* Temporary test button - remove after debugging */}
-        <button onClick={() => {
-          fetch('https://pt-power-pipeline-api.azurewebsites.net/api/projects', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
-          .then(r => r.text())
-          .then(text => {
-            console.log('RAW RESPONSE:', text.substring(0, 500));
-            try {
-              const json = JSON.parse(text);
-              console.log('PARSED JSON:', json);
-            } catch(e) {
-              console.error('Failed to parse JSON:', e);
-            }
-          });
-        }} style={{
-          position: 'fixed',
-          bottom: '10px',
-          right: '10px',
-          zIndex: 9999,
-          padding: '5px 10px',
-          background: '#3b82f6',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer'
-        }}>
-          Test API
-        </button>
       </div>
     </ActivityLogProvider>
   );
