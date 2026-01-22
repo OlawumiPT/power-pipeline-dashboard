@@ -804,11 +804,12 @@ function DashboardContent() {
         type: 'success'
       });
       
-      // Recalculate data
+      // FIXED: Recalculate only the charts, NOT the pipeline rows
       const headers = Object.keys(updatedAllData[0] || {});
       calculateAllData(updatedAllData, headers, {
         setKpiRow1, setKpiRow2, setIsoData, setTechData, 
-        setRedevelopmentTypes, setCounterparties, setPipelineRows: () => {}
+        setRedevelopmentTypes, setCounterparties, 
+        setPipelineRows: () => {}  // DON'T update pipeline rows - we already did
       });
       
       applyAutomaticSorting(updatedPipelineRows);
@@ -1169,7 +1170,8 @@ function DashboardContent() {
   // Fetch dropdown options from database
   const fetchDropdownOptions = async () => {
     try {
-      const response = await fetch("/api/dropdown-options", {
+      //const response = await fetch("/api/dropdown-options", {
+      const response = await fetch(`${API_BASE_URL}/api/dropdown-options`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1278,13 +1280,21 @@ function DashboardContent() {
     
     try {
       // Fetch projects data
-      const response = await fetch("/api/projects", {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) {
+    //  const response = await fetch("/api/projects", {
+      //  headers: {
+       //   'Authorization': `Bearer ${token}`
+       // }
+    //  });
+
+       const API_BASE_URL = "https://pt-power-pipeline-api.azurewebsites.net";
+     const response = await fetch(`${API_BASE_URL}/api/projects`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
+      }
+    });
+
+     if (!response.ok) {
         const errorText = await response.text();
         console.error('Server response:', errorText);
         
