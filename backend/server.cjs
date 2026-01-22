@@ -1,9 +1,3 @@
-/**
- * server.cjs (UPDATED)
- * - Clean + correct CORS for Azure Static Web Apps + local dev
- * - Removed any manual Access-Control-* header middleware
- */
-
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -21,7 +15,9 @@ const projectRoutes = require('./routes/projects');
 // Create Express app
 const app = express();
 const PORT = process.env.PORT || 8080; // Azure commonly uses 8080
-app.listener(PORT, () => console.log('API is running on port ${PORT}'));
+
+// FIXED: Changed from app.listener() to app.listen()
+// app.listener(PORT, () => console.log('API is running on port ${PORT}'));
 
 // Database connection
 const pool = new Pool({
@@ -298,10 +294,8 @@ if (DEBUG_MODE) {
 app.use(helmet());
 
 // ✅ CORS CONFIG (UPDATED + CLEAN)
-// - Allows your Azure Static Web App origin + local dev
-// - Also allows whatever you set in FRONTEND_URL (for custom domain)
-// - No manual Access-Control-* headers anywhere
 const allowedOrigins = [
+  'https://pt-power-pipeline-dashboard.azurestaticapps.net',
   'https://lively-water-022a59110.6.azurestaticapps.net',
   'http://localhost:5173',
   'http://localhost:3000',
@@ -310,18 +304,14 @@ const allowedOrigins = [
 ];
 
 if (process.env.FRONTEND_URL) {
-  // ensure you store a full origin like: https://yourdomain.com (no trailing slash)
   allowedOrigins.push(process.env.FRONTEND_URL);
 }
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // allow server-to-server / Postman (no Origin header)
       if (!origin) return callback(null, true);
-
       if (allowedOrigins.includes(origin)) return callback(null, true);
-
       return callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     credentials: true,
@@ -336,7 +326,7 @@ app.options('*', cors());
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per windowMs
+  max: 1000,
   message: {
     success: false,
     error: 'Too many requests from this IP, please try again later.'
@@ -422,10 +412,11 @@ app.get('/api/test', (req, res) => {
   });
 });
 
-// Add this route to your server.cjs
+// ============================================
+// DEBUG ENDPOINTS (ADDED - CRITICAL FOR DEBUGGING)
+// ============================================
 app.get('/api/debug/db-connection', async (req, res) => {
   try {
-    // Check environment variables
     const envVars = {
       DB_HOST: process.env.DB_HOST,
       DB_PORT: process.env.DB_PORT,
@@ -435,7 +426,6 @@ app.get('/api/debug/db-connection', async (req, res) => {
       DEBUG_MODE: process.env.DEBUG_MODE
     };
 
-    // Check actual database connection
     const client = await pool.connect();
     try {
       const dbInfo = await client.query(`
@@ -448,8 +438,7 @@ app.get('/api/debug/db-connection', async (req, res) => {
       res.json({
         success: true,
         environment_variables: envVars,
-        database_info: dbInfo.rows[0],
-        note: 'Check DB_NAME in environment vs actual connection'
+        database_info: dbInfo.rows[0]
       });
     } finally {
       client.release();
@@ -459,9 +448,6 @@ app.get('/api/debug/db-connection', async (req, res) => {
   }
 });
 
-// ============================================
-// DEBUG ENDPOINTS
-// ============================================
 app.post('/api/echo', (req, res) => {
   if (DEBUG_MODE) {
     console.log('📨 Echo endpoint called:', req.body);
@@ -471,60 +457,6 @@ app.post('/api/echo', (req, res) => {
     received: req.body,
     timestamp: new Date().toISOString()
   });
-});
-
-// Debug route for testing registration
-app.post('/api/debug/test-register', async (req, res) => {
-  console.log('🔍 DEBUG REGISTER REQUEST:', req.body);
-
-  try {
-    const { username, email, password } = req.body;
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const result = await pool.query(
-      `INSERT INTO ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
-       (username, email, password_hash, role, status)
-       VALUES ($1, $2, $3, 'pending', 'pending_approval')
-       RETURNING id, username, email`,
-      [username, email, passwordHash]
-    );
-
-    console.log('✅ DEBUG INSERT SUCCESS:', result.rows[0]);
-    res.json({ success: true, user: result.rows[0] });
-  } catch (error) {
-    console.error('❌ DEBUG INSERT ERROR:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Debug endpoint to see all users
-app.get('/api/debug/all-users', async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT
-        id,
-        username,
-        email,
-        status,
-        role,
-        created_at,
-        approved_at
-      FROM ${process.env.DB_SCHEMA || 'pipeline_dashboard'}.users
-      ORDER BY created_at DESC
-    `);
-
-    res.json({
-      success: true,
-      count: result.rows.length,
-      users: result.rows
-    });
-  } catch (error) {
-    console.error('Debug endpoint error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
 });
 
 // ============================================
@@ -684,10 +616,8 @@ app.post('/api/auth/register', async (req, res) => {
     }
 
     if (emailServiceReady) {
-     // const approvalLink = `${FRONTEND_URL}/admin/approve/${approvalToken}`;
-
       const backendUrl = process.env.BACKEND_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
-const approvalLink = `${backendUrl}/api/admin/approve/${approvalToken}`;
+      const approvalLink = `${backendUrl}/api/admin/approve/${approvalToken}`;
 
       const adminEmailHtml = `
         <h2>New User Registration Requires Approval</h2>
@@ -1078,8 +1008,31 @@ const dropdownOptionsRouter = require('./routes/dropdownOptions');
 app.use('/api/dropdown-options', dropdownOptionsRouter);
 
 // ============================================
-// ADMIN ROUTES
+// ADMIN ROUTES (MOVED HERE - BEFORE 404 HANDLER)
 // ============================================
+
+// ADDED: Debug admin route to test if routes are working
+app.get('/api/admin/debug-test', (req, res) => {
+  console.log('🔍 /api/admin/debug-test called');
+  res.json({
+    success: true,
+    message: 'Admin test route is working!',
+    timestamp: new Date().toISOString(),
+    path: '/api/admin/debug-test',
+    note: 'If this works, admin routes are being registered correctly'
+  });
+});
+
+// ADDED: Admin route without authentication for testing
+app.get('/api/admin/no-auth-test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Admin route without authentication works',
+    note: 'Use this to test if routes are accessible without auth'
+  });
+});
+
+// Existing admin routes (keep these)
 app.get('/api/admin/pending-users', authenticateToken, isAdmin, async (req, res) => {
   try {
     const pendingUsers = await pool.query(
@@ -1293,6 +1246,7 @@ app.post('/api/admin/reject-user/:id', authenticateToken, isAdmin, async (req, r
   }
 });
 
+// CRITICAL: This is the approval endpoint for email links
 app.get('/api/admin/approve/:token', async (req, res) => {
   const client = await pool.connect();
 
@@ -1541,16 +1495,41 @@ app.get('/api/test-email', async (req, res) => {
 // ========== API ROUTES ==========
 app.use('/api/projects', projectRoutes);
 
-// ========== ERROR HANDLING ==========
-
-// 404 Handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Route not found',
-    path: req.originalUrl
+// ========== ADDED: ROUTE DEBUGGING ENDPOINT ==========
+app.get('/api/debug/routes', (req, res) => {
+  const routes = [];
+  
+  app._router.stack.forEach((middleware) => {
+    if (middleware.route) {
+      const route = middleware.route;
+      routes.push({
+        path: route.path,
+        methods: Object.keys(route.methods),
+        type: 'direct'
+      });
+    } else if (middleware.name === 'router') {
+      middleware.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          const route = handler.route;
+          routes.push({
+            path: route.path,
+            methods: Object.keys(route.methods),
+            type: 'router'
+          });
+        }
+      });
+    }
+  });
+  
+  res.json({
+    success: true,
+    totalRoutes: routes.length,
+    adminRoutes: routes.filter(r => r.path.includes('admin')),
+    allRoutes: routes
   });
 });
+
+// ========== ERROR HANDLING ==========
 
 // Global error handler
 app.use((err, req, res, next) => {
@@ -1567,12 +1546,20 @@ app.use((err, req, res, next) => {
     error: err.message || 'Internal Server Error'
   };
 
-  // Include stack trace in development
   if (process.env.NODE_ENV === 'development') {
     response.stack = err.stack;
   }
 
   res.status(statusCode).json(response);
+});
+
+// 404 Handler - MUST BE LAST (after all other routes)
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Route not found',
+    path: req.originalUrl
+  });
 });
 
 // ========== START SERVER ==========
@@ -1599,10 +1586,12 @@ app.listen(PORT, () => {
   console.log('📋 Available Endpoints:');
   console.log('- GET  /health - Server health check');
   console.log('- GET  /api/test - Server status');
+  console.log('- GET  /api/admin/debug-test - Admin debug route');
   console.log('- POST /api/auth/register - Register new user (with email)');
   console.log('- POST /api/auth/login - Login (approved users only)');
   console.log('- POST /api/auth/forgot-password - Request password reset');
   console.log('- GET  /api/admin/pending-users - Get pending users (admin)');
+  console.log('- GET  /api/admin/approve/:token - Approve user via email link');
   console.log('- GET  /api/test-email - Test email service');
   console.log('- GET  /api/projects - Projects API');
   console.log('='.repeat(70));
