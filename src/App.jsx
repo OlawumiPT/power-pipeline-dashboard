@@ -9,7 +9,8 @@ import DashboardContent from './DashboardContent';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
 import ApprovalSuccess from './components/ApprovalSuccess';
-import AdminApproval from './components/AdminApproval';;
+import ApprovalRedirect from './components/ApprovalRedirect';
+import AdminApproval from './components/AdminApproval';
 import './index.css';
 
 // Main App component
@@ -25,6 +26,7 @@ function App() {
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/admin/approve/:token" element={<ApprovalSuccess />} />
           <Route path="/approval-success" element={<ApprovalSuccess />} />
+          <Route path="/admin/approve/:token" element={<ApprovalRedirect />} />
           
           {/* Admin Routes (require admin role) */}
           <Route 
