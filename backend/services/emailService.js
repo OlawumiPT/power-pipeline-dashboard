@@ -100,7 +100,6 @@ class EmailService {
   getDefaultTemplate(templateName, data) {
     const currentYear = new Date().getFullYear();
     const frontendUrl = process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net';
-   // frontend_url: process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net',
     
     const templates = {
       'registration-received': `
@@ -210,7 +209,7 @@ class EmailService {
                 Date: ${new Date().toLocaleString()}
               </div>
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${data.approval_link || frontendUrl + 'api/admin/approve'}" class="button">Review Registration</a>
+                <a href="${data.approval_link || frontendUrl + '/admin/review'}" class="button">Review Registration</a>
               </div>
               <p>Direct approval link:<br>
               <a href="${data.approval_link}">${data.approval_link}</a></p>
