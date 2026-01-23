@@ -128,8 +128,7 @@ router.post('/register', async (req, res) => {
     // Send admin notification
     if (emailServiceReady) {
       try {
-        const approvalLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin/approve/${approvalToken}?user=${encodeURIComponent(newUser.username)}`;
-        
+      const approvalLink = `${process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net'}/admin/review/${approvalToken}`;
         const adminResult = await emailService.sendAdminNotification(newUser, approvalToken);
         
         if (adminResult.success) {
