@@ -96,7 +96,8 @@ router.post('/approve-user/:id', authenticateToken, isAdmin, async (req, res) =>
           </ul>
         </div>
         
-        <p><a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" 
+       
+       <a href="${process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net'}/login"
            style="background:#28a745;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">
           Log In Now
         </a></p>
