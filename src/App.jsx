@@ -23,9 +23,8 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password/:token" element={<ResetPassword />} />
-         // <Route path="/admin/approve/:token" element={<ApprovalSuccess />} />
+          <Route path="/admin/approve/:token" element={<ApprovalSuccess />} />
           <Route path="/approval-success" element={<ApprovalSuccess />} />
-          <Route path="/admin/approve/:token" element={<AdminApprovalRedirect />} />
           
           {/* Admin Routes (require admin role) */}
           <Route 
