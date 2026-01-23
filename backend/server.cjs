@@ -257,6 +257,10 @@ class EmailService {
   }
 }
 
+// ============================================
+// IMPORT OFFICE 365 EMAIL SERVICE
+// ============================================
+const EmailService = require('./emailService-office365.js');
 const emailService = new EmailService();
 let emailServiceReady = false;
 
