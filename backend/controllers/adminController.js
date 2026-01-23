@@ -186,7 +186,7 @@ const approveUserByToken = async (req, res) => {
           <p>The account for <strong>${user.username}</strong> (${user.email}) has been approved.</p>
           <p>An approval email has been sent to the user.</p>
           <br>
-          <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin" class="button">Return to Admin Panel</a>
+          <a href="${process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net'}/admin/review" class="button">Return to Admin Panel</a>
         </div>
       </body>
       </html>
