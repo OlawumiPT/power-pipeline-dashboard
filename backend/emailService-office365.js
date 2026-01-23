@@ -626,7 +626,6 @@ class EmailService {
   }
 
   async sendPasswordResetEmail(userData, resetToken) {
-  //  const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;
     const resetLink = `${process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net'}/reset-password/${resetToken}`;
     
     return this.sendEmail(
