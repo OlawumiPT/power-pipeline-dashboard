@@ -26,8 +26,16 @@ function App() {
           <Route path="/reset-password/:token" element={<ResetPassword />} />
           <Route path="/admin/approve/:token" element={<ApprovalSuccess />} />
           <Route path="/approval-success" element={<ApprovalSuccess />} />
-          <Route path="/admin/approve/:token" element={<ApprovalRedirect />} />
-          
+
+          <Route 
+          path="/admin/approve/:token" 
+          element={({ match }) => {
+            const token = match.params.token;
+            const backendUrl = 'https://pt-power-pipeline-api.azurewebsites.net';
+            window.location.href = `${backendUrl}/api/admin/approve/${token}`;
+            return <div>Redirecting to approval system...</div>;
+          }} 
+        />
           {/* Admin Routes (require admin role) */}
           <Route 
             path="/admin/approvals" 
