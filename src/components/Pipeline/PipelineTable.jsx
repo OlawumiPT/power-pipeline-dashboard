@@ -10,7 +10,6 @@ const PipelineTable = ({
   getSortedPipelineRows,
   handleProjectClick,
   handleEditProject,
-  handleDeleteProject,
   activeTechFilter,
   clearTechFilter,
   clearCounterpartyFilter,
@@ -363,16 +362,7 @@ const PipelineTable = ({
     };
   };
 
-  // Handle delete click
-  const handleDeleteClick = (e, projectId) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (handleDeleteProject && typeof handleDeleteProject === 'function') {
-      handleDeleteProject(projectId);
-    }
-  };
-
-  // Safe wrapper functions for edit - UPDATED: Added poiVoltage field
+   // Safe wrapper functions for edit
  const handleEditClick = (e, row) => {
   e.preventDefault();
   e.stopPropagation();
@@ -928,14 +918,7 @@ const PipelineTable = ({
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                         </svg>
                       </button>
-                      <button 
-                        className="btn-icon btn-delete"
-                        onClick={(e) => handleDeleteClick(e, row.id)}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        title="Delete project"
-                        aria-label={`Delete ${row.asset || 'project'}`}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M3 6h18" />
                           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                           <path d="M10 11v6" />
