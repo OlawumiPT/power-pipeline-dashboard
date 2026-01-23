@@ -263,7 +263,7 @@ class EmailService {
       const templateData = {
         ...data,
         current_year: new Date().getFullYear(),
-        frontend_url: process.env.FRONTEND_URL || 'http://localhost:5173',
+        frontend_url: process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net',
         system_name: 'Power Pipeline Dashboard',
         company_name: 'Power Pipeline Systems',
         support_email: 'ababalola@power-transitions.com'
@@ -611,9 +611,8 @@ class EmailService {
   }
 
   async sendAdminNotification(userData, approvalToken) {
-    
-    // const approvalLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/admin/approve/${approvalToken}?user=${encodeURIComponent(userData.username)}`;
-  const approvalLink = `${process.env.BACKEND_URL || 'https://pt-power-pipeline-api.azurewebsites.net'}/api/admin/approve/${approvalToken}`;
+
+    const approvalLink = `${process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net'}/admin/review/${approvalToken}`;
     return this.sendEmail(
       process.env.ADMIN_EMAIL || 'ababalola@power-transitions.com',
       'URGENT: New User Registration Requires Approval',
@@ -627,7 +626,8 @@ class EmailService {
   }
 
   async sendPasswordResetEmail(userData, resetToken) {
-    const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;
+  //  const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password/${resetToken}`;
+    const resetLink = `${process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net'}/reset-password/${resetToken}`;
     
     return this.sendEmail(
       userData.email,
