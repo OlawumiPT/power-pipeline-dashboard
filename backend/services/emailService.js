@@ -77,7 +77,7 @@ class EmailService {
       const templateData = {
         ...data,
         current_year: new Date().getFullYear(),
-        frontend_url: process.env.FRONTEND_URL || 'http://localhost:5173',
+        frontend_url: process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net',
         approval_date: data.approval_date || new Date().toLocaleDateString(),
         registration_date: data.registration_date || new Date().toLocaleDateString(),
         expiry_time: data.expiry_time || '1 hour'
@@ -99,7 +99,8 @@ class EmailService {
   // Get default template if file doesn't exist
   getDefaultTemplate(templateName, data) {
     const currentYear = new Date().getFullYear();
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net';
+   // frontend_url: process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net',
     
     const templates = {
       'registration-received': `
@@ -209,7 +210,7 @@ class EmailService {
                 Date: ${new Date().toLocaleString()}
               </div>
               <div style="text-align: center; margin: 30px 0;">
-                <a href="${data.approval_link || frontendUrl + '/admin/approvals'}" class="button">Review Registration</a>
+                <a href="${data.approval_link || frontendUrl + 'api/admin/approve'}" class="button">Review Registration</a>
               </div>
               <p>Direct approval link:<br>
               <a href="${data.approval_link}">${data.approval_link}</a></p>
