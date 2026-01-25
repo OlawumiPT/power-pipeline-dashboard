@@ -95,7 +95,7 @@ const Register = () => {
         {/* Header */}
         <div className="register-header">
           <h1>Create Account</h1>
-          <p className="register-subtitle">Join Power Pipeline Dashboard</p>
+          <p className="register-subtitle">Join Power Transitions Platform</p>
         </div>
 
         {/* Registration Form */}
