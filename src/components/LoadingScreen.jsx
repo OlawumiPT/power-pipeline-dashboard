@@ -6,7 +6,7 @@ const LoadingScreen = () => {
     <div className="loading-screen">
       <div className="loading-content">
         <div className="spinner-large"></div>
-        <h2>Power Pipeline Dashboard</h2>
+        <h2>Power Transitions Platform</h2>
         <p>Loading secure session...</p>
         <div className="loading-details">
           <span className="security-badge">🔒 Secure Connection</span>
