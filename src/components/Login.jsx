@@ -149,7 +149,7 @@ const Login = () => {
     <a href="#" className="footer-link">Emergency Procedures</a>
   </div>
   <p className="copyright">
-    © 2026 Power Pipeline Systems. Critical Infrastructure.
+    © 2026 Power Transitions Platform. Critical Infrastructure.
   </p>
 </div>
 
