@@ -186,7 +186,7 @@ const approveUserByToken = async (req, res) => {
           <p>The account for <strong>${user.username}</strong> (${user.email}) has been approved.</p>
           <p>An approval email has been sent to the user.</p>
           <br>
-         <a href="${process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net'}/admin/review" class="button">Return to Admin Panel</a>
+         <a href="${process.env.FRONTEND_URL || 'https://platform.power-transitions.com'}/admin/review" class="button">Return to Admin Panel</a>
         </div>
       </body>
       </html>
@@ -402,7 +402,7 @@ const resendApprovalEmail = async (req, res) => {
     const approvalToken = await userModel.generateApprovalToken(parseInt(id));
     
     // Build approval link for email
-   const approvalLink = `${process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net'}/admin/review/${approvalToken}`;
+   const approvalLink = `${process.env.FRONTEND_URL || 'https://platform.power-transitions.com'}/admin/review/${approvalToken}`;
     
     // Send admin notification with new link
     const emailResult = await emailService.sendAdminNotification(
