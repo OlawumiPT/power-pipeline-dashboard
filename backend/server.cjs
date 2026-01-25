@@ -45,7 +45,7 @@ const DEBUG_MODE = process.env.DEBUG_MODE === 'true';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-jwt-secret-change-in-production';
 const SALT_ROUNDS = 12;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'ababalola@power-transitions.com';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://platform.power-transitions.com';
 
 // ============================================
 // EMAIL SERVICE SETUP
