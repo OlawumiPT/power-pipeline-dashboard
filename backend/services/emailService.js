@@ -16,9 +16,9 @@ class EmailService {
       },
       tls: {
         ciphers: 'SSLv3',
-        rejectUnauthorized: false // Be careful with this in production
+        rejectUnauthorized: false 
       },
-      connectionTimeout: 10000, // 10 seconds
+      connectionTimeout: 10000, 
       greetingTimeout: 10000,
       socketTimeout: 10000
     });
@@ -77,7 +77,7 @@ class EmailService {
       const templateData = {
         ...data,
         current_year: new Date().getFullYear(),
-        frontend_url: process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net',
+        frontend_url: process.env.FRONTEND_URL || 'https://platform.power-transitions.com',
         approval_date: data.approval_date || new Date().toLocaleDateString(),
         registration_date: data.registration_date || new Date().toLocaleDateString(),
         expiry_time: data.expiry_time || '1 hour'
@@ -99,7 +99,7 @@ class EmailService {
   // Get default template if file doesn't exist
   getDefaultTemplate(templateName, data) {
     const currentYear = new Date().getFullYear();
-    const frontendUrl = process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://platform.power-transitions.com';
     
     const templates = {
       'registration-received': `
