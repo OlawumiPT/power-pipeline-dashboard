@@ -122,7 +122,7 @@ const MiddleGridSection = ({ isoData, techData, redevelopmentTypes, ISO_COLORS, 
       </div>
 
       <div className="card mid-card">
-        <div className="card-header">REDEVELOPMENT TYPES</div>
+        <div className="card-header">REDEVELOPMENT POSSIBILITIES</div>
         <div className="card-body">
           <div className="redev-grid">
             {redevelopmentTypes.map((item) => {
