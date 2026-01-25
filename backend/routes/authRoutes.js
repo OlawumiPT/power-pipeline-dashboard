@@ -41,7 +41,7 @@ router.get('/api/approve/:token', async (req, res) => {
             <p>This approval link is invalid, has expired, or the user has already been approved.</p>
             <p>Please contact the administrator if you believe this is an error.</p>
             <br>
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" 
+            <a href="${process.env.FRONTEND_URL || 'https://platform.power-transitions.com'}/login" 
                style="background:#6c757d;color:white;padding:10px 20px;text-decoration:none;border-radius:5px;">
               Go to Login
             </a>
@@ -127,7 +127,7 @@ router.get('/api/approve/:token', async (req, res) => {
           <p>✅ The user can now login to the Power Pipeline Dashboard.</p>
           
           <br>
-          <a href="${process.env.FRONTEND_URL || 'http://localhost:5173'}/login" class="button">
+          <a href="${process.env.FRONTEND_URL || 'https://platform.power-transitions.com'}/login" class="button">
             Go to Login Page
           </a>
           
