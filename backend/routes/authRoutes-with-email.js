@@ -128,7 +128,7 @@ router.post('/register', async (req, res) => {
     // Send admin notification
     if (emailServiceReady) {
       try {
-      const approvalLink = `${process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net'}/admin/review/${approvalToken}`;
+      const approvalLink = `${process.env.FRONTEND_URL || 'https://platform.power-transitions.com'}/admin/review/${approvalToken}`;
         const adminResult = await emailService.sendAdminNotification(newUser, approvalToken);
         
         if (adminResult.success) {
@@ -262,7 +262,7 @@ router.get('/admin/approve/:token', async (req, res) => {
     const username = req.query.user || user.username;
     
     // Redirect to frontend success page
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://platform.power-transitions.com';
     res.redirect(`${frontendUrl}/approval-success?user=${encodeURIComponent(username)}`);
     
   } catch (error) {
