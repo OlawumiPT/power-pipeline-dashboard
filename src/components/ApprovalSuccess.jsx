@@ -88,7 +88,7 @@ const ApprovalSuccess = () => {
         </div>
         
         <div style={styles.footer}>
-          <p>Powered by Power Pipeline Dashboard</p>
+          <p>Powered by Power Transitions Platform</p>
         </div>
       </div>
     </div>
