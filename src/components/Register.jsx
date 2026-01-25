@@ -291,7 +291,7 @@ const Register = () => {
             <a href="#" className="footer-link">Privacy Policy</a>
           </div>
           <p className="copyright">
-            © 2026 Power Pipeline Systems. Critical Infrastructure.
+            © 2026 Power Transitions Platform. Critical Infrastructure.
           </p>
         </div>
       </div>
