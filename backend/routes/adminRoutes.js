@@ -97,7 +97,7 @@ router.post('/approve-user/:id', authenticateToken, isAdmin, async (req, res) =>
         </div>
         
        
-       <a href="${process.env.FRONTEND_URL || 'https://lively-water-022a59110.6.azurestaticapps.net'}/login"
+       <a href="${process.env.FRONTEND_URL || 'https://platform.power-transitions.com'}/login"
            style="background:#28a745;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block;">
           Log In Now
         </a></p>
