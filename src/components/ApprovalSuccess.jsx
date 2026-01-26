@@ -13,6 +13,7 @@ const ApprovalSuccess = () => {
     email: '',
     fullName: ''
   });
+  const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
     const processApproval = async () => {
@@ -24,49 +25,23 @@ const ApprovalSuccess = () => {
           if (response.ok) {
             setSuccess(true);
             setMessage('Account approved successfully!');
-            
-            // Try to get user info from response
-            const contentType = response.headers.get('content-type');
-            if (contentType && contentType.includes('application/json')) {
-              const data = await response.json();
-              if (data.user) {
-                setUserInfo({
-                  username: data.user.username || '',
-                  email: data.user.email || '',
-                  fullName: data.user.full_name || data.user.fullName || ''
-                });
-              }
-            }
           } else {
             setSuccess(false);
             setMessage('Approval failed. Please try again or contact support.');
           }
+        } else {
+          setSuccess(true);
+          setMessage('Account approved successfully!');
         }
         
-        // Also check URL query parameters for user info
         const params = new URLSearchParams(location.search);
         const urlUser = params.get('user');
         const urlEmail = params.get('email');
         const urlName = params.get('name');
         
-        if (urlUser && !userInfo.username) {
-          setUserInfo(prev => ({
-            ...prev,
-            username: decodeURIComponent(urlUser)
-          }));
-        }
-        if (urlEmail && !userInfo.email) {
-          setUserInfo(prev => ({
-            ...prev,
-            email: decodeURIComponent(urlEmail)
-          }));
-        }
-        if (urlName && !userInfo.fullName) {
-          setUserInfo(prev => ({
-            ...prev,
-            fullName: decodeURIComponent(urlName)
-          }));
-        }
+        if (urlUser) setUserInfo(prev => ({ ...prev, username: decodeURIComponent(urlUser) }));
+        if (urlEmail) setUserInfo(prev => ({ ...prev, email: decodeURIComponent(urlEmail) }));
+        if (urlName) setUserInfo(prev => ({ ...prev, fullName: decodeURIComponent(urlName) }));
         
       } catch (error) {
         console.error('Approval error:', error);
@@ -80,7 +55,15 @@ const ApprovalSuccess = () => {
     processApproval();
   }, [token, location]);
 
-  // Render user information
+  const handleNavigation = (path) => {
+    setShowDropdown(false);
+    navigate(path);
+  };
+
+  const toggleDropdown = () => {
+    setShowDropdown(!showDropdown);
+  };
+
   const renderUserInfo = () => {
     if (!userInfo.username && !userInfo.email && !userInfo.fullName) {
       return null;
@@ -111,13 +94,8 @@ const ApprovalSuccess = () => {
     );
   };
 
-  const handleGoToAdminPanel = () => {
-    navigate('/admin/approvals');
-  };
-
-  const handleBackToLogin = () => {
-    navigate('/login');
-  };
+  const isAdminContext = userInfo.email.includes('power-transitions.com') || 
+                        location.pathname.includes('admin');
 
   return (
     <div style={styles.container}>
@@ -133,27 +111,77 @@ const ApprovalSuccess = () => {
         {success && renderUserInfo()}
         
         <div style={styles.actions}>
-          <button 
-            onClick={handleBackToLogin} 
-            style={styles.primaryButton}
-            disabled={loading}
-          >
-            Go to Login
-          </button>
-          
-          <button 
-            onClick={handleGoToAdminPanel} 
-            style={styles.secondaryButton}
-            disabled={loading}
-          >
-            Admin Panel
-          </button>
+          <div style={styles.buttonGroup}>
+            <button 
+              onClick={toggleDropdown}
+              style={styles.primaryButton}
+              disabled={loading}
+            >
+              Next Steps ▾
+            </button>
+            
+            {showDropdown && (
+              <div style={styles.dropdown}>
+                {isAdminContext ? (
+                  <>
+                    <button 
+                      onClick={() => handleNavigation('/admin/approvals')}
+                      style={styles.dropdownItem}
+                    >
+                      ⚙️ Admin Panel
+                    </button>
+                    <button 
+                      onClick={() => handleNavigation('/admin/users')}
+                      style={styles.dropdownItem}
+                    >
+                      👥 Manage Users
+                    </button>
+                    <button 
+                      onClick={() => handleNavigation('/dashboard')}
+                      style={styles.dropdownItem}
+                    >
+                      📊 Dashboard
+                    </button>
+                    <div style={styles.dropdownDivider}></div>
+                  </>
+                ) : null}
+                
+                <button 
+                  onClick={() => handleNavigation('/login')}
+                  style={styles.dropdownItem}
+                >
+                  🔐 Login
+                </button>
+                <button 
+                  onClick={() => handleNavigation('/')}
+                  style={styles.dropdownItem}
+                >
+                  🏠 Home
+                </button>
+                <button 
+                  onClick={() => handleNavigation('/register')}
+                  style={styles.dropdownItem}
+                >
+                  📝 Register
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         
         <div style={styles.footer}>
           <p>Power Transitions Platform</p>
+          <p style={styles.version}>v1.0 • Secure Approval System</p>
         </div>
       </div>
+      
+      {/* Close dropdown when clicking outside */}
+      {showDropdown && (
+        <div 
+          style={styles.dropdownOverlay}
+          onClick={() => setShowDropdown(false)}
+        />
+      )}
     </div>
   );
 };
@@ -166,6 +194,7 @@ const styles = {
     minHeight: '100vh',
     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     padding: '20px',
+    position: 'relative',
   },
   card: {
     background: 'white',
@@ -175,10 +204,13 @@ const styles = {
     textAlign: 'center',
     maxWidth: '500px',
     width: '100%',
+    position: 'relative',
+    zIndex: 10,
   },
   icon: {
     fontSize: '4rem',
     marginBottom: '20px',
+    animation: 'pulse 2s infinite',
   },
   message: {
     fontSize: '1.1rem',
@@ -213,36 +245,71 @@ const styles = {
   },
   actions: {
     display: 'flex',
-    gap: '15px',
     justifyContent: 'center',
-    flexWrap: 'wrap',
     marginBottom: '20px',
+    position: 'relative',
+  },
+  buttonGroup: {
+    position: 'relative',
   },
   primaryButton: {
-    padding: '12px 24px',
+    padding: '12px 30px',
     background: '#28a745',
     color: 'white',
     border: 'none',
     borderRadius: '6px',
     fontWeight: 'bold',
-    minWidth: '150px',
+    minWidth: '200px',
     textAlign: 'center',
     cursor: 'pointer',
     fontSize: '16px',
     transition: 'all 0.3s ease',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
   },
-  secondaryButton: {
-    padding: '12px 24px',
-    background: '#6c757d',
-    color: 'white',
-    border: 'none',
+  dropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: '0',
+    right: '0',
+    background: 'white',
     borderRadius: '6px',
-    fontWeight: 'bold',
-    minWidth: '150px',
-    textAlign: 'center',
+    boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+    marginTop: '5px',
+    overflow: 'hidden',
+    zIndex: 1000,
+    animation: 'slideDown 0.3s ease',
+  },
+  dropdownItem: {
+    padding: '12px 20px',
+    background: 'transparent',
+    color: '#333',
+    border: 'none',
+    width: '100%',
+    textAlign: 'left',
     cursor: 'pointer',
-    fontSize: '16px',
-    transition: 'all 0.3s ease',
+    fontSize: '14px',
+    transition: 'background 0.2s ease',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    borderBottom: '1px solid #f0f0f0',
+  },
+  dropdownDivider: {
+    height: '1px',
+    background: '#e0e0e0',
+    margin: '5px 0',
+  },
+  dropdownOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    background: 'transparent',
+    zIndex: 5,
   },
   footer: {
     marginTop: '30px',
@@ -251,6 +318,58 @@ const styles = {
     color: '#777',
     fontSize: '0.9rem',
   },
+  version: {
+    fontSize: '0.8rem',
+    color: '#aaa',
+    marginTop: '5px',
+  },
 };
+
+// Add CSS animations
+const styleSheet = document.styleSheets[0];
+styleSheet.insertRule(`
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+`, styleSheet.cssRules.length);
+
+styleSheet.insertRule(`
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+`, styleSheet.cssRules.length);
+
+// Add hover effects
+styleSheet.insertRule(`
+  .dropdown-item:hover {
+    background: #f8f9fa;
+  }
+`, styleSheet.cssRules.length);
+
+styleSheet.insertRule(`
+  .primary-button:hover {
+    background: #218838;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(40, 167, 69, 0.3);
+  }
+`, styleSheet.cssRules.length);
+
+// Apply hover classes
+setTimeout(() => {
+  const primaryButton = document.querySelector('[style*="primaryButton"]');
+  const dropdownItems = document.querySelectorAll('[style*="dropdownItem"]');
+  
+  if (primaryButton) primaryButton.classList.add('primary-button');
+  dropdownItems.forEach(item => item.classList.add('dropdown-item'));
+}, 100);
 
 export default ApprovalSuccess;
