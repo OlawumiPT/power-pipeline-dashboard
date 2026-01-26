@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 
 const ApprovalSuccess = () => {
   const { token } = useParams(); 
@@ -8,7 +8,11 @@ const ApprovalSuccess = () => {
   const [message, setMessage] = useState('Processing approval...');
   const [loading, setLoading] = useState(true);
   const [success, setSuccess] = useState(false);
-  const [username, setUsername] = useState('');
+  const [userInfo, setUserInfo] = useState({
+    username: '',
+    email: '',
+    fullName: ''
+  });
 
   useEffect(() => {
     const processApproval = async () => {
@@ -20,19 +24,48 @@ const ApprovalSuccess = () => {
           if (response.ok) {
             setSuccess(true);
             setMessage('Account approved successfully!');
+            
+            // Try to get user info from response
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const data = await response.json();
+              if (data.user) {
+                setUserInfo({
+                  username: data.user.username || '',
+                  email: data.user.email || '',
+                  fullName: data.user.full_name || data.user.fullName || ''
+                });
+              }
+            }
           } else {
             setSuccess(false);
             setMessage('Approval failed. Please try again or contact support.');
           }
-        } else {
-          setSuccess(true);
-          setMessage('Account approved successfully!');
         }
-
+        
+        // Also check URL query parameters for user info
         const params = new URLSearchParams(location.search);
-        const userParam = params.get('user');
-        if (userParam) {
-          setUsername(decodeURIComponent(userParam));
+        const urlUser = params.get('user');
+        const urlEmail = params.get('email');
+        const urlName = params.get('name');
+        
+        if (urlUser && !userInfo.username) {
+          setUserInfo(prev => ({
+            ...prev,
+            username: decodeURIComponent(urlUser)
+          }));
+        }
+        if (urlEmail && !userInfo.email) {
+          setUserInfo(prev => ({
+            ...prev,
+            email: decodeURIComponent(urlEmail)
+          }));
+        }
+        if (urlName && !userInfo.fullName) {
+          setUserInfo(prev => ({
+            ...prev,
+            fullName: decodeURIComponent(urlName)
+          }));
         }
         
       } catch (error) {
@@ -46,6 +79,37 @@ const ApprovalSuccess = () => {
 
     processApproval();
   }, [token, location]);
+
+  // Render user information
+  const renderUserInfo = () => {
+    if (!userInfo.username && !userInfo.email && !userInfo.fullName) {
+      return null;
+    }
+    
+    return (
+      <div style={styles.userInfo}>
+        <h3 style={styles.userInfoTitle}>Approved User:</h3>
+        {userInfo.username && (
+          <p style={styles.userInfoItem}>
+            <strong>Username:</strong> {userInfo.username}
+          </p>
+        )}
+        {userInfo.email && (
+          <p style={styles.userInfoItem}>
+            <strong>Email:</strong> {userInfo.email}
+          </p>
+        )}
+        {userInfo.fullName && (
+          <p style={styles.userInfoItem}>
+            <strong>Full Name:</strong> {userInfo.fullName}
+          </p>
+        )}
+        <p style={styles.userInfoNote}>
+          This user can now log in with their credentials.
+        </p>
+      </div>
+    );
+  };
 
   const handleGoToAdminPanel = () => {
     navigate('/admin/approvals');
@@ -66,12 +130,7 @@ const ApprovalSuccess = () => {
         
         <p style={styles.message}>{message}</p>
         
-        {username && success && (
-          <div style={styles.userInfo}>
-            <p><strong>Username:</strong> {username}</p>
-            <p>The user can now log in with their credentials.</p>
-          </div>
-        )}
+        {success && renderUserInfo()}
         
         <div style={styles.actions}>
           <button 
@@ -129,11 +188,28 @@ const styles = {
   },
   userInfo: {
     background: '#e8f5e9',
-    padding: '15px',
+    padding: '20px',
     borderRadius: '8px',
     marginBottom: '30px',
     textAlign: 'left',
     borderLeft: '4px solid #28a745',
+  },
+  userInfoTitle: {
+    marginTop: '0',
+    marginBottom: '15px',
+    color: '#155724',
+    fontSize: '1.2rem',
+  },
+  userInfoItem: {
+    margin: '8px 0',
+    color: '#333',
+  },
+  userInfoNote: {
+    marginTop: '15px',
+    paddingTop: '15px',
+    borderTop: '1px solid #c3e6cb',
+    color: '#155724',
+    fontStyle: 'italic',
   },
   actions: {
     display: 'flex',
@@ -176,34 +252,5 @@ const styles = {
     fontSize: '0.9rem',
   },
 };
-
-// Add hover effects
-const addHoverStyles = () => {
-  const styleSheet = document.styleSheets[0];
-  styleSheet.insertRule(`
-    .approval-button:hover {
-      opacity: 0.9;
-      transform: translateY(-2px);
-    }
-  `, styleSheet.cssRules.length);
-  
-  styleSheet.insertRule(`
-    .approval-button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  `, styleSheet.cssRules.length);
-};
-
-// Initialize hover styles
-if (typeof window !== 'undefined') {
-  addHoverStyles();
-  
-  // Add class to buttons
-  const primaryButton = document.querySelector('[style*="primaryButton"]');
-  const secondaryButton = document.querySelector('[style*="secondaryButton"]');
-  if (primaryButton) primaryButton.classList.add('approval-button');
-  if (secondaryButton) secondaryButton.classList.add('approval-button');
-}
 
 export default ApprovalSuccess;
