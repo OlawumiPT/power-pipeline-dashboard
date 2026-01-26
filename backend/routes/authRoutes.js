@@ -256,17 +256,14 @@ router.post('/register', async (req, res) => {
     });
 
 const backendUrl = process.env.BACKEND_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
-const approvalLink = `${backendUrl}/api/admin/approve/${approvalToken}`;
-    
-    // Send admin notification with CORRECT LINK
-   // const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
-    
-    //const backendUrl = process.env.BACKEND_URL || process.env.API_URL || 'https://pt-power-pipeline-dashboard.azurestaticapps.net';
-   // const approvalLink = `${backendUrl}/api/approve/${approvalToken}`;
+//const approvalLink = `${backendUrl}/api/admin/approve/${approvalToken}`;
+
+const approvalLink = `${backendUrl}/admin/approve/${approvalToken}`;
+  
     
     await emailService.sendAdminNotification(
       newUser, 
-      approvalLink  // This is the FIXED link that will work
+      approvalLink  
     );
     
     res.status(201).json({
