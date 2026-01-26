@@ -3,7 +3,7 @@ import { useNavigate, useParams, useLocation, Link } from 'react-router-dom';
 import axios from 'axios';
 
 const ApprovalSuccess = () => {
-  const { token } = useParams(); // Get token from URL if using /admin/approve/:token
+  const { token } = useParams(); 
   const location = useLocation();
   const navigate = useNavigate();
   const [message, setMessage] = useState('Processing approval...');
@@ -15,9 +15,7 @@ const ApprovalSuccess = () => {
     const processApproval = async () => {
       try {
         if (token) {
-          // Call backend API to process the approval token
-         // const response = await axios.get(`http://localhost:3001/api/admin/approve/${token}`);
-         const response = await axios.get(`/api/admin/approve/${token}`);
+         const response = await axios.get(`/admin/approve/${token}`);
           console.log('Approval processed:', response.data);
           
           // Extract username from redirect URL if available
