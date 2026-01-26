@@ -20,78 +20,109 @@ const AdminApproval = () => {
     } else {
       navigate('/dashboard');
     }
-  }, [user]);
+  }, [user, navigate]);
 
   const fetchPendingUsers = async () => {
     try {
-      //const response = await fetch('http://localhost:3001/api/admin/pending-users', {
-      const response = await fetch('/api/admin/pending-users', {
+      setLoading(true);
+      const response = await fetch('/api/admin/pending', {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
       
       if (!response.ok) {
-        throw new Error('Failed to fetch pending users');
+        throw new Error(`Failed to fetch pending users: ${response.status}`);
       }
       
       const data = await response.json();
-      setPendingUsers(data);
+      if (data.success) {
+        setPendingUsers(data.data || []);
+      } else {
+        throw new Error(data.error || 'Failed to load pending users');
+      }
     } catch (error) {
       console.error('Error fetching pending users:', error);
-      setMessage({ type: 'error', text: 'Failed to load pending users' });
+      setMessage({ 
+        type: 'error', 
+        text: error.message || 'Failed to load pending users' 
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApprove = async (userId) => {
+  const handleApprove = async (userId, userEmail) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/admin/approve-user/${userId}`, {
+      const response = await fetch('/api/admin/approve', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ role: selectedRole })
+        body: JSON.stringify({ 
+          userId: userId,
+          email: userEmail,
+          role: selectedRole 
+        })
       });
       
       if (!response.ok) {
-        throw new Error('Failed to approve user');
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to approve user: ${response.status}`);
       }
       
       const data = await response.json();
       
-      setMessage({ type: 'success', text: data.message });
-      setPendingUsers(pendingUsers.filter(user => user.id !== userId));
+      setMessage({ 
+        type: 'success', 
+        text: data.message || 'User approved successfully!' 
+      });
+      
+      // Remove approved user from list
+      setPendingUsers(prev => prev.filter(user => user.id !== userId));
       
       // Clear message after 3 seconds
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
       console.error('Error approving user:', error);
-      setMessage({ type: 'error', text: 'Failed to approve user' });
+      setMessage({ 
+        type: 'error', 
+        text: error.message || 'Failed to approve user' 
+      });
     }
   };
 
-  const handleReject = async (userId, reason) => {
+  const handleReject = async (userId, userEmail, reason) => {
     try {
-      const response = await fetch(`http://localhost:3001/api/admin/reject-user/${userId}`, {
+      const response = await fetch('/api/admin/reject', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ reason })
+        body: JSON.stringify({ 
+          userId: userId,
+          email: userEmail,
+          reason: reason || 'No reason provided'
+        })
       });
       
       if (!response.ok) {
-        throw new Error('Failed to reject user');
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Failed to reject user: ${response.status}`);
       }
       
       const data = await response.json();
       
-      setMessage({ type: 'success', text: data.message });
-      setPendingUsers(pendingUsers.filter(user => user.id !== userId));
+      setMessage({ 
+        type: 'success', 
+        text: data.message || 'User rejected successfully!' 
+      });
+      
+      // Remove rejected user from list
+      setPendingUsers(prev => prev.filter(user => user.id !== userId));
       setShowRejectModal(false);
       setRejectionReason('');
       setSelectedUser(null);
@@ -100,7 +131,10 @@ const AdminApproval = () => {
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
       console.error('Error rejecting user:', error);
-      setMessage({ type: 'error', text: 'Failed to reject user' });
+      setMessage({ 
+        type: 'error', 
+        text: error.message || 'Failed to reject user' 
+      });
     }
   };
 
@@ -119,11 +153,47 @@ const AdminApproval = () => {
     });
   };
 
+  const handleResendApprovalEmail = async (userId, username, email) => {
+    try {
+      const response = await fetch(`/api/admin/users/${userId}/resend-approval`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to resend approval email');
+      }
+      
+      const data = await response.json();
+      setMessage({ 
+        type: 'success', 
+        text: data.message || `Approval email resent to admin for ${username}` 
+      });
+      
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Error resending approval email:', error);
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to resend approval email' 
+      });
+    }
+  };
+
   if (!user || user.role !== 'admin') {
     return (
       <div className="access-denied">
-        <h2>Access Denied</h2>
-        <p>You must be an administrator to access this page.</p>
+        <h2>🔒 Access Denied</h2>
+        <p>Administrator privileges required to access this page.</p>
+        <button 
+          className="back-btn"
+          onClick={() => navigate('/dashboard')}
+        >
+          ← Back to Dashboard
+        </button>
       </div>
     );
   }
@@ -131,8 +201,11 @@ const AdminApproval = () => {
   return (
     <div className="admin-approval-container">
       <div className="admin-approval-header">
-        <h1>User Approval Portal</h1>
+        <h1>👑 User Approval Portal</h1>
         <p className="subtitle">Approve or reject new user registrations</p>
+        <div className="admin-info">
+          <span className="admin-badge">Admin: {user.username}</span>
+        </div>
       </div>
 
       {message.text && (
@@ -158,13 +231,21 @@ const AdminApproval = () => {
           <span className="help-text">Selected role will be assigned to approved users</span>
         </div>
         
-        <button 
-          className="refresh-btn"
-          onClick={fetchPendingUsers}
-          disabled={loading}
-        >
-          {loading ? 'Refreshing...' : '⟳ Refresh List'}
-        </button>
+        <div className="control-buttons">
+          <button 
+            className="refresh-btn"
+            onClick={fetchPendingUsers}
+            disabled={loading}
+          >
+            {loading ? '⏳ Refreshing...' : '⟳ Refresh List'}
+          </button>
+          <button 
+            className="stats-btn"
+            onClick={() => navigate('/admin/stats')}
+          >
+            📊 View Stats
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -174,15 +255,22 @@ const AdminApproval = () => {
         </div>
       ) : pendingUsers.length === 0 ? (
         <div className="empty-state">
-          <div className="empty-icon">📭</div>
+          <div className="empty-icon">🎉</div>
           <h3>No Pending Approvals</h3>
-          <p>There are no users waiting for approval.</p>
+          <p>All user registrations have been processed.</p>
+          <button 
+            className="view-all-btn"
+            onClick={() => navigate('/admin/users')}
+          >
+            View All Users
+          </button>
         </div>
       ) : (
         <div className="pending-users-list">
           <div className="list-header">
             <div className="header-item user-info">User Information</div>
             <div className="header-item registration-date">Registration Date</div>
+            <div className="header-item status">Status</div>
             <div className="header-item actions">Actions</div>
           </div>
           
@@ -195,11 +283,18 @@ const AdminApproval = () => {
                 </div>
                 <div className="user-details">
                   <span className="username">Username: {pendingUser.username}</span>
+                  {pendingUser.registration_ip && (
+                    <span className="user-ip">IP: {pendingUser.registration_ip}</span>
+                  )}
                 </div>
               </div>
               
               <div className="registration-date">
                 {formatDate(pendingUser.created_at)}
+              </div>
+              
+              <div className="status">
+                <span className="status-badge pending">⏳ Pending</span>
               </div>
               
               <div className="actions">
@@ -216,19 +311,31 @@ const AdminApproval = () => {
                   </select>
                 </div>
                 
-                <button
-                  className="approve-btn"
-                  onClick={() => handleApprove(pendingUser.id)}
-                >
-                  ✓ Approve
-                </button>
-                
-                <button
-                  className="reject-btn"
-                  onClick={() => openRejectModal(pendingUser)}
-                >
-                  ✗ Reject
-                </button>
+                <div className="action-buttons">
+                  <button
+                    className="approve-btn"
+                    onClick={() => handleApprove(pendingUser.id, pendingUser.email)}
+                    title="Approve this user"
+                  >
+                    ✓ Approve
+                  </button>
+                  
+                  <button
+                    className="reject-btn"
+                    onClick={() => openRejectModal(pendingUser)}
+                    title="Reject this user"
+                  >
+                    ✗ Reject
+                  </button>
+                  
+                  <button
+                    className="resend-btn"
+                    onClick={() => handleResendApprovalEmail(pendingUser.id, pendingUser.username, pendingUser.email)}
+                    title="Resend approval email to admin"
+                  >
+                    ↻ Resend Email
+                  </button>
+                </div>
               </div>
             </div>
           ))}
@@ -236,12 +343,12 @@ const AdminApproval = () => {
       )}
 
       {/* Rejection Modal */}
-      {showRejectModal && (
+      {showRejectModal && selectedUser && (
         <div className="modal-overlay">
           <div className="modal">
-            <h3>Reject User Registration</h3>
+            <h3>✗ Reject User Registration</h3>
             <p>
-              Are you sure you want to reject <strong>{selectedUser?.full_name || selectedUser?.username}</strong>?
+              Are you sure you want to reject <strong>{selectedUser.full_name || selectedUser.username}</strong> ({selectedUser.email})?
             </p>
             
             <div className="form-group">
@@ -254,6 +361,7 @@ const AdminApproval = () => {
                 rows="3"
                 className="reason-textarea"
               />
+              <small>This reason will be logged but not sent to the user.</small>
             </div>
             
             <div className="modal-actions">
@@ -269,7 +377,7 @@ const AdminApproval = () => {
               </button>
               <button
                 className="confirm-reject-btn"
-                onClick={() => handleReject(selectedUser.id, rejectionReason)}
+                onClick={() => handleReject(selectedUser.id, selectedUser.email, rejectionReason)}
               >
                 Confirm Rejection
               </button>
@@ -281,7 +389,7 @@ const AdminApproval = () => {
       <div className="admin-footer">
         <div className="stats">
           <span className="stat">
-            <strong>{pendingUsers.length}</strong> pending approval
+            <strong>{pendingUsers.length}</strong> pending approval{pendingUsers.length !== 1 ? 's' : ''}
           </span>
           <span className="stat-separator">•</span>
           <span className="stat">
@@ -295,12 +403,17 @@ const AdminApproval = () => {
           </button>
           <span className="separator">•</span>
           <button className="footer-link" onClick={() => navigate('/admin/users')}>
-            Manage All Users
+            👥 Manage All Users
+          </button>
+          <span className="separator">•</span>
+          <button className="footer-link" onClick={() => navigate('/admin/stats')}>
+            📊 View Statistics
           </button>
         </div>
         
         <p className="security-notice">
-          <strong>⚠️ Security Notice:</strong> All approval actions are logged and audited.
+          <strong>⚠️ Security Notice:</strong> All approval/rejection actions are logged and audited.
+          Only approve @power-transitions.com emails.
         </p>
       </div>
     </div>
