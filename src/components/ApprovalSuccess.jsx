@@ -18,66 +18,62 @@ const ApprovalSuccess = () => {
         console.log('Token:', token);
         console.log('Current URL:', window.location.href);
         
-        // Check if we're on frontend or backend
-        const isFrontend = window.location.hostname.includes('platform.power-transitions.com');
-        const isBackend = window.location.hostname.includes('pt-power-pipeline-api');
+        // Extract username from query parameters if available
+        const params = new URLSearchParams(location.search);
+        const userParam = params.get('user');
+        if (userParam) {
+          setUsername(decodeURIComponent(userParam));
+        }
         
-        console.log('Is Frontend:', isFrontend);
-        console.log('Is Backend:', isBackend);
-        
-        if (isFrontend) {
-          // We're on the FRONTEND React app
-          // This means admin clicked a link that went to frontend instead of backend
-          setDebugInfo('Frontend React app loaded. The approval should have been processed by backend when admin clicked the email link.');
+        // If we have a token, call the backend API
+        if (token) {
+          console.log('Calling backend API to approve user...');
           
-          // Extract username from query parameters if available
-          const params = new URLSearchParams(location.search);
-          const userParam = params.get('user');
-          if (userParam) {
-            setUsername(decodeURIComponent(userParam));
-          }
+          // Try different endpoints
+          const backendUrl = 'https://pt-power-pipeline-api.azurewebsites.net';
+          const endpoints = [
+            `${backendUrl}/api/approve/${token}`,  // From authRoutes-with-email.js
+            `${backendUrl}/admin/approve/${token}`, // Alternative
+            `${backendUrl}/api/admin/approve/${token}` // Another alternative
+          ];
           
-          // If we have a token, we could call the backend API
-          if (token) {
-            console.log('Calling backend API to approve user...');
+          let response;
+          let successfulEndpoint = '';
+          
+          for (const endpoint of endpoints) {
             try {
-              // Call the actual BACKEND API (not frontend)
-              const backendUrl = 'https://pt-power-pipeline-api.azurewebsites.net';
-              const response = await fetch(`${backendUrl}/admin/approve/${token}`);
+              console.log('Trying endpoint:', endpoint);
+              response = await fetch(endpoint);
+              console.log('Response status:', response.status);
               
               if (response.ok) {
-                console.log('Backend approval successful');
-                const data = await response.text();
-                console.log('Backend response (first 200 chars):', data.substring(0, 200));
-                
-                // If backend returns HTML, it means approval was processed
-                setSuccess(true);
-                setMessage('Account approved successfully via backend!');
-              } else {
-                console.warn('Backend returned error status:', response.status);
-                setSuccess(false);
-                setMessage(`Backend error: ${response.status}. The approval link might be invalid.`);
+                successfulEndpoint = endpoint;
+                break;
               }
-            } catch (apiError) {
-              console.error('Error calling backend API:', apiError);
-              setDebugInfo(`API Error: ${apiError.message}. The backend might be unavailable.`);
-              setSuccess(false);
-              setMessage('Could not connect to approval service. Please contact administrator.');
+            } catch (err) {
+              console.log('Endpoint failed:', endpoint, err.message);
             }
-          } else {
-            // No token, just show success message
+          }
+          
+          if (response && response.ok) {
+            console.log('✅ Backend approval successful via:', successfulEndpoint);
+            const data = await response.text();
+            console.log('Backend response type:', response.headers.get('content-type'));
+            
+            setDebugInfo(`Approval processed via: ${successfulEndpoint.replace(backendUrl, '')}`);
             setSuccess(true);
             setMessage('Account approved successfully!');
+          } else {
+            console.warn('❌ All endpoints failed');
+            setDebugInfo(`All endpoints failed. Last status: ${response?.status || 'No response'}`);
+            setSuccess(false);
+            setMessage('Approval endpoint not found. Please check backend configuration.');
           }
-        } else if (isBackend) {
-          // We're on the BACKEND - this shouldn't happen in React component
-          setDebugInfo('Directly on backend - approval should be processed automatically');
-          setSuccess(true);
-          setMessage('Backend approval page loaded');
         } else {
-          setDebugInfo(`Unknown host: ${window.location.hostname}`);
+          // No token, just show success message
           setSuccess(true);
-          setMessage('Approval processed');
+          setMessage('Account approved successfully!');
+          setDebugInfo('No token provided - showing generic success message');
         }
         
       } catch (error) {
@@ -136,14 +132,25 @@ const ApprovalSuccess = () => {
               <Link to="/login" style={styles.secondaryButton}>
                 Back to Login
               </Link>
+              <button 
+                onClick={() => window.location.href = `https://pt-power-pipeline-api.azurewebsites.net/api/approve/${token}`}
+                style={styles.directButton}
+              >
+                Try Direct Link
+              </button>
             </>
           )}
         </div>
         
         <div style={styles.note}>
           <p><small>
-            <strong>Note:</strong> The approval link in emails should go directly to:<br/>
-            <code>https://pt-power-pipeline-api.azurewebsites.net/admin/approve/&#123;token&#125;</code>
+            <strong>Note:</strong> If approval fails, try these direct links:<br/>
+            1. <a href={`https://pt-power-pipeline-api.azurewebsites.net/api/approve/${token}`} target="_blank" rel="noopener noreferrer">
+              /api/approve/{token}
+            </a><br/>
+            2. <a href={`https://pt-power-pipeline-api.azurewebsites.net/admin/approve/${token}`} target="_blank" rel="noopener noreferrer">
+              /admin/approve/{token}
+            </a>
           </small></p>
         </div>
         
@@ -229,6 +236,8 @@ const styles = {
     textAlign: 'center',
     display: 'inline-block',
     transition: 'background 0.3s',
+    border: 'none',
+    cursor: 'pointer',
   },
   secondaryButton: {
     padding: '12px 24px',
@@ -241,6 +250,22 @@ const styles = {
     textAlign: 'center',
     display: 'inline-block',
     transition: 'background 0.3s',
+    border: 'none',
+    cursor: 'pointer',
+  },
+  directButton: {
+    padding: '12px 24px',
+    background: '#17a2b8',
+    color: 'white',
+    textDecoration: 'none',
+    borderRadius: '6px',
+    fontWeight: 'bold',
+    minWidth: '150px',
+    textAlign: 'center',
+    display: 'inline-block',
+    transition: 'background 0.3s',
+    border: 'none',
+    cursor: 'pointer',
   },
   footer: {
     marginTop: '30px',
@@ -250,9 +275,5 @@ const styles = {
     fontSize: '0.9rem',
   },
 };
-
-// Add hover effects
-styles.primaryButton[':hover'] = { background: '#218838' };
-styles.secondaryButton[':hover'] = { background: '#5a6268' };
 
 export default ApprovalSuccess;
