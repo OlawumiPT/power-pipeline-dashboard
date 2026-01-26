@@ -402,8 +402,9 @@ const resendApprovalEmail = async (req, res) => {
     const approvalToken = await userModel.generateApprovalToken(parseInt(id));
     
     // Build approval link for email
-   const approvalLink = `${process.env.FRONTEND_URL || 'https://platform.power-transitions.com'}/admin/review/${approvalToken}`;
-    
+//const approvalLink = `${process.env.FRONTEND_URL || 'https://platform.power-transitions.com'}/admin/review/${approvalToken}`;
+const approvalLink = `${process.env.BACKEND_URL || 'https://pt-power-pipeline-api.azurewebsites.net'}/admin/approve/${approvalToken}`;
+
     // Send admin notification with new link
     const emailResult = await emailService.sendAdminNotification(
       user,
@@ -421,7 +422,7 @@ const resendApprovalEmail = async (req, res) => {
         },
         emailSent: emailResult.success,
         emailMessage: emailResult.message,
-        approvalLink: approvalLink // For debugging
+        approvalLink: approvalLink 
       }
     });
     
