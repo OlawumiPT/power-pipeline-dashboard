@@ -11,6 +11,7 @@ const nodemailer = require('nodemailer');
 
 // Import routes
 const projectRoutes = require('./routes/projects');
+const expertAnalysisRoutes = require('./routes/expertAnalysisRoutes');
 
 // Create Express app
 const app = express();
@@ -1498,6 +1499,7 @@ app.get('/api/test-email', async (req, res) => {
 
 // ========== API ROUTES ==========
 app.use('/api/projects', projectRoutes);
+app.use('/api', expertAnalysisRoutes);
 
 // ========== ADDED: ROUTE DEBUGGING ENDPOINT ==========
 app.get('/api/debug/routes', (req, res) => {
@@ -1575,6 +1577,7 @@ app.listen(PORT, () => {
   console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
   console.log(`🔗 Health Check: http://localhost:${PORT}/health`);
   console.log(`📊 Projects API: http://localhost:${PORT}/api/projects`);
+  console.log(`📈 Expert Analysis API: http://localhost:${PORT}/api/expert-analysis`);
   console.log(`🗄️ Using schema: ${process.env.DB_SCHEMA || 'pipeline_dashboard'}`);
   console.log(`👤 Admin email: ${ADMIN_EMAIL}`);
   console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
@@ -1598,6 +1601,8 @@ app.listen(PORT, () => {
   console.log('- GET  /api/admin/approve/:token - Approve user via email link');
   console.log('- GET  /api/test-email - Test email service');
   console.log('- GET  /api/projects - Projects API');
+  console.log('- GET  /api/expert-analysis - Expert analysis API');
+  console.log('- GET  /api/transmission-interconnection - Transmission data API');
   console.log('='.repeat(70));
   console.log('✅ Ready to accept requests!');
   console.log('='.repeat(70));
