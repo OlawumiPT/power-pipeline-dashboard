@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
-// GET expert analysis by project ID or name
+// GET expert analysis by project ID
 router.get('/expert-analysis', async (req, res) => {
   try {
     const { projectId, projectName } = req.query;
@@ -15,8 +15,7 @@ router.get('/expert-analysis', async (req, res) => {
     let params;
     
     if (projectId) {
-      // Try to match by project_id (could be string or integer)
-      query = 'SELECT * FROM expert_analysis WHERE project_id::text = $1';
+      query = 'SELECT * FROM expert_analysis WHERE project_id = $1';
       params = [projectId];
     } else {
       query = 'SELECT * FROM expert_analysis WHERE project_name ILIKE $1';
@@ -26,10 +25,9 @@ router.get('/expert-analysis', async (req, res) => {
     const result = await db.query(query, params);
     
     if (result.rows.length === 0) {
-      return res.json(null); // Return null instead of error for new projects
+      return res.json(null); // Return null for new projects
     }
     
-    // Format the response
     const analysis = result.rows[0];
     res.json({
       projectId: analysis.project_id,
@@ -74,8 +72,8 @@ router.post('/expert-analysis', async (req, res) => {
 
     // Check if record exists
     const existing = await db.query(
-      'SELECT id FROM expert_analysis WHERE project_id::text = $1',
-      [projectId.toString()]
+      'SELECT id FROM expert_analysis WHERE project_id = $1',
+      [projectId]
     );
 
     if (existing.rows.length > 0) {
@@ -93,7 +91,7 @@ router.post('/expert-analysis', async (req, res) => {
              infrastructure_score = $9,
              edited_by = $10,
              updated_at = CURRENT_TIMESTAMP
-         WHERE project_id::text = $11`,
+         WHERE project_id = $11`,
         [
           projectName,
           overallScore,
@@ -105,7 +103,7 @@ router.post('/expert-analysis', async (req, res) => {
           JSON.stringify(redevelopmentBreakdown),
           infrastructureScore,
           editedBy,
-          projectId.toString()
+          projectId
         ]
       );
     } else {
@@ -117,7 +115,7 @@ router.post('/expert-analysis', async (req, res) => {
           redevelopment_breakdown, infrastructure_score, edited_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
-          projectId, // Let PostgreSQL handle type conversion
+          projectId,
           projectName,
           overallScore,
           overallRating,
@@ -155,7 +153,8 @@ router.get('/transmission-interconnection', async (req, res) => {
         excess_injection_capacity as "excessInjectionCapacity",
         excess_withdrawal_capacity as "excessWithdrawalCapacity",
         constraints,
-        excess_ix_capacity as "excessIXCapacity"
+        excess_ix_capacity as "excessIXCapacity",
+        project_id as "projectId"
       FROM transmission_interconnection 
       WHERE LOWER(site) LIKE LOWER($1) 
          OR $1 LIKE '%' || LOWER(site) || '%'
@@ -184,8 +183,8 @@ router.post('/transmission-interconnection', async (req, res) => {
     
     // Delete existing data for this project
     await db.query(
-      'DELETE FROM transmission_interconnection WHERE project_id::text = $1',
-      [projectId.toString()]
+      'DELETE FROM transmission_interconnection WHERE project_id = $1',
+      [projectId]
     );
     
     // Insert new data
@@ -214,6 +213,53 @@ router.post('/transmission-interconnection', async (req, res) => {
     await db.query('ROLLBACK');
     console.error('Save error:', error);
     res.status(500).json({ error: 'Failed to save transmission data' });
+  }
+});
+
+// Bulk update transmission data for a project
+router.put('/transmission-interconnection/bulk', async (req, res) => {
+  try {
+    const { projectId, transmissions } = req.body;
+    
+    if (!projectId || !transmissions) {
+      return res.status(400).json({ error: 'Project ID and transmissions array required' });
+    }
+
+    await db.query('BEGIN');
+    
+    // Delete old data
+    await db.query('DELETE FROM transmission_interconnection WHERE project_id = $1', [projectId]);
+    
+    // Insert new data
+    for (const tx of transmissions) {
+      await db.query(
+        `INSERT INTO transmission_interconnection 
+         (site, poi_voltage, excess_injection_capacity, excess_withdrawal_capacity, 
+          constraints, excess_ix_capacity, project_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          tx.site,
+          tx.poiVoltage,
+          tx.excessInjectionCapacity,
+          tx.excessWithdrawalCapacity,
+          tx.constraints,
+          tx.excessIXCapacity,
+          projectId
+        ]
+      );
+    }
+    
+    await db.query('COMMIT');
+    
+    res.json({ 
+      success: true, 
+      message: `Updated ${transmissions.length} transmission records`,
+      count: transmissions.length 
+    });
+  } catch (error) {
+    await db.query('ROLLBACK');
+    console.error('Bulk update error:', error);
+    res.status(500).json({ error: 'Failed to bulk update transmission data' });
   }
 });
 
