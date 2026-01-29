@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import './ExpertAnalysisModal.css'; // We'll create this CSS file
 
 const ExpertAnalysisModal = ({ 
   selectedExpertProject, 
@@ -15,16 +16,14 @@ const ExpertAnalysisModal = ({
   const [isLoading, setIsLoading] = useState(false);
   
   // API Base URL
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
   
   // Fetch expert analysis from API
   const fetchExpertAnalysis = async () => {
     try {
       setIsLoading(true);
       const projectId = selectedExpertProject.id;
-      const projectName = selectedExpertProject?.expertAnalysis?.projectName || "";
       
-      // Try to fetch from database
       const response = await fetch(
         `${API_BASE_URL}/api/expert-analysis?projectId=${encodeURIComponent(projectId)}`
       );
@@ -64,89 +63,37 @@ const ExpertAnalysisModal = ({
   // Initialize all data
   useEffect(() => {
     const initializeData = async () => {
-      // Get saved data from localStorage first
-      const savedEdits = getSavedEdits(selectedExpertProject.id);
+      const dbAnalysis = await fetchExpertAnalysis();
+      const dbTransmission = await fetchTransmissionData();
       
-      if (savedEdits) {
-        setEditedAnalysis(savedEdits);
-        setEditedTransmissionData(savedEdits.transmissionData || []);
+      if (dbAnalysis) {
+        setEditedAnalysis({
+          ...originalAnalysis,
+          ...dbAnalysis,
+          thermalBreakdown: dbAnalysis.thermalBreakdown || originalAnalysis.thermalBreakdown || {},
+          redevelopmentBreakdown: dbAnalysis.redevelopmentBreakdown || originalAnalysis.redevelopmentBreakdown || {}
+        });
       } else {
-        // Try to fetch from database
-        const dbAnalysis = await fetchExpertAnalysis();
-        const dbTransmission = await fetchTransmissionData();
-        
-        if (dbAnalysis) {
-          setEditedAnalysis({
-            ...originalAnalysis,
-            ...dbAnalysis,
-            thermalBreakdown: dbAnalysis.thermal_breakdown || originalAnalysis.thermalBreakdown,
-            redevelopmentBreakdown: dbAnalysis.redevelopment_breakdown || originalAnalysis.redevelopmentBreakdown
-          });
-        } else {
-          // Use default if no database record
-          const defaultScores = {
-            ...originalAnalysis,
-            thermalBreakdown: originalAnalysis.thermalBreakdown || {
-              unit_cod: { score: 2, analysis: "Vintage plant (<2000) - higher retirement potential" },
-              markets: { score: 2, analysis: "Premium market with strong pricing" },
-              transactability: { score: 2, analysis: "Unknown transactability" },
-              thermal_optimization: { score: 1, analysis: "No identifiable value add" },
-              environmental: { score: 2, analysis: "Standard environmental assessment" }
-            },
-            redevelopmentBreakdown: originalAnalysis.redevelopmentBreakdown || {
-              redev_market: { score: 2, analysis: "Market position assessment" },
-              land_availability: { score: 2, analysis: "Land availability assessment" },
-              utilities: { score: 2, analysis: "Utilities connectivity" },
-              interconnection: { score: 2, analysis: "Interconnection status" }
-            }
-          };
-          setEditedAnalysis(defaultScores);
-        }
-        
-        setEditedTransmissionData(dbTransmission);
+        setEditedAnalysis({
+          ...originalAnalysis,
+          thermalBreakdown: originalAnalysis.thermalBreakdown || {
+            thermal_optimization: { score: 1 },
+            environmental: { score: 2 }
+          },
+          redevelopmentBreakdown: originalAnalysis.redevelopmentBreakdown || {
+            redev_market: { score: 2 },
+            land_availability: { score: 2 },
+            utilities: { score: 2 },
+            interconnection: { score: 2 }
+          }
+        });
       }
+      
+      setEditedTransmissionData(dbTransmission);
     };
     
     initializeData();
   }, [selectedExpertProject]);
-
-  // Get saved edits from localStorage
-  const getSavedEdits = (projectId) => {
-    try {
-      const allEdits = JSON.parse(localStorage.getItem('projectEdits') || '{}');
-      return allEdits[projectId] || null;
-    } catch (error) {
-      console.error('Error reading edits:', error);
-      return null;
-    }
-  };
-
-  // Save to localStorage
-  const saveToLocalStorage = (analysis, transmissionData) => {
-    try {
-      const allEdits = JSON.parse(localStorage.getItem('projectEdits') || '{}');
-      const projectId = selectedExpertProject.id;
-      
-      const editRecord = {
-        ...analysis,
-        transmissionData,
-        editedAt: new Date().toISOString(),
-        editedBy: currentUser,
-        originalScores: {
-          overall: originalAnalysis.overallScore,
-          thermal: originalAnalysis.thermalScore,
-          redevelopment: originalAnalysis.redevelopmentScore
-        }
-      };
-      
-      allEdits[projectId] = editRecord;
-      localStorage.setItem('projectEdits', JSON.stringify(allEdits));
-      return true;
-    } catch (error) {
-      console.error('Error saving to localStorage:', error);
-      return false;
-    }
-  };
 
   // Save to database
   const saveToDatabase = async (analysis, transmissionData) => {
@@ -183,7 +130,14 @@ const ExpertAnalysisModal = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectId,
-          transmissionData
+          transmissionData: transmissionData.map(item => ({
+            site: item.site,
+            poiVoltage: item.poiVoltage,
+            excessInjectionCapacity: parseFloat(item.excessInjectionCapacity) || 0,
+            excessWithdrawalCapacity: parseFloat(item.excessWithdrawalCapacity) || 0,
+            constraints: item.constraints,
+            excessIXCapacity: item.excessIXCapacity
+          }))
         })
       });
       
@@ -199,40 +153,24 @@ const ExpertAnalysisModal = ({
   };
 
   // Handle save
-  const handleSave = async (saveType) => {
+  const handleSave = async () => {
     setSaveStatus('saving');
     
     try {
-      if (saveType === 'cancel') {
-        setIsEditing(false);
-        setSaveStatus(null);
-        return;
-      }
-      
       // Recalculate scores before saving
       const updatedAnalysis = recalculateScores(editedAnalysis);
       
-      // Save to localStorage
-      const localStorageSuccess = saveToLocalStorage(updatedAnalysis, editedTransmissionData);
+      // Save to database
+      const success = await saveToDatabase(updatedAnalysis, editedTransmissionData);
       
-      // Save to database if requested
-      let dbSuccess = true;
-      if (saveType === 'save-db') {
-        dbSuccess = await saveToDatabase(updatedAnalysis, editedTransmissionData);
-      }
-      
-      if (localStorageSuccess && dbSuccess) {
+      if (success) {
         setEditedAnalysis(updatedAnalysis);
         setIsEditing(false);
         setSaveStatus('success');
         
         setTimeout(() => {
           setSaveStatus(null);
-          if (saveType === 'save-db') {
-            alert('Changes saved to database.');
-          } else {
-            alert('Changes saved locally.');
-          }
+          alert('Changes saved successfully!');
         }, 500);
       } else {
         setSaveStatus('error');
@@ -248,29 +186,26 @@ const ExpertAnalysisModal = ({
 
   // Recalculate scores function
   const recalculateScores = (analysisData) => {
-    // Your existing recalculateScores logic here
-    // This is a simplified version - add your full logic
-    
     const thermalBreakdown = analysisData.thermalBreakdown || {};
     const redevBreakdown = analysisData.redevelopmentBreakdown || {};
     
-    // Calculate thermal score
+    // Calculate thermal score (5% + 15% = 20%)
     let thermalScore = 0;
-    if (thermalBreakdown.thermal_optimization) thermalScore += thermalBreakdown.thermal_optimization.score * 0.05;
-    if (thermalBreakdown.environmental) thermalScore += thermalBreakdown.environmental.score * 0.15;
+    if (thermalBreakdown.thermal_optimization) thermalScore += (thermalBreakdown.thermal_optimization.score || 1) * 0.05;
+    if (thermalBreakdown.environmental) thermalScore += (thermalBreakdown.environmental.score || 2) * 0.15;
     
-    // Calculate redevelopment score
+    // Calculate redevelopment score (40% + 30% + 30% = 100%)
     let redevelopmentScore = 0;
-    if (redevBreakdown.redev_market) redevelopmentScore += redevBreakdown.redev_market.score * 0.40;
+    if (redevBreakdown.redev_market) redevelopmentScore += (redevBreakdown.redev_market.score || 2) * 0.40;
     
-    // Infrastructure score (average of land and utilities)
-    const landScore = redevBreakdown.land_availability?.score || 0;
-    const utilitiesScore = redevBreakdown.utilities?.score || 0;
+    // Infrastructure score (average of land and utilities) - part of the 30%
+    const landScore = redevBreakdown.land_availability?.score || 2;
+    const utilitiesScore = redevBreakdown.utilities?.score || 2;
     const infrastructureScore = (landScore + utilitiesScore) / 2;
     redevelopmentScore += infrastructureScore * 0.30;
     
-    // Interconnection
-    if (redevBreakdown.interconnection) redevelopmentScore += redevBreakdown.interconnection.score * 0.30;
+    // Interconnection - 30%
+    if (redevBreakdown.interconnection) redevelopmentScore += (redevBreakdown.interconnection.score || 2) * 0.30;
     
     const overallScore = (thermalScore + redevelopmentScore) * 2;
     
@@ -285,7 +220,6 @@ const ExpertAnalysisModal = ({
     };
   };
 
-  // ========== MISSING FUNCTION - ADD THIS ==========
   // Get score color class
   const getScoreColorClass = (score) => {
     const numScore = parseFloat(score) || 0;
@@ -295,7 +229,6 @@ const ExpertAnalysisModal = ({
     return 'score-poor';
   };
 
-  // ========== MISSING FUNCTION - ADD THIS ==========
   // Get score text
   const getScoreText = (score) => {
     const numScore = parseFloat(score) || 0;
@@ -344,27 +277,26 @@ const ExpertAnalysisModal = ({
     });
   };
 
-  // Handle transmission data field change
+  // Handle transmission data field change - FIXED CURSOR ISSUE
   const handleTransmissionFieldChange = (index, field, value) => {
     if (!isEditing) return;
     
     setEditedTransmissionData(prev => {
       const newData = [...prev];
-      if (newData[index]) {
-        newData[index] = {
-          ...newData[index],
-          [field]: field === 'excessInjectionCapacity' || field === 'excessWithdrawalCapacity' 
-            ? parseFloat(value) || 0 
-            : value
-        };
-      }
+      newData[index] = {
+        ...newData[index],
+        [field]: field === 'excessInjectionCapacity' || field === 'excessWithdrawalCapacity' 
+          ? parseFloat(value) || 0 
+          : value
+      };
       return newData;
     });
   };
 
-  // Add new POI voltage entry
-  const addNewTransmissionEntry = () => {
+  // Add new POI voltage entry - FIXED: No auto-scroll
+  const addNewTransmissionEntry = (e) => {
     if (!isEditing) return;
+    e.preventDefault(); // Prevent default form behavior
     
     const projectName = selectedExpertProject?.expertAnalysis?.projectName || "";
     
@@ -392,213 +324,41 @@ const ExpertAnalysisModal = ({
     });
   };
 
-  // Card Components
-  const ScoringCard = ({ title, subtitle, children, weight }) => (
-    <div className="scoring-card dark-card">
-      <div className="scoring-card-header">
-        <div className="scoring-card-title-section">
-          <h4 className="scoring-card-title">{title}</h4>
-          {subtitle && <div className="scoring-card-subtitle">{subtitle}</div>}
-        </div>
-        <div className="scoring-card-header-right">
-          <span className="scoring-card-weight dark-weight">{weight}</span>
-        </div>
-      </div>
-      <div className="scoring-card-body">
-        {children}
-      </div>
-    </div>
-  );
-
-  const ScoreField = ({ label, category, component, currentScore }) => {
-    const criteria = {
-      thermal_optimization: { weightText: "5%" },
-      environmental: { weightText: "15%" },
-      redev_market: { weightText: "40%" },
-      land_availability: { weightText: "15%" },
-      utilities: { weightText: "15%" },
-      interconnection: { weightText: "30%" }
-    }[component] || { weightText: "0%" };
-    
-    return (
-      <div className="score-field dark-field">
-        <div className="score-field-header">
-          <label className="score-field-label dark-label">{label}</label>
-        </div>
-        
-        <div className="score-field-content dark-field-content">
-          {isEditing ? (
-            <select
-              className="score-dropdown dark-dropdown"
-              value={currentScore}
-              onChange={(e) => handleScoreChange(category, component, e.target.value)}
-            >
-              <option value="1">1 - Low</option>
-              <option value="2">2 - Medium</option>
-              <option value="3">3 - High</option>
-            </select>
-          ) : (
-            <div className="score-display dark-score-display">
-              Score: {currentScore}
-            </div>
-          )}
-          
-          <div className="score-field-details dark-details">
-            <span className="score-weight dark-detail">Weight: {criteria.weightText}</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  // Transmission Data Component
-  const TransmissionDataDisplay = () => {
-    const hasTransmissionData = editedTransmissionData.length > 0;
-    const projectName = selectedExpertProject?.expertAnalysis?.projectName || "";
-    
-    return (
-      <div className="transmission-data-section">
-        <div className="transmission-header">
-          <h5 className="transmission-title">Transmission Interconnection Details</h5>
-          {hasTransmissionData && (
-            <span className="excess-capacity-badge">
-              ● Excess IX Capacity Available
-            </span>
-          )}
-        </div>
-        
-        {isLoading ? (
-          <div className="loading-transmission-data">
-            Loading transmission data...
-          </div>
-        ) : isEditing ? (
-          <>
-            <div className="transmission-table-container">
-              <table className="transmission-table">
-                <thead>
-                  <tr>
-                    <th>POI Voltage</th>
-                    <th>Excess Injection Capacity (MW)</th>
-                    <th>Excess Withdrawal Capacity (MW)</th>
-                    <th>Constraints</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {editedTransmissionData.length > 0 ? (
-                    editedTransmissionData.map((item, index) => (
-                      <tr key={index}>
-                        <td>
-                          <input
-                            type="text"
-                            value={item.poiVoltage}
-                            onChange={(e) => handleTransmissionFieldChange(index, 'poiVoltage', e.target.value)}
-                            placeholder="e.g., 69 kV"
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            value={item.excessInjectionCapacity}
-                            onChange={(e) => handleTransmissionFieldChange(index, 'excessInjectionCapacity', e.target.value)}
-                            placeholder="0.0"
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="number"
-                            value={item.excessWithdrawalCapacity}
-                            onChange={(e) => handleTransmissionFieldChange(index, 'excessWithdrawalCapacity', e.target.value)}
-                            placeholder="0.0"
-                          />
-                        </td>
-                        <td>
-                          <input
-                            type="text"
-                            value={item.constraints}
-                            onChange={(e) => handleTransmissionFieldChange(index, 'constraints', e.target.value)}
-                          />
-                        </td>
-                        <td>
-                          <button onClick={() => removeTransmissionEntry(index)}>
-                            Remove
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="5">
-                        No transmission data available. Click "Add POI Voltage" to add new entries.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-            
-            <div className="transmission-actions">
-              <button onClick={addNewTransmissionEntry}>
-                + Add POI Voltage
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            {hasTransmissionData ? (
-              <div className="transmission-table-container">
-                <table className="transmission-table">
-                  <thead>
-                    <tr>
-                      <th>POI Voltage</th>
-                      <th>Excess Injection Capacity</th>
-                      <th>Excess Withdrawal Capacity</th>
-                      <th>Constraints</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {editedTransmissionData.map((item, index) => (
-                      <tr key={index}>
-                        <td>{item.poiVoltage}</td>
-                        <td>{item.excessInjectionCapacity.toFixed(1)} MW</td>
-                        <td>{item.excessWithdrawalCapacity.toFixed(1)} MW</td>
-                        <td>{item.constraints === "-" ? "None" : item.constraints}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="no-transmission-data">
-                No transmission interconnection data available for {projectName}.
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    );
-  };
-
   // Calculate scores
   const thermalScore = parseFloat(editedAnalysis?.thermalScore) || 0;
   const redevScore = parseFloat(editedAnalysis?.redevelopmentScore) || 0;
   const overallScore = parseFloat(editedAnalysis?.overallScore) || 0;
   
+  if (isLoading) {
+    return (
+      <div className="modal-overlay">
+        <div className="modal-content">
+          <div className="loading-spinner">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="modal-overlay" onClick={() => !isEditing && setSelectedExpertProject(null)}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-content expert-analysis-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
         <div className="modal-header">
-          <h2>{editedAnalysis?.projectName || 'Project'} - Expert Details</h2>
-          <p>AI-powered assessment of all pipeline projects</p>
-          <div className="edit-toggle-section">
+          <div className="header-top">
+            <h2>{editedAnalysis?.projectName || 'Project'} - Expert Analysis</h2>
+            <button className="close-btn" onClick={() => setSelectedExpertProject(null)}>×</button>
+          </div>
+          <p className="subtitle">AI-powered assessment of all pipeline projects</p>
+          
+          <div className="edit-toggle">
             {!isEditing ? (
-              <button onClick={() => setIsEditing(true)}>
-                ✏️ Enable Editing
+              <button className="edit-btn" onClick={() => setIsEditing(true)}>
+                <span className="edit-icon">✏️</span> Enable Editing
               </button>
             ) : (
-              <div>
-                <span>EDIT MODE</span>
-                <button onClick={() => handleSave('cancel')}>
+              <div className="edit-mode-indicator">
+                <span className="edit-badge">EDIT MODE</span>
+                <button className="cancel-btn" onClick={() => setIsEditing(false)}>
                   Cancel Edit
                 </button>
               </div>
@@ -606,144 +366,951 @@ const ExpertAnalysisModal = ({
           </div>
         </div>
         
-        <div className="modal-body">
-          {saveStatus && (
-            <div className={`save-status ${saveStatus}`}>
-              {saveStatus === 'saving' && 'Saving...'}
-              {saveStatus === 'success' && '✓ Saved!'}
-              {saveStatus === 'error' && '✗ Error'}
-            </div>
-          )}
-          
-          <div className="overall-score-section">
-            <h2>Overall Score Summary</h2>
-            <div className="score-summary-grid">
-              <div className="score-summary-card">
-                <div>Overall Score</div>
-                <div className={getScoreColorClass(overallScore / 2)}>
-                  {overallScore}/6.0
-                </div>
-                <div>{Math.round((overallScore / 6) * 100)}%</div>
-                <div style={{ color: getRatingColor(editedAnalysis?.overallRating) }}>
-                  {editedAnalysis?.overallRating || 'N/A'}
-                </div>
-              </div>
-              <div className="score-summary-card">
-                <div>Thermal Operating Score</div>
-                <div className={getScoreColorClass(thermalScore)}>
-                  {thermalScore.toFixed(2)}/3.0
-                </div>
-                <div>{Math.round((thermalScore / 3) * 100)}%</div>
-                <div>{getScoreText(thermalScore)}</div>
-              </div>
-              <div className="score-summary-card">
-                <div>Redevelopment</div>
-                <div className={getScoreColorClass(redevScore)}>
-                  {redevScore.toFixed(2)}/3.0
-                </div>
-                <div>{Math.round((redevScore / 3) * 100)}%</div>
-                <div>{getScoreText(redevScore)}</div>
-              </div>
-            </div>
+        {/* Save Status */}
+        {saveStatus && (
+          <div className={`save-status ${saveStatus}`}>
+            {saveStatus === 'saving' && 'Saving changes...'}
+            {saveStatus === 'success' && '✓ Changes saved successfully!'}
+            {saveStatus === 'error' && '✗ Failed to save changes'}
           </div>
-          
-          <div className="expert-cards-section">
-            <h2>Expert Analysis Cards</h2>
-            <p>Click info buttons for scoring criteria details</p>
+        )}
+        
+        {/* Overall Score Summary */}
+        <div className="overall-score-section">
+          <h3>Overall Score Summary</h3>
+          <div className="score-grid">
+            <div className="score-card">
+              <div className="score-label">OVERALL SCORE</div>
+              <div className={`score-value ${getScoreColorClass(overallScore / 2)}`}>
+                {overallScore}/6.0
+              </div>
+              <div className="score-percent">{Math.round((overallScore / 6) * 100)}%</div>
+              <div className="score-rating" style={{ color: getRatingColor(editedAnalysis?.overallRating) }}>
+                {editedAnalysis?.overallRating || 'N/A'}
+              </div>
+            </div>
             
-            <div className="cards-grid">
-              <ScoringCard 
-                title="Thermal Operating Assessment" 
-                subtitle="Evaluation of existing plant operations"
-                weight="50%"
-              >
-                <div className="sub-card">
-                  <h5>Thermal Optimization Potential</h5>
-                  <ScoreField
-                    category="thermal"
-                    component="thermal_optimization"
-                    currentScore={editedAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
-                  />
-                </div>
-                
-                <div className="sub-card">
-                  <h5>Environmental Considerations</h5>
-                  <ScoreField
-                    category="thermal"
-                    component="environmental"
-                    currentScore={editedAnalysis?.thermalBreakdown?.environmental?.score || 2}
-                  />
-                </div>
-              </ScoringCard>
-              
-              <ScoringCard 
-                title="Redevelopment Assessment" 
-                subtitle="Evaluation of future development potential"
-                weight="50%"
-              >
-                <div className="sub-card">
-                  <h5>Market Position</h5>
-                  <ScoreField
-                    category="redevelopment"
-                    component="redev_market"
-                    currentScore={editedAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
-                  />
-                </div>
-                
-                <div className="sub-card">
-                  <h5>Infrastructure</h5>
-                  <ScoreField
-                    label="Land Availability"
-                    category="redevelopment"
-                    component="land_availability"
-                    currentScore={editedAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
-                  />
-                  <ScoreField
-                    label="Utilities"
-                    category="redevelopment"
-                    component="utilities"
-                    currentScore={editedAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
-                  />
-                </div>
-                
-                <div className="sub-card">
-                  <h5>Interconnection (IX)</h5>
-                  <ScoreField
-                    category="redevelopment"
-                    component="interconnection"
-                    currentScore={editedAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
-                  />
-                  <TransmissionDataDisplay />
-                </div>
-              </ScoringCard>
-            </div>
-          </div>
-          
-          <div className="action-buttons">
-            {isEditing && (
-              <div>
-                <button onClick={() => handleSave('cancel')}>
-                  Cancel
-                </button>
-                <button onClick={() => handleSave('save-local')}>
-                  Save Locally
-                </button>
-                <button onClick={() => handleSave('save-db')}>
-                  Save to Database
-                </button>
+            <div className="score-card">
+              <div className="score-label">THERMAL OPERATING SCORE</div>
+              <div className={`score-value ${getScoreColorClass(thermalScore)}`}>
+                {thermalScore.toFixed(2)}/3.0
               </div>
-            )}
+              <div className="score-percent">{Math.round((thermalScore / 3) * 100)}%</div>
+              <div className="score-rating">{getScoreText(thermalScore)}</div>
+            </div>
+            
+            <div className="score-card">
+              <div className="score-label">REDEVELOPMENT</div>
+              <div className={`score-value ${getScoreColorClass(redevScore)}`}>
+                {redevScore.toFixed(2)}/3.0
+              </div>
+              <div className="score-percent">{Math.round((redevScore / 3) * 100)}%</div>
+              <div className="score-rating">{getScoreText(redevScore)}</div>
+            </div>
           </div>
         </div>
         
-        <div className="modal-footer">
-          <button onClick={() => setSelectedExpertProject(null)}>
-            BACK TO SCORES
-          </button>
-          <button className="primary" onClick={() => alert('Report generation would be implemented here')}>
-            GENERATE REPORT
-          </button>
+        {/* Expert Analysis Cards */}
+        <div className="expert-cards-section">
+          <h3>Expert Analysis Cards</h3>
+          <p className="section-subtitle">Click info buttons for scoring criteria details</p>
+          
+          <div className="cards-container">
+            {/* Left Card - Thermal Operating Assessment */}
+            <div className="analysis-card">
+              <div className="card-header">
+                <h4>Thermal Operating Assessment</h4>
+                <p className="card-subtitle">Evaluation of existing plant operations and market position</p>
+                <span className="card-weight">Weight: 50%</span>
+              </div>
+              
+              <div className="card-body">
+                {/* M&A Thermal Optimization */}
+                <div className="score-field-group">
+                  <div className="field-header">
+                    <span className="field-icon">M&A</span>
+                    <h5>Thermal Optimization Potential</h5>
+                  </div>
+                  <div className="field-controls">
+                    {isEditing ? (
+                      <select 
+                        className="score-select"
+                        value={editedAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
+                        onChange={(e) => handleScoreChange('thermal', 'thermal_optimization', e.target.value)}
+                      >
+                        <option value="1">1 - No identifiable value add</option>
+                        <option value="2">2 - Readily apparent value add</option>
+                      </select>
+                    ) : (
+                      <div className="score-display">
+                        Score: {editedAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
+                      </div>
+                    )}
+                    <div className="field-details">
+                      <span className="weight">Weight: 5%</span>
+                      <span className="contribution">
+                        Contribution: {((editedAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1) * 0.05).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Environmental Considerations */}
+                <div className="score-field-group">
+                  <div className="field-header">
+                    <span className="field-icon">Env</span>
+                    <h5>Environmental Considerations</h5>
+                  </div>
+                  <div className="field-controls">
+                    {isEditing ? (
+                      <select 
+                        className="score-select"
+                        value={editedAnalysis?.thermalBreakdown?.environmental?.score || 2}
+                        onChange={(e) => handleScoreChange('thermal', 'environmental', e.target.value)}
+                      >
+                        <option value="0">0 - Known and not mitigable</option>
+                        <option value="1">1 - Not known</option>
+                        <option value="2">2 - Known, mitigable, no cost advantage</option>
+                        <option value="3">3 - Known, mitigable, PT has cost advantage</option>
+                      </select>
+                    ) : (
+                      <div className="score-display">
+                        Score: {editedAnalysis?.thermalBreakdown?.environmental?.score || 2}
+                      </div>
+                    )}
+                    <div className="field-details">
+                      <span className="weight">Weight: 15%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {/* Right Card - Redevelopment Assessment */}
+            <div className="analysis-card">
+              <div className="card-header">
+                <h4>Redevelopment Assessment</h4>
+                <p className="card-subtitle">Evaluation of future development potential and infrastructure</p>
+                <span className="card-weight">Weight: 50%</span>
+              </div>
+              
+              <div className="card-body">
+                {/* Market Position */}
+                <div className="score-field-group">
+                  <div className="field-header">
+                    <span className="field-icon">Mkt</span>
+                    <h5>Market Position</h5>
+                  </div>
+                  <div className="field-controls">
+                    {isEditing ? (
+                      <select 
+                        className="score-select"
+                        value={editedAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
+                        onChange={(e) => handleScoreChange('redevelopment', 'redev_market', e.target.value)}
+                      >
+                        <option value="0">0 - Challenging</option>
+                        <option value="1">1 - Uncertain</option>
+                        <option value="2">2 - Secondary</option>
+                        <option value="3">3 - Primary</option>
+                      </select>
+                    ) : (
+                      <div className="score-display">
+                        Score: {editedAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
+                      </div>
+                    )}
+                    <div className="field-details">
+                      <span className="weight">Weight: 40%</span>
+                      <span className="contribution">
+                        Contribution: {((editedAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2) * 0.40).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Infrastructure */}
+                <div className="infrastructure-section">
+                  <h5>Infrastructure</h5>
+                  <div className="infra-grid">
+                    <div className="infra-field">
+                      <label>Land Availability</label>
+                      {isEditing ? (
+                        <select 
+                          className="score-select"
+                          value={editedAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
+                          onChange={(e) => handleScoreChange('redevelopment', 'land_availability', e.target.value)}
+                        >
+                          <option value="0">0 - No land available</option>
+                          <option value="1">1 - No onsite, available nearby</option>
+                          <option value="2">2 - Some onsite + nearby parcel</option>
+                          <option value="3">3 - Sufficient land onsite</option>
+                        </select>
+                      ) : (
+                        <div className="score-display">
+                          Score: {editedAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
+                        </div>
+                      )}
+                    </div>
+                    <div className="infra-field">
+                      <label>Utilities</label>
+                      {isEditing ? (
+                        <select 
+                          className="score-select"
+                          value={editedAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
+                          onChange={(e) => handleScoreChange('redevelopment', 'utilities', e.target.value)}
+                        >
+                          <option value="-1">-1 - N/A - BESS and Solar</option>
+                          <option value="0">0 - No clear path</option>
+                          <option value="1">1 - Utilities available but expensive</option>
+                          <option value="2">2 - Utilities nearby, low cost</option>
+                          <option value="3">3 - Sufficient utilities onsite</option>
+                        </select>
+                      ) : (
+                        <div className="score-display">
+                          Score: {editedAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="infra-total">
+                    <span>Infrastructure Score:</span>
+                    <span className={`infra-value ${getScoreColorClass(editedAnalysis?.infrastructureScore || 0)}`}>
+                      {(editedAnalysis?.infrastructureScore || 0).toFixed(2)}/3.0
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Interconnection */}
+                <div className="score-field-group">
+                  <div className="field-header">
+                    <span className="field-icon">IX</span>
+                    <h5>Interconnection (IX)</h5>
+                  </div>
+                  <div className="field-controls">
+                    {isEditing ? (
+                      <select 
+                        className="score-select"
+                        value={editedAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                        onChange={(e) => handleScoreChange('redevelopment', 'interconnection', e.target.value)}
+                      >
+                        <option value="0">0 - Major upgrades needed</option>
+                        <option value="1">1 - Minimal upgrades needed</option>
+                        <option value="2">2 - No upgrades needed (Unsecured)</option>
+                        <option value="3">3 - Secured IX Rights</option>
+                      </select>
+                    ) : (
+                      <div className="score-display">
+                        Score: {editedAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                      </div>
+                    )}
+                    <div className="field-details">
+                      <span className="weight">Weight: 30%</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Transmission Data Section - IMPROVED DESIGN */}
+                <div className="transmission-section">
+                  <div className="transmission-header">
+                    <h5>Transmission Interconnection Details</h5>
+                    {editedTransmissionData.length > 0 && (
+                      <span className="capacity-badge">
+                        <span className="badge-dot">●</span> Excess IX Capacity Available
+                      </span>
+                    )}
+                  </div>
+                  
+                  {isEditing ? (
+                    <div className="transmission-edit">
+                      <div className="transmission-table-container">
+                        <table className="transmission-table">
+                          <thead>
+                            <tr>
+                              <th style={{ width: '25%' }}>POI Voltage</th>
+                              <th style={{ width: '25%' }}>Excess Injection Capacity (MW)</th>
+                              <th style={{ width: '25%' }}>Excess Withdrawal Capacity (MW)</th>
+                              <th style={{ width: '15%' }}>Constraints</th>
+                              <th style={{ width: '10%' }}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {editedTransmissionData.length > 0 ? (
+                              editedTransmissionData.map((item, index) => (
+                                <tr key={index}>
+                                  <td>
+                                    <input
+                                      type="text"
+                                      className="transmission-input"
+                                      value={item.poiVoltage}
+                                      onChange={(e) => handleTransmissionFieldChange(index, 'poiVoltage', e.target.value)}
+                                      placeholder="e.g., 69 kV"
+                                      style={{ width: '100%', padding: '8px' }}
+                                    />
+                                  </td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      className="transmission-input"
+                                      value={item.excessInjectionCapacity}
+                                      onChange={(e) => handleTransmissionFieldChange(index, 'excessInjectionCapacity', e.target.value)}
+                                      placeholder="0.0"
+                                      step="0.1"
+                                      min="0"
+                                      style={{ width: '100%', padding: '8px' }}
+                                    />
+                                  </td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      className="transmission-input"
+                                      value={item.excessWithdrawalCapacity}
+                                      onChange={(e) => handleTransmissionFieldChange(index, 'excessWithdrawalCapacity', e.target.value)}
+                                      placeholder="0.0"
+                                      step="0.1"
+                                      min="0"
+                                      style={{ width: '100%', padding: '8px' }}
+                                    />
+                                  </td>
+                                  <td>
+                                    <input
+                                      type="text"
+                                      className="transmission-input"
+                                      value={item.constraints}
+                                      onChange={(e) => handleTransmissionFieldChange(index, 'constraints', e.target.value)}
+                                      placeholder="e.g., None, 1, 2"
+                                      style={{ width: '100%', padding: '8px' }}
+                                    />
+                                  </td>
+                                  <td>
+                                    <button 
+                                      className="remove-btn"
+                                      onClick={() => removeTransmissionEntry(index)}
+                                      title="Remove this entry"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan="5" className="no-data">
+                                  No transmission data available. Click "Add POI Voltage" to add new entries.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      
+                      <div className="transmission-actions">
+                        <button 
+                          className="add-btn"
+                          onClick={addNewTransmissionEntry}
+                        >
+                          + Add POI Voltage
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="transmission-view">
+                      {editedTransmissionData.length > 0 ? (
+                        <div className="transmission-table-container">
+                          <table className="transmission-table">
+                            <thead>
+                              <tr>
+                                <th style={{ width: '30%' }}>POI Voltage</th>
+                                <th style={{ width: '30%' }}>Excess Injection Capacity</th>
+                                <th style={{ width: '30%' }}>Excess Withdrawal Capacity</th>
+                                <th style={{ width: '20%' }}>Constraints</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {editedTransmissionData.map((item, index) => (
+                                <tr key={index}>
+                                  <td>{item.poiVoltage}</td>
+                                  <td>{item.excessInjectionCapacity.toFixed(1)} MW</td>
+                                  <td>{item.excessWithdrawalCapacity.toFixed(1)} MW</td>
+                                  <td>{item.constraints === "-" ? "None" : item.constraints}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="no-transmission-data">
+                          <div className="no-data-icon">📊</div>
+                          <div className="no-data-text">
+                            No transmission interconnection data available.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+        
+        {/* Action Buttons - SIMPLIFIED */}
+        <div className="action-buttons">
+          {isEditing ? (
+            <div className="edit-actions">
+              <button 
+                className="action-btn secondary"
+                onClick={() => setIsEditing(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="action-btn primary"
+                onClick={handleSave}
+                disabled={saveStatus === 'saving'}
+              >
+                {saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          ) : (
+            <div className="view-actions">
+              <button 
+                className="action-btn secondary"
+                onClick={() => setSelectedExpertProject(null)}
+              >
+                Back to Scores
+              </button>
+              <button 
+                className="action-btn primary"
+                onClick={() => alert('Report generation would be implemented here')}
+              >
+                Generate Report
+              </button>
+            </div>
+          )}
+        </div>
+        
+        {/* CSS Styles */}
+        <style>{`
+          .expert-analysis-modal {
+            max-width: 1200px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+          }
+          
+          .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+          }
+          
+          .modal-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            border-bottom: 1px solid #4a5568;
+            border-radius: 12px 12px 0 0;
+          }
+          
+          .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+          }
+          
+          h2 {
+            margin: 0;
+            color: #ffffff;
+            font-size: 24px;
+            font-weight: 600;
+          }
+          
+          .subtitle {
+            color: #a0aec0;
+            margin: 0 0 16px 0;
+            font-size: 14px;
+          }
+          
+          .edit-toggle {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+          }
+          
+          .edit-btn, .cancel-btn, .action-btn {
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+          }
+          
+          .edit-btn {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+          }
+          
+          .edit-btn:hover {
+            background: rgba(59, 130, 246, 0.2);
+          }
+          
+          .edit-badge {
+            background: rgba(245, 158, 11, 0.15);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #fbbf24;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+          }
+          
+          .cancel-btn {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+          }
+          
+          .close-btn {
+            background: none;
+            border: none;
+            color: #a0aec0;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          
+          .save-status {
+            padding: 12px 20px;
+            margin: 0 20px;
+            border-radius: 6px;
+            font-weight: 500;
+          }
+          
+          .save-status.saving {
+            background: rgba(59, 130, 246, 0.1);
+            color: #93c5fd;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+          }
+          
+          .save-status.success {
+            background: rgba(34, 197, 94, 0.1);
+            color: #86efac;
+            border: 1px solid rgba(34, 197, 94, 0.3);
+          }
+          
+          .save-status.error {
+            background: rgba(239, 68, 68, 0.1);
+            color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+          }
+          
+          .overall-score-section {
+            padding: 20px;
+            border-bottom: 1px solid #4a5568;
+          }
+          
+          h3 {
+            color: #ffffff;
+            margin: 0 0 16px 0;
+            font-size: 18px;
+          }
+          
+          .score-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+          }
+          
+          .score-card {
+            background: #2d3748;
+            padding: 16px;
+            border-radius: 8px;
+            border: 1px solid #4a5568;
+            text-align: center;
+          }
+          
+          .score-label {
+            color: #a0aec0;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          
+          .score-value {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 4px;
+          }
+          
+          .score-excellent { color: #10b981; }
+          .score-good { color: #f59e0b; }
+          .score-fair { color: #fbbf24; }
+          .score-poor { color: #ef4444; }
+          
+          .score-percent {
+            color: #a0aec0;
+            font-size: 14px;
+            margin-bottom: 8px;
+          }
+          
+          .score-rating {
+            font-weight: 600;
+            font-size: 14px;
+          }
+          
+          .expert-cards-section {
+            padding: 20px;
+          }
+          
+          .section-subtitle {
+            color: #a0aec0;
+            margin: 0 0 20px 0;
+            font-size: 14px;
+          }
+          
+          .cards-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+          }
+          
+          @media (max-width: 1024px) {
+            .cards-container {
+              grid-template-columns: 1fr;
+            }
+            .score-grid {
+              grid-template-columns: 1fr;
+            }
+          }
+          
+          .analysis-card {
+            background: #2d3748;
+            border: 1px solid #4a5568;
+            border-radius: 8px;
+            overflow: hidden;
+          }
+          
+          .card-header {
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.2);
+            border-bottom: 1px solid #4a5568;
+          }
+          
+          h4 {
+            margin: 0 0 4px 0;
+            color: #ffffff;
+            font-size: 16px;
+          }
+          
+          .card-subtitle {
+            color: #a0aec0;
+            font-size: 13px;
+            margin: 0 0 8px 0;
+          }
+          
+          .card-weight {
+            display: inline-block;
+            background: rgba(59, 130, 246, 0.1);
+            color: #93c5fd;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+          }
+          
+          .card-body {
+            padding: 16px;
+          }
+          
+          .score-field-group {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #4a5568;
+          }
+          
+          .score-field-group:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+          }
+          
+          .field-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+          }
+          
+          .field-icon {
+            background: #4a5568;
+            color: #e2e8f0;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+          }
+          
+          h5 {
+            margin: 0;
+            color: #e2e8f0;
+            font-size: 14px;
+            font-weight: 600;
+          }
+          
+          .score-select, .transmission-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: #1a202c;
+            border: 1px solid #4a5568;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 14px;
+            margin-bottom: 8px;
+          }
+          
+          .score-select:focus, .transmission-input:focus {
+            outline: none;
+            border-color: #63b3ed;
+            box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.1);
+          }
+          
+          .score-display {
+            background: #1a202c;
+            border: 1px solid #4a5568;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            color: #e2e8f0;
+            font-weight: 500;
+          }
+          
+          .field-details {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #a0aec0;
+          }
+          
+          .infrastructure-section {
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #4a5568;
+          }
+          
+          .infra-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-bottom: 12px;
+          }
+          
+          .infra-field label {
+            display: block;
+            color: #a0aec0;
+            font-size: 12px;
+            margin-bottom: 6px;
+            font-weight: 500;
+          }
+          
+          .infra-total {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 12px;
+            border-top: 1px solid #4a5568;
+            font-weight: 500;
+          }
+          
+          .infra-value {
+            font-weight: 600;
+          }
+          
+          .transmission-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #4a5568;
+          }
+          
+          .transmission-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+          }
+          
+          .capacity-badge {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #86efac;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+          }
+          
+          .badge-dot {
+            color: #22c55e;
+            font-size: 16px;
+          }
+          
+          .transmission-table-container {
+            overflow-x: auto;
+            margin-bottom: 16px;
+          }
+          
+          .transmission-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+          }
+          
+          .transmission-table th {
+            background: #1a202c;
+            color: #a0aec0;
+            font-weight: 600;
+            text-align: left;
+            padding: 10px 12px;
+            border-bottom: 2px solid #4a5568;
+          }
+          
+          .transmission-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #4a5568;
+            color: #e2e8f0;
+          }
+          
+          .transmission-table tr:hover {
+            background: rgba(255, 255, 255, 0.05);
+          }
+          
+          .remove-btn {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+          }
+          
+          .remove-btn:hover {
+            background: rgba(239, 68, 68, 0.2);
+          }
+          
+          .add-btn {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #86efac;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+          }
+          
+          .add-btn:hover {
+            background: rgba(34, 197, 94, 0.2);
+          }
+          
+          .no-data {
+            text-align: center;
+            color: #a0aec0;
+            font-style: italic;
+            padding: 20px !important;
+          }
+          
+          .no-transmission-data {
+            text-align: center;
+            padding: 30px 20px;
+            color: #a0aec0;
+          }
+          
+          .no-data-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+            opacity: 0.5;
+          }
+          
+          .action-buttons {
+            padding: 20px;
+            border-top: 1px solid #4a5568;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0 0 12px 12px;
+          }
+          
+          .edit-actions, .view-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+          }
+          
+          .action-btn {
+            padding: 10px 20px;
+            font-weight: 500;
+          }
+          
+          .action-btn.secondary {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
+            color: #e2e8f0;
+          }
+          
+          .action-btn.secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+          }
+          
+          .action-btn.primary {
+            background: rgba(59, 130, 246, 0.9);
+            border-color: rgba(59, 130, 246, 0.9);
+            color: white;
+          }
+          
+          .action-btn.primary:hover {
+            background: rgba(59, 130, 246, 1);
+          }
+          
+          .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+          }
+          
+          .transmission-actions {
+            display: flex;
+            justify-content: center;
+            margin-top: 16px;
+          }
+          
+          .edit-mode-indicator {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+          }
+        `}</style>
       </div>
     </div>
   );
