@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import './ExpertAnalysisModal.css'; // We'll create this CSS file
 
 const ExpertAnalysisModal = ({ 
   selectedExpertProject, 
@@ -643,7 +642,7 @@ const ExpertAnalysisModal = ({
                                       value={item.poiVoltage}
                                       onChange={(e) => handleTransmissionFieldChange(index, 'poiVoltage', e.target.value)}
                                       placeholder="e.g., 69 kV"
-                                      style={{ width: '100%', padding: '8px' }}
+                                      style={{ width: '100%', padding: '10px 12px', fontSize: '14px' }}
                                     />
                                   </td>
                                   <td>
@@ -655,7 +654,7 @@ const ExpertAnalysisModal = ({
                                       placeholder="0.0"
                                       step="0.1"
                                       min="0"
-                                      style={{ width: '100%', padding: '8px' }}
+                                      style={{ width: '100%', padding: '10px 12px', fontSize: '14px' }}
                                     />
                                   </td>
                                   <td>
@@ -667,7 +666,7 @@ const ExpertAnalysisModal = ({
                                       placeholder="0.0"
                                       step="0.1"
                                       min="0"
-                                      style={{ width: '100%', padding: '8px' }}
+                                      style={{ width: '100%', padding: '10px 12px', fontSize: '14px' }}
                                     />
                                   </td>
                                   <td>
@@ -677,7 +676,7 @@ const ExpertAnalysisModal = ({
                                       value={item.constraints}
                                       onChange={(e) => handleTransmissionFieldChange(index, 'constraints', e.target.value)}
                                       placeholder="e.g., None, 1, 2"
-                                      style={{ width: '100%', padding: '8px' }}
+                                      style={{ width: '100%', padding: '10px 12px', fontSize: '14px' }}
                                     />
                                   </td>
                                   <td>
@@ -685,15 +684,24 @@ const ExpertAnalysisModal = ({
                                       className="remove-btn"
                                       onClick={() => removeTransmissionEntry(index)}
                                       title="Remove this entry"
+                                      style={{ 
+                                        background: 'rgba(239, 68, 68, 0.1)',
+                                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                                        color: '#fca5a5',
+                                        padding: '8px 12px',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        fontSize: '12px'
+                                      }}
                                     >
-                                      🗑️
+                                      🗑️ Remove
                                     </button>
                                   </td>
                                 </tr>
                               ))
                             ) : (
                               <tr>
-                                <td colSpan="5" className="no-data">
+                                <td colSpan="5" style={{ textAlign: 'center', color: '#a0aec0', fontStyle: 'italic', padding: '20px' }}>
                                   No transmission data available. Click "Add POI Voltage" to add new entries.
                                 </td>
                               </tr>
@@ -702,10 +710,20 @@ const ExpertAnalysisModal = ({
                         </table>
                       </div>
                       
-                      <div className="transmission-actions">
+                      <div className="transmission-actions" style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
                         <button 
                           className="add-btn"
                           onClick={addNewTransmissionEntry}
+                          style={{
+                            background: 'rgba(34, 197, 94, 0.1)',
+                            border: '1px solid rgba(34, 197, 94, 0.3)',
+                            color: '#86efac',
+                            padding: '10px 20px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: '500',
+                            fontSize: '14px'
+                          }}
                         >
                           + Add POI Voltage
                         </button>
@@ -737,11 +755,9 @@ const ExpertAnalysisModal = ({
                           </table>
                         </div>
                       ) : (
-                        <div className="no-transmission-data">
-                          <div className="no-data-icon">📊</div>
-                          <div className="no-data-text">
-                            No transmission interconnection data available.
-                          </div>
+                        <div style={{ textAlign: 'center', padding: '30px 20px', color: '#a0aec0' }}>
+                          <div style={{ fontSize: '32px', marginBottom: '8px', opacity: '0.5' }}>📊</div>
+                          <div>No transmission interconnection data available.</div>
                         </div>
                       )}
                     </div>
@@ -759,6 +775,15 @@ const ExpertAnalysisModal = ({
               <button 
                 className="action-btn secondary"
                 onClick={() => setIsEditing(false)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#e2e8f0',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
               >
                 Cancel
               </button>
@@ -766,6 +791,15 @@ const ExpertAnalysisModal = ({
                 className="action-btn primary"
                 onClick={handleSave}
                 disabled={saveStatus === 'saving'}
+                style={{
+                  background: 'rgba(59, 130, 246, 0.9)',
+                  border: '1px solid rgba(59, 130, 246, 0.9)',
+                  color: 'white',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
               >
                 {saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
               </button>
@@ -775,12 +809,30 @@ const ExpertAnalysisModal = ({
               <button 
                 className="action-btn secondary"
                 onClick={() => setSelectedExpertProject(null)}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#e2e8f0',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
               >
                 Back to Scores
               </button>
               <button 
                 className="action-btn primary"
                 onClick={() => alert('Report generation would be implemented here')}
+                style={{
+                  background: 'rgba(59, 130, 246, 0.9)',
+                  border: '1px solid rgba(59, 130, 246, 0.9)',
+                  color: 'white',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500'
+                }}
               >
                 Generate Report
               </button>
@@ -788,7 +840,7 @@ const ExpertAnalysisModal = ({
           )}
         </div>
         
-        {/* CSS Styles */}
+        {/* CSS Styles - INLINE */}
         <style>{`
           .expert-analysis-modal {
             max-width: 1200px;
@@ -847,19 +899,15 @@ const ExpertAnalysisModal = ({
             gap: 12px;
           }
           
-          .edit-btn, .cancel-btn, .action-btn {
+          .edit-btn {
+            background: rgba(59, 130, 246, 0.1);
+            border: 1px solid rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
             padding: 8px 16px;
             border-radius: 6px;
-            border: 1px solid;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
-          }
-          
-          .edit-btn {
-            background: rgba(59, 130, 246, 0.1);
-            border-color: rgba(59, 130, 246, 0.3);
-            color: #93c5fd;
           }
           
           .edit-btn:hover {
@@ -878,8 +926,11 @@ const ExpertAnalysisModal = ({
           
           .cancel-btn {
             background: rgba(239, 68, 68, 0.1);
-            border-color: rgba(239, 68, 68, 0.3);
+            border: 1px solid rgba(239, 68, 68, 0.3);
             color: #fca5a5;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
           }
           
           .close-btn {
@@ -936,6 +987,12 @@ const ExpertAnalysisModal = ({
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 16px;
+          }
+          
+          @media (max-width: 768px) {
+            .score-grid {
+              grid-template-columns: 1fr;
+            }
           }
           
           .score-card {
@@ -995,9 +1052,6 @@ const ExpertAnalysisModal = ({
           
           @media (max-width: 1024px) {
             .cards-container {
-              grid-template-columns: 1fr;
-            }
-            .score-grid {
               grid-template-columns: 1fr;
             }
           }
@@ -1080,7 +1134,7 @@ const ExpertAnalysisModal = ({
             font-weight: 600;
           }
           
-          .score-select, .transmission-input {
+          .score-select {
             width: 100%;
             padding: 10px 12px;
             background: #1a202c;
@@ -1091,7 +1145,7 @@ const ExpertAnalysisModal = ({
             margin-bottom: 8px;
           }
           
-          .score-select:focus, .transmission-input:focus {
+          .score-select:focus {
             outline: none;
             border-color: #63b3ed;
             box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.1);
@@ -1187,7 +1241,7 @@ const ExpertAnalysisModal = ({
           .transmission-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 13px;
+            font-size: 14px;
           }
           
           .transmission-table th {
@@ -1195,12 +1249,12 @@ const ExpertAnalysisModal = ({
             color: #a0aec0;
             font-weight: 600;
             text-align: left;
-            padding: 10px 12px;
+            padding: 12px;
             border-bottom: 2px solid #4a5568;
           }
           
           .transmission-table td {
-            padding: 10px 12px;
+            padding: 12px;
             border-bottom: 1px solid #4a5568;
             color: #e2e8f0;
           }
@@ -1209,51 +1263,20 @@ const ExpertAnalysisModal = ({
             background: rgba(255, 255, 255, 0.05);
           }
           
-          .remove-btn {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: #fca5a5;
-            padding: 6px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-          }
-          
-          .remove-btn:hover {
-            background: rgba(239, 68, 68, 0.2);
-          }
-          
-          .add-btn {
-            background: rgba(34, 197, 94, 0.1);
-            border: 1px solid rgba(34, 197, 94, 0.3);
-            color: #86efac;
-            padding: 8px 16px;
+          .transmission-input {
+            width: 100%;
+            padding: 10px 12px;
+            background: #1a202c;
+            border: 1px solid #4a5568;
             border-radius: 6px;
-            cursor: pointer;
-            font-weight: 500;
+            color: #e2e8f0;
+            font-size: 14px;
           }
           
-          .add-btn:hover {
-            background: rgba(34, 197, 94, 0.2);
-          }
-          
-          .no-data {
-            text-align: center;
-            color: #a0aec0;
-            font-style: italic;
-            padding: 20px !important;
-          }
-          
-          .no-transmission-data {
-            text-align: center;
-            padding: 30px 20px;
-            color: #a0aec0;
-          }
-          
-          .no-data-icon {
-            font-size: 32px;
-            margin-bottom: 8px;
-            opacity: 0.5;
+          .transmission-input:focus {
+            outline: none;
+            border-color: #63b3ed;
+            box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.1);
           }
           
           .action-buttons {
@@ -1269,46 +1292,21 @@ const ExpertAnalysisModal = ({
             gap: 12px;
           }
           
-          .action-btn {
-            padding: 10px 20px;
-            font-weight: 500;
-          }
-          
-          .action-btn.secondary {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(255, 255, 255, 0.2);
-            color: #e2e8f0;
-          }
-          
-          .action-btn.secondary:hover {
-            background: rgba(255, 255, 255, 0.15);
-          }
-          
-          .action-btn.primary {
-            background: rgba(59, 130, 246, 0.9);
-            border-color: rgba(59, 130, 246, 0.9);
-            color: white;
-          }
-          
-          .action-btn.primary:hover {
-            background: rgba(59, 130, 246, 1);
-          }
-          
           .action-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
-          }
-          
-          .transmission-actions {
-            display: flex;
-            justify-content: center;
-            margin-top: 16px;
           }
           
           .edit-mode-indicator {
             display: flex;
             align-items: center;
             gap: 12px;
+          }
+          
+          .loading-spinner {
+            padding: 40px;
+            text-align: center;
+            color: #a0aec0;
           }
         `}</style>
       </div>
