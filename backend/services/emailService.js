@@ -409,37 +409,6 @@ class EmailService {
     );
   }
 
-  // Test email functionality
-  async testEmailConnection() {
-    try {
-      const testEmail = 'ababalola@power-transitions.com';
-      console.log('🧪 Testing email connection...');
-      
-      const result = await this.sendEmail(
-        testEmail,
-        'Power Pipeline - SMTP Test',
-        'registration-received',
-        {
-          username: 'Test User',
-          email: testEmail,
-          full_name: 'Test User'
-        }
-      );
-      
-      if (result.success) {
-        console.log('✅ Email test successful! Check your inbox.');
-      } else {
-        console.log('❌ Email test failed:', result.error);
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('❌ Email test error:', error);
-      return { success: false, error: error.message };
-    }
-  }
-}
-
 // Create and export singleton instance
 const emailService = new EmailService();
 
