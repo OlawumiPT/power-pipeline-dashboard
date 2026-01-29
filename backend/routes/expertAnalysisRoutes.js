@@ -25,7 +25,7 @@ router.get('/expert-analysis', async (req, res) => {
     const result = await db.query(query, params);
     
     if (result.rows.length === 0) {
-      return res.json(null); // Return null for new projects
+      return res.json(null);
     }
     
     const analysis = result.rows[0];
@@ -70,14 +70,12 @@ router.post('/expert-analysis', async (req, res) => {
       return res.status(400).json({ error: 'Project ID and name are required' });
     }
 
-    // Check if record exists
     const existing = await db.query(
       'SELECT id FROM expert_analysis WHERE project_id = $1',
       [projectId]
     );
 
     if (existing.rows.length > 0) {
-      // Update existing record
       await db.query(
         `UPDATE expert_analysis 
          SET project_name = $1,
@@ -107,7 +105,6 @@ router.post('/expert-analysis', async (req, res) => {
         ]
       );
     } else {
-      // Insert new record
       await db.query(
         `INSERT INTO expert_analysis 
          (project_id, project_name, overall_score, overall_rating, confidence,
@@ -181,13 +178,11 @@ router.post('/transmission-interconnection', async (req, res) => {
 
     await db.query('BEGIN');
     
-    // Delete existing data for this project
     await db.query(
       'DELETE FROM transmission_interconnection WHERE project_id = $1',
       [projectId]
     );
     
-    // Insert new data
     for (const item of transmissionData) {
       await db.query(
         `INSERT INTO transmission_interconnection 
@@ -216,51 +211,13 @@ router.post('/transmission-interconnection', async (req, res) => {
   }
 });
 
-// Bulk update transmission data for a project
-router.put('/transmission-interconnection/bulk', async (req, res) => {
-  try {
-    const { projectId, transmissions } = req.body;
-    
-    if (!projectId || !transmissions) {
-      return res.status(400).json({ error: 'Project ID and transmissions array required' });
-    }
-
-    await db.query('BEGIN');
-    
-    // Delete old data
-    await db.query('DELETE FROM transmission_interconnection WHERE project_id = $1', [projectId]);
-    
-    // Insert new data
-    for (const tx of transmissions) {
-      await db.query(
-        `INSERT INTO transmission_interconnection 
-         (site, poi_voltage, excess_injection_capacity, excess_withdrawal_capacity, 
-          constraints, excess_ix_capacity, project_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          tx.site,
-          tx.poiVoltage,
-          tx.excessInjectionCapacity,
-          tx.excessWithdrawalCapacity,
-          tx.constraints,
-          tx.excessIXCapacity,
-          projectId
-        ]
-      );
-    }
-    
-    await db.query('COMMIT');
-    
-    res.json({ 
-      success: true, 
-      message: `Updated ${transmissions.length} transmission records`,
-      count: transmissions.length 
-    });
-  } catch (error) {
-    await db.query('ROLLBACK');
-    console.error('Bulk update error:', error);
-    res.status(500).json({ error: 'Failed to bulk update transmission data' });
-  }
+// Health check endpoint
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'Expert Analysis API',
+    timestamp: new Date().toISOString()
+  });
 });
 
 module.exports = router;
