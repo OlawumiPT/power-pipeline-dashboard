@@ -518,40 +518,39 @@ const AddSiteModal = ({
                   />
                 </div>
 
-                {/* NEW: M&A Tier Field - Added in same position as Edit Modal */}
-                            {/* Debug: Log dropdown options */}
-              {/* M&A Tier Field - Added in same position as Edit Modal */}
-              <div className="form-group">
-                <label className="form-label">M&A Tier</label>
-                <select
-                  className="form-select"
-                  value={newSiteData["ma_tier"] || newSiteData["M&A Tier"] || ""}
-                  onChange={(e) => handleMaTierChange(e.target.value)}
-                  style={{ width: '100%' }}
-                >
-                  <option value="">Select M&A Tier</option>
-                  {maTierOptions && maTierOptions.length > 0 ? (
-                    maTierOptions.map(tier => {
-                      // Handle different possible data structures
-                      const tierValue = tier.value || tier.tier_name || tier.name || tier;
-                      return (
-                        <option key={tierValue} value={tierValue}>
-                          {tierValue}
-                        </option>
-                      );
-                    })
-                  ) : (
-                    <>
-                      <option value="Owned">Owned</option>
-                      <option value="Exclusivity">Exclusivity</option>
-                      <option value="second round">Second round</option>
-                      <option value="first round">First round</option>
-                      <option value="pipeline">Pipeline</option>
-                      <option value="passed">Passed</option>
-                    </>
-                  )}
-                </select>
-              </div>
+                {/* M&A Tier Field */}
+                <div className="form-group">
+                  <label className="form-label">M&A Tier</label>
+                  <select
+                    className="form-select"
+                    value={newSiteData["ma_tier"] || newSiteData["M&A Tier"] || ""}
+                    onChange={(e) => handleMaTierChange(e.target.value)}
+                    style={{ width: '100%' }}
+                  >
+                    <option value="">Select M&A Tier</option>
+                    {maTierOptions && maTierOptions.length > 0 ? (
+                      maTierOptions.map(tier => {
+                        // Handle different possible data structures
+                        const tierValue = tier.value || tier.tier_name || tier.name || tier;
+                        return (
+                          <option key={tierValue} value={tierValue}>
+                            {tierValue}
+                          </option>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <option value="Owned">Owned</option>
+                        <option value="Exclusivity">Exclusivity</option>
+                        <option value="second round">Second round</option>
+                        <option value="first round">First round</option>
+                        <option value="pipeline">Pipeline</option>
+                        <option value="passed">Passed</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                
                 <div className="form-group">
                   <label className="form-label">Status</label>
                   <select
@@ -587,7 +586,7 @@ const AddSiteModal = ({
                   />
                 </div>
                 
-                {/* NEW: POI Voltage Field - Added after Capacity MW */}
+                {/* POI Voltage Field */}
                 <div className="form-group">
                   <label className="form-label">POI Voltage (KV)</label>
                   <input
@@ -1002,42 +1001,54 @@ const AddSiteModal = ({
                   </select>
                 </div>
 
-                {/* Redev Lead */}
+                {/* Redev Lead - CHANGED: Free-text with suggestions */}
                 <div className="form-group">
                   <label className="form-label">Redev Lead</label>
-                  <select
-                    className="form-select"
-                    value={newSiteData["redev_lead"] || newSiteData["Redev Lead"] || ""}
-                    onChange={(e) => handleFieldChange("Redev Lead", e.target.value)}
-                    style={{ width: '100%' }}
-                  >
-                    <option value="">Select Redev Lead</option>
-                    {redevLeadOptions.map(lead => {
-                      const leadName = lead.lead_name || lead.name || lead;
-                      return (
-                        <option key={leadName} value={leadName}>{leadName}</option>
-                      );
-                    })}
-                  </select>
+                  <div className="autocomplete-wrapper" style={{ position: 'relative', width: '100%' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={newSiteData["redev_lead"] || newSiteData["Redev Lead"] || ""}
+                      onChange={(e) => handleFieldChange("Redev Lead", e.target.value)}
+                      placeholder="Enter redevelopment lead name"
+                      list="redev-lead-suggestions"
+                      style={{ width: '100%' }}
+                    />
+                    <datalist id="redev-lead-suggestions">
+                      {redevLeadOptions && redevLeadOptions.map(lead => {
+                        const leadName = lead.lead_name || lead.name || lead;
+                        return <option key={leadName} value={leadName} />;
+                      })}
+                    </datalist>
+                  </div>
+                  <small className="form-hint">
+                    Start typing for suggestions or enter a new lead name
+                  </small>
                 </div>
 
-                {/* Redev Support */}
+                {/* Redev Support - CHANGED: Free-text with suggestions */}
                 <div className="form-group">
                   <label className="form-label">Redev Support</label>
-                  <select
-                    className="form-select"
-                    value={newSiteData["redev_support"] || newSiteData["Redev Support"] || ""}
-                    onChange={(e) => handleFieldChange("Redev Support", e.target.value)}
-                    style={{ width: '100%' }}
-                  >
-                    <option value="">Select Redev Support</option>
-                    {redevSupportOptions.map(support => {
-                      const supportName = support.support_name || support.name || support;
-                      return (
-                        <option key={supportName} value={supportName}>{supportName}</option>
-                      );
-                    })}
-                  </select>
+                  <div className="autocomplete-wrapper" style={{ position: 'relative', width: '100%' }}>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={newSiteData["redev_support"] || newSiteData["Redev Support"] || ""}
+                      onChange={(e) => handleFieldChange("Redev Support", e.target.value)}
+                      placeholder="Enter support team/contacts"
+                      list="redev-support-suggestions"
+                      style={{ width: '100%' }}
+                    />
+                    <datalist id="redev-support-suggestions">
+                      {redevSupportOptions && redevSupportOptions.map(support => {
+                        const supportName = support.support_name || support.name || support;
+                        return <option key={supportName} value={supportName} />;
+                      })}
+                    </datalist>
+                  </div>
+                  <small className="form-hint">
+                    Enter support team members or contacts (comma-separated for multiple)
+                  </small>
                 </div>
 
                 {/* Co-Locate/Repower */}
