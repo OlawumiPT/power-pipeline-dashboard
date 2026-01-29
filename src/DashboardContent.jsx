@@ -195,6 +195,104 @@ function DashboardContent() {
     "Carthage": "115 kV|538.5|193.8|31|true",
   };
 
+  // NEW: Helper functions for Redev Lead/Support lookup tables
+  const checkAndAddToLeadOptions = async (leadName) => {
+    if (!leadName || leadName.trim() === "") return;
+    
+    try {
+      console.log('🔍 Checking if lead exists:', leadName);
+      
+      // Check if lead exists
+      const checkResponse = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/redev-leads/check?name=${encodeURIComponent(leadName)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+      
+      if (checkResponse.ok) {
+        const { exists } = await checkResponse.json();
+        console.log('✅ Lead check result:', { leadName, exists });
+        
+        if (!exists) {
+          // Add new lead to lookup table
+          console.log('➕ Adding new lead to lookup table:', leadName);
+          const addResponse = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/redev-leads', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ lead_name: leadName })
+          });
+          
+          if (addResponse.ok) {
+            console.log('✅ Lead added successfully:', leadName);
+            // Refresh dropdown options
+            await fetchDropdownOptions();
+          } else {
+            console.error('❌ Failed to add lead:', addResponse.status);
+          }
+        }
+      } else {
+        console.warn('⚠️ Lead check API failed:', checkResponse.status);
+      }
+    } catch (error) {
+      console.error('❌ Error adding to lead options:', error);
+      // Don't block the main operation if this fails
+    }
+  };
+
+  const checkAndAddToSupportOptions = async (supportName) => {
+    if (!supportName || supportName.trim() === "") return;
+    
+    try {
+      console.log('🔍 Checking if support exists:', supportName);
+      
+      // Support can be comma-separated multiple values
+      const supportNames = supportName.split(',').map(s => s.trim()).filter(s => s);
+      
+      for (const name of supportNames) {
+        // Check if support exists
+        const checkResponse = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/redev-supports/check?name=${encodeURIComponent(name)}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          }
+        });
+        
+        if (checkResponse.ok) {
+          const { exists } = await checkResponse.json();
+          console.log('✅ Support check result:', { name, exists });
+          
+          if (!exists) {
+            // Add new support to lookup table
+            console.log('➕ Adding new support to lookup table:', name);
+            const addResponse = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/redev-supports', {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ support_name: name })
+            });
+            
+            if (!addResponse.ok) {
+              console.error('❌ Failed to add support:', addResponse.status);
+            }
+          }
+        } else {
+          console.warn('⚠️ Support check API failed:', checkResponse.status);
+        }
+      }
+      
+      // Refresh dropdown options
+      await fetchDropdownOptions();
+      
+    } catch (error) {
+      console.error('❌ Error adding to support options:', error);
+      // Don't block the main operation if this fails
+    }
+  };
+
   // NEW: Custom sorting function for Redev Tier (ascending: 0, I, II, etc.)
   const sortRedevTier = (a, b) => {
     const tierOrder = {
@@ -603,6 +701,18 @@ const handleUpdateProject = async (updatedData) => {
   console.log('Updating project ID:', projectId);
   
   try {
+    // 🔥 NEW: Check and add new Redev Lead/Support to lookup tables
+    const redevLead = updatedData["Redev Lead"] || updatedData.redev_lead || updatedData.redevLead;
+    const redevSupport = updatedData["Redev Support"] || updatedData.redev_support || updatedData.redevSupport;
+    
+    if (redevLead && redevLead.trim()) {
+      await checkAndAddToLeadOptions(redevLead.trim());
+    }
+    
+    if (redevSupport && redevSupport.trim()) {
+      await checkAndAddToSupportOptions(redevSupport.trim());
+    }
+    
     // Transform form data to match EXACT database schema
     const backendData = {
       // Basic Information (from database schema)
@@ -1035,6 +1145,18 @@ const handleUpdateProject = async (updatedData) => {
           }
         }
       });
+      
+      // 🔥 NEW: Check and add new Redev Lead/Support to lookup tables
+      const redevLead = cleanSiteData.redev_lead || cleanSiteData.redevLead;
+      const redevSupport = cleanSiteData.redev_support || cleanSiteData.redevSupport;
+      
+      if (redevLead && redevLead.trim()) {
+        await checkAndAddToLeadOptions(redevLead.trim());
+      }
+      
+      if (redevSupport && redevSupport.trim()) {
+        await checkAndAddToSupportOptions(redevSupport.trim());
+      }
       
       // Ensure status is calculated if not provided
       if (!cleanSiteData.status || cleanSiteData.status === "") {
