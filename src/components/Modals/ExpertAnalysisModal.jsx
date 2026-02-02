@@ -21,28 +21,34 @@ const ExpertAnalysisModal = ({
     console.log('Generating default analysis for project:', project);
     
     // Try to get scores from multiple possible sources
-    const overallScore = parseFloat(
+    const getNumericValue = (value, defaultValue = 0) => {
+      if (value === undefined || value === null) return defaultValue;
+      const num = parseFloat(value);
+      return isNaN(num) ? defaultValue : num;
+    };
+    
+    const overallScore = getNumericValue(
       project.expertAnalysis?.overallScore || 
       project.detailData?.["Overall Project Score"] || 
       project.detailData?.overall_project_score || 
-      project.overall || 
-      "0"
+      project.overall,
+      0
     ).toFixed(1);
     
-    const thermalScore = parseFloat(
+    const thermalScore = getNumericValue(
       project.expertAnalysis?.thermalScore ||
       project.detailData?.["Thermal Operating Score"] ||
       project.detailData?.thermal_operating_score ||
-      project.thermal ||
-      "0"
+      project.thermal,
+      0
     ).toFixed(1);
     
-    const redevelopmentScore = parseFloat(
+    const redevelopmentScore = getNumericValue(
       project.expertAnalysis?.redevelopmentScore ||
       project.detailData?.["Redevelopment Score"] ||
       project.detailData?.redevelopment_score ||
-      project.redev ||
-      "0"
+      project.redev,
+      0
     ).toFixed(1);
     
     const projectName = project.expertAnalysis?.projectName ||
@@ -73,7 +79,7 @@ const ExpertAnalysisModal = ({
         utilities: { score: 2 },
         interconnection: { score: 2 }
       },
-      infrastructureScore: project.expertAnalysis?.infrastructureScore || 2.0,
+      infrastructureScore: getNumericValue(project.expertAnalysis?.infrastructureScore, 2.0).toFixed(2),
       confidence: project.expertAnalysis?.confidence || 75
     };
     
@@ -120,40 +126,19 @@ const ExpertAnalysisModal = ({
           if (data) {
             console.log('Expert analysis fetched via provided function:', data);
             return data;
+          } else {
+            console.log('No expert analysis data returned from provided function');
+            return null;
           }
         } catch (error) {
           console.warn('Provided fetch function failed:', error);
+          return null;
         }
       }
       
-      const currentToken = getAuthToken();
-      const headers = {
-        'Accept': 'application/json'
-      };
+      console.log('No fetch function provided, skipping API call');
+      return null;
       
-      // Add auth header only if token exists
-      if (currentToken && currentToken.trim() !== '') {
-        headers['Authorization'] = `Bearer ${currentToken}`;
-      }
-      
-      const response = await fetch(
-        `${API_BASE_URL}/api/expert-analysis?projectId=${encodeURIComponent(projectId)}`,
-        {
-          headers: headers
-        }
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Expert analysis fetched from API:', data);
-        return data;
-      } else if (response.status === 404) {
-        console.log('No expert analysis found in database for this project');
-        return null;
-      } else {
-        console.log('API returned status:', response.status);
-        return null;
-      }
     } catch (error) {
       console.error('Error fetching expert analysis:', error);
       return null;
@@ -183,39 +168,19 @@ const ExpertAnalysisModal = ({
           if (data && Array.isArray(data)) {
             console.log('Transmission data fetched via provided function:', data);
             return data;
+          } else {
+            console.log('No transmission data returned from provided function');
+            return [];
           }
         } catch (error) {
           console.warn('Provided transmission fetch function failed:', error);
+          return [];
         }
       }
       
-      const currentToken = getAuthToken();
-      const headers = {
-        'Accept': 'application/json'
-      };
+      console.log('No transmission fetch function provided, returning empty array');
+      return [];
       
-      if (currentToken && currentToken.trim() !== '') {
-        headers['Authorization'] = `Bearer ${currentToken}`;
-      }
-      
-      const response = await fetch(
-        `${API_BASE_URL}/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`,
-        {
-          headers: headers
-        }
-      );
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log('Transmission data fetched from API:', data);
-        return data;
-      } else if (response.status === 404) {
-        console.log('No transmission data found for this project');
-        return [];
-      } else {
-        console.log('Transmission API returned status:', response.status);
-        return [];
-      }
     } catch (error) {
       console.error('Error fetching transmission data:', error);
       return [];
@@ -270,23 +235,31 @@ const ExpertAnalysisModal = ({
     const thermalBreakdown = analysisData.thermalBreakdown || {};
     const redevBreakdown = analysisData.redevelopmentBreakdown || {};
     
+    // Helper function to safely get numeric scores
+    const getSafeScore = (breakdown, key, defaultValue = 0) => {
+      const value = breakdown[key]?.score;
+      if (value === undefined || value === null) return defaultValue;
+      const num = parseInt(value);
+      return isNaN(num) ? defaultValue : num;
+    };
+    
     // Calculate thermal score (5% + 15% = 20%)
     let thermalScore = 0;
-    if (thermalBreakdown.thermal_optimization) thermalScore += (thermalBreakdown.thermal_optimization.score || 1) * 0.05;
-    if (thermalBreakdown.environmental) thermalScore += (thermalBreakdown.environmental.score || 2) * 0.15;
+    thermalScore += getSafeScore(thermalBreakdown, 'thermal_optimization', 1) * 0.05;
+    thermalScore += getSafeScore(thermalBreakdown, 'environmental', 2) * 0.15;
     
     // Calculate redevelopment score (40% + 30% + 30% = 100%)
     let redevelopmentScore = 0;
-    if (redevBreakdown.redev_market) redevelopmentScore += (redevBreakdown.redev_market.score || 2) * 0.40;
+    redevelopmentScore += getSafeScore(redevBreakdown, 'redev_market', 2) * 0.40;
     
     // Infrastructure score (average of land and utilities) - part of the 30%
-    const landScore = redevBreakdown.land_availability?.score || 2;
-    const utilitiesScore = redevBreakdown.utilities?.score || 2;
+    const landScore = getSafeScore(redevBreakdown, 'land_availability', 2);
+    const utilitiesScore = getSafeScore(redevBreakdown, 'utilities', 2);
     const infrastructureScore = (landScore + utilitiesScore) / 2;
     redevelopmentScore += infrastructureScore * 0.30;
     
     // Interconnection - 30%
-    if (redevBreakdown.interconnection) redevelopmentScore += (redevBreakdown.interconnection.score || 2) * 0.30;
+    redevelopmentScore += getSafeScore(redevBreakdown, 'interconnection', 2) * 0.30;
     
     const overallScore = (thermalScore + redevelopmentScore) * 2;
     
@@ -356,35 +329,18 @@ const ExpertAnalysisModal = ({
           console.log('Save successful via provided function');
         } catch (error) {
           console.error('Save via provided function failed:', error);
-          throw error;
+          // Show user-friendly message
+          if (error.message.includes('404')) {
+            throw new Error('Save failed: The expert analysis API endpoint was not found (404). Please check if the backend API is deployed correctly.');
+          } else if (error.message.includes('401') || error.message.includes('403')) {
+            throw new Error('Save failed: Authentication error. Please check your login credentials.');
+          } else {
+            throw error;
+          }
         }
       } else {
-        // Fallback to direct API call
-        console.log('Using direct API call for save');
-        const currentToken = getAuthToken();
-        const headers = { 
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        };
-        
-        if (currentToken && currentToken.trim() !== '') {
-          headers['Authorization'] = `Bearer ${currentToken}`;
-        }
-        
-        const response = await fetch(`${API_BASE_URL}/api/expert-analysis`, {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify(saveData)
-        });
-        
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Save failed:', errorText);
-          throw new Error(`Save failed: ${response.status} - ${errorText}`);
-        }
-        
-        saveSuccessful = true;
-        console.log('Save successful via direct API');
+        // No save function provided
+        throw new Error('No save function provided. Cannot save changes.');
       }
       
       // Save transmission data if needed
@@ -395,6 +351,7 @@ const ExpertAnalysisModal = ({
             console.log('Transmission data saved via provided function');
           } catch (error) {
             console.error('Failed to save transmission data:', error);
+            // Don't fail the entire save if transmission data fails
           }
         }
       }
@@ -409,26 +366,6 @@ const ExpertAnalysisModal = ({
         setTimeout(() => {
           setSaveStatus(null);
           alert('Changes saved successfully!');
-          
-          // Refresh data from server
-          setTimeout(async () => {
-            try {
-              const freshAnalysis = await fetchExpertAnalysisData();
-              const freshTransmission = await fetchTransmissionData();
-              
-              if (freshAnalysis) {
-                const recalculatedFresh = recalculateScores(freshAnalysis);
-                setEditedAnalysis(recalculatedFresh);
-                setAnalysisData(recalculatedFresh);
-              }
-              
-              if (freshTransmission) {
-                setEditedTransmissionData(freshTransmission);
-              }
-            } catch (refreshError) {
-              console.error('Error refreshing data after save:', refreshError);
-            }
-          }, 500);
         }, 500);
       } else {
         setSaveStatus('error');
@@ -559,7 +496,7 @@ const ExpertAnalysisModal = ({
   
   console.log('Current analysis data for rendering:', currentAnalysis);
   
-  // Calculate scores for display
+  // Safely calculate scores for display
   const thermalScore = parseFloat(currentAnalysis?.thermalScore) || 0;
   const redevScore = parseFloat(currentAnalysis?.redevelopmentScore) || 0;
   const overallScore = parseFloat(currentAnalysis?.overallScore) || 0;
@@ -620,7 +557,7 @@ const ExpertAnalysisModal = ({
             <div className="score-card">
               <div className="score-label">OVERALL SCORE</div>
               <div className={`score-value ${getScoreColorClass(overallScore / 2)}`}>
-                {overallScore}/6.0
+                {overallScore.toFixed(1)}/6.0
               </div>
               <div className="score-percent">{Math.round((overallScore / 6) * 100)}%</div>
               <div className="score-rating" style={{ color: getRatingColor(currentAnalysis?.overallRating) }}>
@@ -687,7 +624,7 @@ const ExpertAnalysisModal = ({
                     <div className="field-details">
                       <span className="weight">Weight: 5%</span>
                       <span className="contribution">
-                        Contribution: {((currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1) * 0.05).toFixed(2)}
+                        Contribution: {(((currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1) * 0.05).toFixed(2))}
                       </span>
                     </div>
                   </div>
@@ -759,7 +696,7 @@ const ExpertAnalysisModal = ({
                     <div className="field-details">
                       <span className="weight">Weight: 40%</span>
                       <span className="contribution">
-                        Contribution: {((currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2) * 0.40).toFixed(2)}
+                        Contribution: {(((currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2) * 0.40).toFixed(2))}
                       </span>
                     </div>
                   </div>
@@ -812,7 +749,7 @@ const ExpertAnalysisModal = ({
                   <div className="infra-total">
                     <span>Infrastructure Score:</span>
                     <span className={`infra-value ${getScoreColorClass(currentAnalysis?.infrastructureScore || 0)}`}>
-                      {(currentAnalysis?.infrastructureScore || 0).toFixed(2)}/3.0
+                      {(parseFloat(currentAnalysis?.infrastructureScore) || 0).toFixed(2)}/3.0
                     </span>
                   </div>
                 </div>
