@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from './contexts/AuthContext'; // ADD THIS IMPORT
 
 const ExpertAnalysisModal = ({ 
   selectedExpertProject, 
@@ -6,6 +7,9 @@ const ExpertAnalysisModal = ({
   currentUser = "PowerTrans Team"
 }) => {
   if (!selectedExpertProject || !selectedExpertProject.expertAnalysis) return null;
+  
+  // ADD THIS: Get the authentication token
+  const { token } = useAuth();
   
   const originalAnalysis = selectedExpertProject.expertAnalysis;
   const [isEditing, setIsEditing] = useState(false);
@@ -17,19 +21,28 @@ const ExpertAnalysisModal = ({
   // API Base URL
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
   
-  // Fetch expert analysis from API
+  // Fetch expert analysis from API - FIXED: Added auth header
   const fetchExpertAnalysis = async () => {
     try {
       setIsLoading(true);
       const projectId = selectedExpertProject.id;
       
       const response = await fetch(
-        `${API_BASE_URL}/api/expert-analysis?projectId=${encodeURIComponent(projectId)}`
+        `${API_BASE_URL}/api/expert-analysis?projectId=${encodeURIComponent(projectId)}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        }
       );
       
       if (response.ok) {
         const data = await response.json();
         return data;
+      } else if (response.status === 404) {
+        console.log('No expert analysis found for this project, using defaults');
+        return null;
       }
       return null;
     } catch (error) {
@@ -40,17 +53,26 @@ const ExpertAnalysisModal = ({
     }
   };
   
-  // Fetch transmission data from API
+  // Fetch transmission data from API - FIXED: Added auth header
   const fetchTransmissionData = async () => {
     try {
       const projectName = selectedExpertProject?.expertAnalysis?.projectName || "";
       const response = await fetch(
-        `${API_BASE_URL}/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`
+        `${API_BASE_URL}/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        }
       );
       
       if (response.ok) {
         const data = await response.json();
         return data;
+      } else if (response.status === 404) {
+        console.log('No transmission data found for this project');
+        return [];
       }
       return [];
     } catch (error) {
@@ -88,22 +110,28 @@ const ExpertAnalysisModal = ({
         });
       }
       
-      setEditedTransmissionData(dbTransmission);
+      setEditedTransmissionData(dbTransmission || []);
     };
     
-    initializeData();
-  }, [selectedExpertProject]);
+    if (selectedExpertProject) {
+      initializeData();
+    }
+  }, [selectedExpertProject, token]);
 
-  // Save to database
+  // Save to database - FIXED: Added auth header
   const saveToDatabase = async (analysis, transmissionData) => {
     try {
       const projectId = selectedExpertProject.id;
       const projectName = analysis.projectName;
       
-      // Save expert analysis
+      // Save expert analysis - FIXED: Added auth header
       const analysisResponse = await fetch(`${API_BASE_URL}/api/expert-analysis`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           projectId,
           projectName,
@@ -120,13 +148,19 @@ const ExpertAnalysisModal = ({
       });
       
       if (!analysisResponse.ok) {
-        throw new Error('Failed to save expert analysis');
+        const errorText = await analysisResponse.text();
+        console.error('Failed to save expert analysis:', errorText);
+        throw new Error(`Failed to save expert analysis: ${analysisResponse.status}`);
       }
       
-      // Save transmission data
+      // Save transmission data - FIXED: Added auth header
       const transmissionResponse = await fetch(`${API_BASE_URL}/api/transmission-interconnection`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           projectId,
           transmissionData: transmissionData.map(item => ({
@@ -141,7 +175,9 @@ const ExpertAnalysisModal = ({
       });
       
       if (!transmissionResponse.ok) {
-        throw new Error('Failed to save transmission data');
+        const errorText = await transmissionResponse.text();
+        console.error('Failed to save transmission data:', errorText);
+        throw new Error(`Failed to save transmission data: ${transmissionResponse.status}`);
       }
       
       return true;
@@ -153,6 +189,11 @@ const ExpertAnalysisModal = ({
 
   // Handle save
   const handleSave = async () => {
+    if (!token) {
+      alert('Authentication error. Please log in again.');
+      return;
+    }
+    
     setSaveStatus('saving');
     
     try {
@@ -167,6 +208,21 @@ const ExpertAnalysisModal = ({
         setIsEditing(false);
         setSaveStatus('success');
         
+        // Refresh data from server
+        const freshAnalysis = await fetchExpertAnalysis();
+        const freshTransmission = await fetchTransmissionData();
+        
+        if (freshAnalysis) {
+          setEditedAnalysis(prev => ({
+            ...prev,
+            ...freshAnalysis
+          }));
+        }
+        
+        if (freshTransmission) {
+          setEditedTransmissionData(freshTransmission);
+        }
+        
         setTimeout(() => {
           setSaveStatus(null);
           alert('Changes saved successfully!');
@@ -179,7 +235,7 @@ const ExpertAnalysisModal = ({
     } catch (error) {
       console.error('Save error:', error);
       setSaveStatus('error');
-      alert('Error saving changes.');
+      alert(`Error saving changes: ${error.message}`);
     }
   };
 
@@ -276,7 +332,7 @@ const ExpertAnalysisModal = ({
     });
   };
 
-  // Handle transmission data field change - FIXED CURSOR ISSUE
+  // Handle transmission data field change
   const handleTransmissionFieldChange = (index, field, value) => {
     if (!isEditing) return;
     
@@ -292,10 +348,10 @@ const ExpertAnalysisModal = ({
     });
   };
 
-  // Add new POI voltage entry - FIXED: No auto-scroll
+  // Add new POI voltage entry
   const addNewTransmissionEntry = (e) => {
     if (!isEditing) return;
-    e.preventDefault(); // Prevent default form behavior
+    e.preventDefault();
     
     const projectName = selectedExpertProject?.expertAnalysis?.projectName || "";
     
@@ -332,7 +388,7 @@ const ExpertAnalysisModal = ({
     return (
       <div className="modal-overlay">
         <div className="modal-content">
-          <div className="loading-spinner">Loading...</div>
+          <div className="loading-spinner">Loading expert analysis...</div>
         </div>
       </div>
     );
@@ -607,7 +663,7 @@ const ExpertAnalysisModal = ({
                   </div>
                 </div>
                 
-                {/* Transmission Data Section - IMPROVED DESIGN */}
+                {/* Transmission Data Section */}
                 <div className="transmission-section">
                   <div className="transmission-header">
                     <h5>Transmission Interconnection Details</h5>
@@ -768,7 +824,7 @@ const ExpertAnalysisModal = ({
           </div>
         </div>
         
-        {/* Action Buttons - SIMPLIFIED */}
+        {/* Action Buttons */}
         <div className="action-buttons">
           {isEditing ? (
             <div className="edit-actions">
@@ -790,18 +846,18 @@ const ExpertAnalysisModal = ({
               <button 
                 className="action-btn primary"
                 onClick={handleSave}
-                disabled={saveStatus === 'saving'}
+                disabled={saveStatus === 'saving' || !token}
                 style={{
-                  background: 'rgba(59, 130, 246, 0.9)',
-                  border: '1px solid rgba(59, 130, 246, 0.9)',
+                  background: !token ? 'rgba(107, 114, 128, 0.5)' : 'rgba(59, 130, 246, 0.9)',
+                  border: !token ? '1px solid rgba(107, 114, 128, 0.5)' : '1px solid rgba(59, 130, 246, 0.9)',
                   color: 'white',
                   padding: '10px 20px',
                   borderRadius: '6px',
-                  cursor: 'pointer',
+                  cursor: !token ? 'not-allowed' : 'pointer',
                   fontWeight: '500'
                 }}
               >
-                {saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
+                {!token ? 'Login Required' : saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           ) : (
