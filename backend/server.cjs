@@ -14,7 +14,7 @@ const expertAnalysisRoutes = require('./routes/expertAnalysisRoutes');
 const app = express();
 const PORT = process.env.PORT || 8080; 
 
-// Database connection
+// DB connection
 const pool = new Pool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT || 5432,
