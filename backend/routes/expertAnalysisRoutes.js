@@ -20,7 +20,6 @@ try {
   };
 }
 
-// Expert Analysis Routes
 router.get('/expert-analysis', protect, getExpertAnalysis);
 router.post('/expert-analysis', protect, saveExpertAnalysis);
 
