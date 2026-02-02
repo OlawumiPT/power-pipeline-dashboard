@@ -12,13 +12,11 @@ const nodemailer = require('nodemailer');
 // Import routes
 const projectRoutes = require('./routes/projects');
 const expertAnalysisRoutes = require('./routes/expertAnalysisRoutes');
+const transmissionRoutes = require('./routes/expertAnalysisRoutes'); // This contains transmission routes
 
 // Create Express app
 const app = express();
 const PORT = process.env.PORT || 8080; // Azure commonly uses 8080
-
-// FIXED: Changed from app.listener() to app.listen()
-// app.listener(PORT, () => console.log('API is running on port ${PORT}'));
 
 // Database connection
 const pool = new Pool({
@@ -1499,7 +1497,12 @@ app.get('/api/test-email', async (req, res) => {
 
 // ========== API ROUTES ==========
 app.use('/api/projects', projectRoutes);
-app.use('/api', expertAnalysisRoutes);
+
+// ✅ FIXED: Mount expert analysis routes properly
+app.use('/api/expert-analysis', expertAnalysisRoutes);
+
+// ✅ FIXED: Mount transmission routes separately
+app.use('/api/transmission-interconnection', transmissionRoutes);
 
 // ========== ADDED: ROUTE DEBUGGING ENDPOINT ==========
 app.get('/api/debug/routes', (req, res) => {
@@ -1578,6 +1581,7 @@ app.listen(PORT, () => {
   console.log(`🔗 Health Check: http://localhost:${PORT}/health`);
   console.log(`📊 Projects API: http://localhost:${PORT}/api/projects`);
   console.log(`📈 Expert Analysis API: http://localhost:${PORT}/api/expert-analysis`);
+  console.log(`⚡ Transmission API: http://localhost:${PORT}/api/transmission-interconnection`);
   console.log(`🗄️ Using schema: ${process.env.DB_SCHEMA || 'pipeline_dashboard'}`);
   console.log(`👤 Admin email: ${ADMIN_EMAIL}`);
   console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
@@ -1602,7 +1606,9 @@ app.listen(PORT, () => {
   console.log('- GET  /api/test-email - Test email service');
   console.log('- GET  /api/projects - Projects API');
   console.log('- GET  /api/expert-analysis - Expert analysis API');
+  console.log('- POST /api/expert-analysis - Save expert analysis');
   console.log('- GET  /api/transmission-interconnection - Transmission data API');
+  console.log('- POST /api/transmission-interconnection - Save transmission data');
   console.log('='.repeat(70));
   console.log('✅ Ready to accept requests!');
   console.log('='.repeat(70));
