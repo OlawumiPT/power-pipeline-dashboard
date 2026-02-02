@@ -9,12 +9,10 @@ const { Pool } = require('pg');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 
-// Import routes
 const projectRoutes = require('./routes/projects');
 const expertAnalysisRoutes = require('./routes/expertAnalysisRoutes');
-// Create Express app
 const app = express();
-const PORT = process.env.PORT || 8080; // Azure commonly uses 8080
+const PORT = process.env.PORT || 8080; 
 
 // Database connection
 const pool = new Pool({
