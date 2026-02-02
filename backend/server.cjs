@@ -1495,16 +1495,10 @@ app.get('/api/test-email', async (req, res) => {
   }
 });
 
-// ========== API ROUTES ==========
 app.use('/api/projects', projectRoutes);
 
-// ✅ FIXED: Mount expert analysis routes properly
-app.use('/api/expert-analysis', expertAnalysisRoutes);
+app.use('/api', expertAnalysisRoutes);
 
-// ✅ FIXED: Mount transmission routes separately
-app.use('/api/transmission-interconnection', transmissionRoutes);
-
-// ========== ADDED: ROUTE DEBUGGING ENDPOINT ==========
 app.get('/api/debug/routes', (req, res) => {
   const routes = [];
   
