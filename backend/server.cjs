@@ -44,9 +44,6 @@ const SALT_ROUNDS = 12;
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'ababalola@power-transitions.com';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://platform.power-transitions.com';
 
-// ============================================
-// EMAIL SERVICE SETUP
-// ============================================
 class EmailService {
   constructor() {
     this.transporter = null;
@@ -274,9 +271,6 @@ let emailServiceReady = false;
   }
 })();
 
-// ============================================
-// DEBUGGING MIDDLEWARE
-// ============================================
 if (DEBUG_MODE) {
   console.log('🔧 DEBUG MODE ENABLED');
 
@@ -288,13 +282,8 @@ if (DEBUG_MODE) {
     next();
   });
 }
-
-// ========== MIDDLEWARE SETUP ==========
-
-// Security headers
 app.use(helmet());
 
-// ✅ CORS CONFIG (UPDATED + CLEAN)
 const allowedOrigins = [
   'https://pt-power-pipeline-dashboard.azurestaticapps.net',
   'https://lively-water-022a59110.6.azurestaticapps.net',
@@ -321,10 +310,8 @@ app.use(
   })
 );
 
-// Handle preflight for all routes
 app.options('*', cors());
 
-// Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000,
@@ -335,16 +322,12 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request logging
 app.use(morgan('dev'));
 
-// ============================================
-// HELPER FUNCTIONS
-// ============================================
 const hashPassword = async (password) => {
   return await bcrypt.hash(password, SALT_ROUNDS);
 };
