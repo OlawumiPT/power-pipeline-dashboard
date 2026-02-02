@@ -12,8 +12,6 @@ const nodemailer = require('nodemailer');
 // Import routes
 const projectRoutes = require('./routes/projects');
 const expertAnalysisRoutes = require('./routes/expertAnalysisRoutes');
-const transmissionRoutes = require('./routes/expertAnalysisRoutes'); // This contains transmission routes
-
 // Create Express app
 const app = express();
 const PORT = process.env.PORT || 8080; // Azure commonly uses 8080
