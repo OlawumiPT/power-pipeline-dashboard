@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const ExpertAnalysisModal = ({ 
   selectedExpertProject, 
@@ -13,28 +13,8 @@ const ExpertAnalysisModal = ({
   // Remove the strict early return - only return null if no project at all
   if (!selectedExpertProject) return null;
   
-  // Check if we have any data to show
-  const hasData = selectedExpertProject.expertAnalysis || 
-                  selectedExpertProject.detailData || 
-                  selectedExpertProject.overall;
-  
-  if (!hasData) {
-    console.log('No data available for this project');
-    return (
-      <div className="modal-overlay" onClick={() => setSelectedExpertProject(null)}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header">
-            <h2>No Data Available</h2>
-            <button className="close-btn" onClick={() => setSelectedExpertProject(null)}>×</button>
-          </div>
-          <div className="modal-body">
-            <p>No expert analysis data is available for this project.</p>
-            <button onClick={() => setSelectedExpertProject(null)}>Close</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Create a stable reference to the selected project
+  const projectRef = useRef(selectedExpertProject);
   
   // Generate default analysis if none exists
   const generateDefaultAnalysis = (project) => {
@@ -73,7 +53,7 @@ const ExpertAnalysisModal = ({
     
     const projectId = project.id || project.detailData?.id || "N/A";
     
-    return {
+    const defaultAnalysis = {
       overallScore: overallScore,
       overallRating: parseFloat(overallScore) >= 4.5 ? "Strong" : 
                     parseFloat(overallScore) >= 3.0 ? "Moderate" : "Weak",
@@ -96,18 +76,23 @@ const ExpertAnalysisModal = ({
       infrastructureScore: project.expertAnalysis?.infrastructureScore || 2.0,
       confidence: project.expertAnalysis?.confidence || 75
     };
+    
+    console.log('Generated default analysis:', defaultAnalysis);
+    return defaultAnalysis;
   };
 
   // Use token from props or try to get from localStorage as fallback
-  const [token, setToken] = useState(authToken || localStorage.getItem('token') || '');
-  
-  const originalAnalysis = selectedExpertProject.expertAnalysis || generateDefaultAnalysis(selectedExpertProject);
+  const [token] = useState(authToken || localStorage.getItem('token') || '');
   const [isEditing, setIsEditing] = useState(false);
   const [editedAnalysis, setEditedAnalysis] = useState(null);
   const [saveStatus, setSaveStatus] = useState(null);
   const [editedTransmissionData, setEditedTransmissionData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [analysisData, setAnalysisData] = useState(originalAnalysis);
+  const [analysisData, setAnalysisData] = useState(() => {
+    const initialAnalysis = selectedExpertProject.expertAnalysis || generateDefaultAnalysis(selectedExpertProject);
+    console.log('Initial analysisData:', initialAnalysis);
+    return initialAnalysis;
+  });
   
   // API Base URL
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
@@ -137,7 +122,7 @@ const ExpertAnalysisModal = ({
             return data;
           }
         } catch (error) {
-          console.warn('Provided fetch function failed, falling back to defaults:', error);
+          console.warn('Provided fetch function failed:', error);
         }
       }
       
@@ -268,6 +253,7 @@ const ExpertAnalysisModal = ({
       }
       
       setEditedAnalysis(initialAnalysis);
+      setAnalysisData(initialAnalysis);
       setEditedTransmissionData(dbTransmission || []);
       console.log('Initial analysis set:', initialAnalysis);
     };
@@ -276,217 +262,6 @@ const ExpertAnalysisModal = ({
       initializeData();
     }
   }, [selectedExpertProject]);
-
-  // Save to database
-  const saveToDatabase = async (analysis, transmissionData) => {
-    try {
-      const projectId = selectedExpertProject.id;
-      const projectName = analysis.projectName;
-      
-      if (!projectId) {
-        throw new Error('No project ID available for saving');
-      }
-      
-      console.log('Saving to database for project:', { projectId, projectName });
-      
-      // Use provided save functions if available
-      let analysisSaved = false;
-      let transmissionSaved = false;
-      
-      // Save expert analysis using provided function
-      if (saveExpertAnalysis && typeof saveExpertAnalysis === 'function') {
-        try {
-          const analysisDataToSave = {
-            projectId,
-            projectName,
-            overallScore: parseFloat(analysis.overallScore) || 0,
-            overallRating: analysis.overallRating || 'Moderate',
-            confidence: analysis.confidence || 75,
-            thermalScore: parseFloat(analysis.thermalScore) || 0,
-            thermalBreakdown: analysis.thermalBreakdown || {
-              thermal_optimization: { score: 1 },
-              environmental: { score: 2 }
-            },
-            redevelopmentScore: parseFloat(analysis.redevelopmentScore) || 0,
-            redevelopmentBreakdown: analysis.redevelopmentBreakdown || {
-              redev_market: { score: 2 },
-              land_availability: { score: 2 },
-              utilities: { score: 2 },
-              interconnection: { score: 2 }
-            },
-            infrastructureScore: parseFloat(analysis.infrastructureScore) || 2.0,
-            editedBy: currentUser
-          };
-          
-          console.log('Saving expert analysis via provided function:', analysisDataToSave);
-          await saveExpertAnalysis(analysisDataToSave);
-          analysisSaved = true;
-          console.log('Expert analysis saved successfully via provided function');
-        } catch (error) {
-          console.error('Failed to save expert analysis via provided function:', error);
-        }
-      }
-      
-      // Save transmission data using provided function
-      if (saveTransmissionInterconnection && typeof saveTransmissionInterconnection === 'function' && transmissionData.length > 0) {
-        try {
-          console.log('Saving transmission data via provided function:', transmissionData);
-          await saveTransmissionInterconnection(projectId, transmissionData);
-          transmissionSaved = true;
-          console.log('Transmission data saved successfully via provided function');
-        } catch (error) {
-          console.error('Failed to save transmission data via provided function:', error);
-        }
-      }
-      
-      // If provided functions succeeded, return true
-      if (analysisSaved && (transmissionSaved || transmissionData.length === 0)) {
-        return true;
-      }
-      
-      console.log('Falling back to direct API calls...');
-      // Fallback to direct API calls if provided functions failed or weren't provided
-      const currentToken = getAuthToken();
-      const headers = { 
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-      
-      if (currentToken && currentToken.trim() !== '') {
-        headers['Authorization'] = `Bearer ${currentToken}`;
-      }
-      
-      // Save expert analysis directly
-      if (!analysisSaved) {
-        const analysisResponse = await fetch(`${API_BASE_URL}/api/expert-analysis`, {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify({
-            projectId,
-            projectName,
-            overallScore: parseFloat(analysis.overallScore) || 0,
-            overallRating: analysis.overallRating || 'Moderate',
-            confidence: analysis.confidence || 75,
-            thermalScore: parseFloat(analysis.thermalScore) || 0,
-            thermalBreakdown: analysis.thermalBreakdown || {
-              thermal_optimization: { score: 1 },
-              environmental: { score: 2 }
-            },
-            redevelopmentScore: parseFloat(analysis.redevelopmentScore) || 0,
-            redevelopmentBreakdown: analysis.redevelopmentBreakdown || {
-              redev_market: { score: 2 },
-              land_availability: { score: 2 },
-              utilities: { score: 2 },
-              interconnection: { score: 2 }
-            },
-            infrastructureScore: parseFloat(analysis.infrastructureScore) || 2.0,
-            editedBy: currentUser
-          })
-        });
-        
-        if (!analysisResponse.ok) {
-          const errorText = await analysisResponse.text();
-          console.error('Failed to save expert analysis:', errorText);
-          throw new Error(`Failed to save expert analysis: ${analysisResponse.status}`);
-        }
-        console.log('Expert analysis saved directly to API');
-      }
-      
-      // Save transmission data directly
-      if (!transmissionSaved && transmissionData.length > 0) {
-        const transmissionResponse = await fetch(`${API_BASE_URL}/api/transmission-interconnection`, {
-          method: 'POST',
-          headers: headers,
-          body: JSON.stringify({
-            projectId,
-            transmissionData: transmissionData.map(item => ({
-              site: item.site || projectName,
-              poiVoltage: item.poiVoltage || '',
-              excessInjectionCapacity: parseFloat(item.excessInjectionCapacity) || 0,
-              excessWithdrawalCapacity: parseFloat(item.excessWithdrawalCapacity) || 0,
-              constraints: item.constraints || "-",
-              excessIXCapacity: item.excessIXCapacity || true
-            }))
-          })
-        });
-        
-        if (!transmissionResponse.ok) {
-          const errorText = await transmissionResponse.text();
-          console.error('Failed to save transmission data:', errorText);
-          throw new Error(`Failed to save transmission data: ${transmissionResponse.status}`);
-        }
-        console.log('Transmission data saved directly to API');
-      }
-      
-      console.log('All data saved successfully');
-      return true;
-    } catch (error) {
-      console.error('Error saving to database:', error);
-      return false;
-    }
-  };
-
-  // Handle save
-  const handleSave = async () => {
-    console.log('Save button clicked');
-    setSaveStatus('saving');
-    
-    try {
-      // Recalculate scores before saving
-      const updatedAnalysis = recalculateScores(editedAnalysis || analysisData);
-      console.log('Updated analysis to save:', updatedAnalysis);
-      
-      // Save to database
-      const success = await saveToDatabase(updatedAnalysis, editedTransmissionData);
-      
-      if (success) {
-        setEditedAnalysis(updatedAnalysis);
-        setAnalysisData(updatedAnalysis);
-        setIsEditing(false);
-        setSaveStatus('success');
-        
-        console.log('Save successful, refreshing data...');
-        
-        // Refresh data from server after a short delay
-        setTimeout(async () => {
-          try {
-            const freshAnalysis = await fetchExpertAnalysisData();
-            const freshTransmission = await fetchTransmissionData();
-            
-            if (freshAnalysis) {
-              setEditedAnalysis(prev => ({
-                ...prev,
-                ...freshAnalysis
-              }));
-              setAnalysisData(prev => ({
-                ...prev,
-                ...freshAnalysis
-              }));
-            }
-            
-            if (freshTransmission) {
-              setEditedTransmissionData(freshTransmission);
-            }
-          } catch (refreshError) {
-            console.error('Error refreshing data after save:', refreshError);
-          }
-        }, 500);
-        
-        setTimeout(() => {
-          setSaveStatus(null);
-          alert('Changes saved successfully!');
-        }, 500);
-      } else {
-        setSaveStatus('error');
-        alert('Failed to save changes. Please try again.');
-      }
-      
-    } catch (error) {
-      console.error('Save error:', error);
-      setSaveStatus('error');
-      alert(`Error saving changes: ${error.message}`);
-    }
-  };
 
   // Recalculate scores function
   const recalculateScores = (analysisData) => {
@@ -529,6 +304,144 @@ const ExpertAnalysisModal = ({
     return result;
   };
 
+  // Handle save
+  const handleSave = async () => {
+    console.log('Save button clicked');
+    setSaveStatus('saving');
+    
+    try {
+      // Use editedAnalysis if available, otherwise use analysisData
+      const currentAnalysisToSave = editedAnalysis || analysisData;
+      
+      if (!currentAnalysisToSave) {
+        throw new Error('No analysis data to save');
+      }
+      
+      // Recalculate scores before saving
+      const updatedAnalysis = recalculateScores(currentAnalysisToSave);
+      console.log('Updated analysis to save:', updatedAnalysis);
+      
+      // Prepare data for saving
+      const saveData = {
+        projectId: selectedExpertProject.id,
+        projectName: updatedAnalysis.projectName,
+        overallScore: parseFloat(updatedAnalysis.overallScore) || 0,
+        overallRating: updatedAnalysis.overallRating || 'Moderate',
+        confidence: updatedAnalysis.confidence || 75,
+        thermalScore: parseFloat(updatedAnalysis.thermalScore) || 0,
+        thermalBreakdown: updatedAnalysis.thermalBreakdown || {
+          thermal_optimization: { score: 1 },
+          environmental: { score: 2 }
+        },
+        redevelopmentScore: parseFloat(updatedAnalysis.redevelopmentScore) || 0,
+        redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || {
+          redev_market: { score: 2 },
+          land_availability: { score: 2 },
+          utilities: { score: 2 },
+          interconnection: { score: 2 }
+        },
+        infrastructureScore: parseFloat(updatedAnalysis.infrastructureScore) || 2.0,
+        editedBy: currentUser
+      };
+      
+      console.log('Saving data:', saveData);
+      
+      // Save to database using provided function
+      let saveSuccessful = false;
+      
+      if (saveExpertAnalysis && typeof saveExpertAnalysis === 'function') {
+        try {
+          await saveExpertAnalysis(saveData);
+          saveSuccessful = true;
+          console.log('Save successful via provided function');
+        } catch (error) {
+          console.error('Save via provided function failed:', error);
+          throw error;
+        }
+      } else {
+        // Fallback to direct API call
+        console.log('Using direct API call for save');
+        const currentToken = getAuthToken();
+        const headers = { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        };
+        
+        if (currentToken && currentToken.trim() !== '') {
+          headers['Authorization'] = `Bearer ${currentToken}`;
+        }
+        
+        const response = await fetch(`${API_BASE_URL}/api/expert-analysis`, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(saveData)
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Save failed:', errorText);
+          throw new Error(`Save failed: ${response.status} - ${errorText}`);
+        }
+        
+        saveSuccessful = true;
+        console.log('Save successful via direct API');
+      }
+      
+      // Save transmission data if needed
+      if (editedTransmissionData.length > 0) {
+        if (saveTransmissionInterconnection && typeof saveTransmissionInterconnection === 'function') {
+          try {
+            await saveTransmissionInterconnection(selectedExpertProject.id, editedTransmissionData);
+            console.log('Transmission data saved via provided function');
+          } catch (error) {
+            console.error('Failed to save transmission data:', error);
+          }
+        }
+      }
+      
+      if (saveSuccessful) {
+        setAnalysisData(updatedAnalysis);
+        setEditedAnalysis(updatedAnalysis);
+        setIsEditing(false);
+        setSaveStatus('success');
+        
+        // Show success message
+        setTimeout(() => {
+          setSaveStatus(null);
+          alert('Changes saved successfully!');
+          
+          // Refresh data from server
+          setTimeout(async () => {
+            try {
+              const freshAnalysis = await fetchExpertAnalysisData();
+              const freshTransmission = await fetchTransmissionData();
+              
+              if (freshAnalysis) {
+                const recalculatedFresh = recalculateScores(freshAnalysis);
+                setEditedAnalysis(recalculatedFresh);
+                setAnalysisData(recalculatedFresh);
+              }
+              
+              if (freshTransmission) {
+                setEditedTransmissionData(freshTransmission);
+              }
+            } catch (refreshError) {
+              console.error('Error refreshing data after save:', refreshError);
+            }
+          }, 500);
+        }, 500);
+      } else {
+        setSaveStatus('error');
+        alert('Failed to save changes. Please try again.');
+      }
+      
+    } catch (error) {
+      console.error('Save error:', error);
+      setSaveStatus('error');
+      alert(`Error saving changes: ${error.message}`);
+    }
+  };
+
   // Get score color class
   const getScoreColorClass = (score) => {
     const numScore = parseFloat(score) || 0;
@@ -559,33 +472,35 @@ const ExpertAnalysisModal = ({
 
   // Handle score change
   const handleScoreChange = (category, component, value) => {
-    if (!isEditing) return;
-    
     console.log('Score changed:', { category, component, value });
     
-    setEditedAnalysis(prev => {
-      const updated = { ...prev };
-      
-      if (category === 'thermal') {
-        updated.thermalBreakdown = {
-          ...updated.thermalBreakdown,
-          [component]: {
-            ...updated.thermalBreakdown[component],
-            score: parseInt(value) || 0
-          }
-        };
-      } else if (category === 'redevelopment') {
-        updated.redevelopmentBreakdown = {
-          ...updated.redevelopmentBreakdown,
-          [component]: {
-            ...updated.redevelopmentBreakdown[component],
-            score: parseInt(value) || 0
-          }
-        };
-      }
-      
-      return recalculateScores(updated);
-    });
+    // Use editedAnalysis if it exists, otherwise use analysisData
+    const currentAnalysis = editedAnalysis || analysisData;
+    
+    const updated = { ...currentAnalysis };
+    
+    if (category === 'thermal') {
+      updated.thermalBreakdown = {
+        ...updated.thermalBreakdown,
+        [component]: {
+          ...updated.thermalBreakdown[component],
+          score: parseInt(value) || 0
+        }
+      };
+    } else if (category === 'redevelopment') {
+      updated.redevelopmentBreakdown = {
+        ...updated.redevelopmentBreakdown,
+        [component]: {
+          ...updated.redevelopmentBreakdown[component],
+          score: parseInt(value) || 0
+        }
+      };
+    }
+    
+    // Recalculate scores
+    const recalculated = recalculateScores(updated);
+    setEditedAnalysis(recalculated);
+    console.log('Updated analysis after score change:', recalculated);
   };
 
   // Handle transmission data field change
@@ -642,7 +557,7 @@ const ExpertAnalysisModal = ({
   // Use editedAnalysis if available, otherwise use analysisData
   const currentAnalysis = editedAnalysis || analysisData;
   
-  console.log('Current analysis data:', currentAnalysis);
+  console.log('Current analysis data for rendering:', currentAnalysis);
   
   // Calculate scores for display
   const thermalScore = parseFloat(currentAnalysis?.thermalScore) || 0;
@@ -651,8 +566,8 @@ const ExpertAnalysisModal = ({
   
   if (isLoading) {
     return (
-      <div className="modal-overlay">
-        <div className="modal-content">
+      <div className="modal-overlay" onClick={() => !isEditing && setSelectedExpertProject(null)}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
           <div className="loading-spinner">Loading expert analysis...</div>
         </div>
       </div>
@@ -678,7 +593,10 @@ const ExpertAnalysisModal = ({
             ) : (
               <div className="edit-mode-indicator">
                 <span className="edit-badge">EDIT MODE</span>
-                <button className="cancel-btn" onClick={() => setIsEditing(false)}>
+                <button className="cancel-btn" onClick={() => {
+                  setIsEditing(false);
+                  setEditedAnalysis(null); // Reset edits
+                }}>
                   Cancel Edit
                 </button>
               </div>
@@ -1095,7 +1013,10 @@ const ExpertAnalysisModal = ({
             <div className="edit-actions">
               <button 
                 className="action-btn secondary"
-                onClick={() => setIsEditing(false)}
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditedAnalysis(null); // Reset edits
+                }}
                 style={{
                   background: 'rgba(255, 255, 255, 0.1)',
                   border: '1px solid rgba(255, 255, 255, 0.2)',
