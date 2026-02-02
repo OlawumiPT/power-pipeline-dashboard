@@ -2,24 +2,28 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
-router.get('/api/expert-analysis', async (req, res) => {
+router.get('/expert-analysis', async (req, res) => {
   try {
     const { projectId } = req.query;
     
     if (!projectId) {
-      return res.status(400).json({ error: 'projectId query parameter is required' });
+      return res.status(400).json({ 
+        error: 'projectId query parameter is required' 
+      });
     }
 
-    console.log(`Fetching expert analysis for project ID: ${projectId}`);
+    console.log(`[API] GET /api/expert-analysis for project ID: ${projectId}`);
     
     // 1. First, get project details from projects table
     const projectResult = await db.query(
-      'SELECT id, project_name FROM projects WHERE id = $1',
+      'SELECT id, project_name FROM pipeline_dashboard.projects WHERE id = $1',
       [projectId]
     );
     
     if (projectResult.rows.length === 0) {
-      return res.status(404).json({ error: `Project with ID ${projectId} not found` });
+      return res.status(404).json({ 
+        error: `Project with ID ${projectId} not found in database` 
+      });
     }
     
     const project = projectResult.rows[0];
@@ -30,12 +34,12 @@ router.get('/api/expert-analysis', async (req, res) => {
       tableExists = await db.query(`
         SELECT EXISTS (
           SELECT FROM information_schema.tables 
-          WHERE table_schema = 'public' 
+          WHERE table_schema = 'pipeline_dashboard'
           AND table_name = 'expert_analysis'
         )
       `);
     } catch (e) {
-      console.log('Error checking table existence:', e.message);
+      console.log('[API] expert_analysis table check error:', e.message);
       tableExists = { rows: [{ exists: false }] };
     }
     
@@ -43,25 +47,19 @@ router.get('/api/expert-analysis', async (req, res) => {
     if (tableExists.rows[0].exists) {
       // 3. Get analysis data
       const analysisResult = await db.query(
-        'SELECT * FROM expert_analysis WHERE project_id = $1',
+        'SELECT * FROM pipeline_dashboard.expert_analysis WHERE project_id = $1',
         [projectId]
       );
       
       if (analysisResult.rows.length > 0) {
         analysis = analysisResult.rows[0];
+        console.log(`[API] Found existing expert analysis for project ${projectId}`);
       }
+    } else {
+      console.log(`[API] expert_analysis table doesn't exist for project ${projectId}`);
     }
     
-    // 4. Format response to match frontend expectations
-    // Based on your screenshot, the frontend expects:
-    // - environmentalConsiderations
-    // - landAvailability
-    // - utilities
-    // - weight
-    // - infrastructureScore
-    // - interconnection
-    // - transmissionDetails
-    
+    // 4. Format response to match frontend expectations from screenshot
     const response = {
       projectId: parseInt(projectId),
       projectName: project.project_name,
@@ -80,11 +78,11 @@ router.get('/api/expert-analysis', async (req, res) => {
       }
     };
     
-    console.log('Sending response:', JSON.stringify(response, null, 2));
+    console.log('[API] Sending response for expert analysis');
     res.json(response);
     
   } catch (error) {
-    console.error('Database error in GET /api/expert-analysis:', error);
+    console.error('[API ERROR] GET /expert-analysis:', error);
     res.status(500).json({ 
       error: 'Internal server error',
       details: error.message 
@@ -92,11 +90,11 @@ router.get('/api/expert-analysis', async (req, res) => {
   }
 });
 
-// POST to save/update expert analysis - FIXED PATH to match frontend
-// Frontend calls: POST /api/expert-analysis
-router.post('/api/expert-analysis', async (req, res) => {
+// POST to save/update expert analysis - FRONTEND CALLS: POST /api/expert-analysis
+router.post('/expert-analysis', async (req, res) => {
   try {
-    console.log('POST /api/expert-analysis received:', JSON.stringify(req.body, null, 2));
+    console.log('[API] POST /api/expert-analysis received');
+    console.log('[API] Request body:', JSON.stringify(req.body, null, 2));
     
     const {
       projectId,
@@ -115,19 +113,23 @@ router.post('/api/expert-analysis', async (req, res) => {
 
     // 1. Ensure project exists
     const projectCheck = await db.query(
-      'SELECT id FROM projects WHERE id = $1',
+      'SELECT id FROM pipeline_dashboard.projects WHERE id = $1',
       [projectId]
     );
     
     if (projectCheck.rows.length === 0) {
-      return res.status(404).json({ error: `Project with ID ${projectId} not found` });
+      return res.status(404).json({ 
+        error: `Project with ID ${projectId} not found in database` 
+      });
     }
+
+    console.log(`[API] Project ${projectId} exists, saving expert analysis...`);
 
     // 2. Ensure expert_analysis table has the correct structure
     await db.query(`
-      CREATE TABLE IF NOT EXISTS expert_analysis (
+      CREATE TABLE IF NOT EXISTS pipeline_dashboard.expert_analysis (
         id SERIAL PRIMARY KEY,
-        project_id INTEGER UNIQUE REFERENCES projects(id) ON DELETE CASCADE,
+        project_id INTEGER UNIQUE,
         environmental_considerations TEXT,
         land_availability TEXT,
         utilities TEXT,
@@ -136,21 +138,24 @@ router.post('/api/expert-analysis', async (req, res) => {
         interconnection TEXT,
         transmission_details JSONB,
         created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+        updated_at TIMESTAMP DEFAULT NOW(),
+        CONSTRAINT fk_project FOREIGN KEY (project_id) 
+          REFERENCES pipeline_dashboard.projects(id) ON DELETE CASCADE
       )
     `);
 
     // 3. Check if analysis already exists
     const existing = await db.query(
-      'SELECT id FROM expert_analysis WHERE project_id = $1',
+      'SELECT id FROM pipeline_dashboard.expert_analysis WHERE project_id = $1',
       [projectId]
     );
 
     let result;
     if (existing.rows.length > 0) {
       // Update existing record
+      console.log(`[API] Updating existing expert analysis for project ${projectId}`);
       result = await db.query(
-        `UPDATE expert_analysis 
+        `UPDATE pipeline_dashboard.expert_analysis 
          SET environmental_considerations = $2,
              land_availability = $3,
              utilities = $4,
@@ -169,13 +174,19 @@ router.post('/api/expert-analysis', async (req, res) => {
           weight || 15.00,
           infrastructureScore || 0.00,
           interconnection || '2-No upgrades needed (Unsecured)',
-          JSON.stringify(transmissionDetails || {})
+          JSON.stringify(transmissionDetails || {
+            poiVoltage: "115",
+            excessCapacity: 80,
+            injectionCapacity: 120,
+            constraints: ""
+          })
         ]
       );
     } else {
       // Insert new record
+      console.log(`[API] Creating new expert analysis for project ${projectId}`);
       result = await db.query(
-        `INSERT INTO expert_analysis 
+        `INSERT INTO pipeline_dashboard.expert_analysis 
          (project_id, environmental_considerations, land_availability, utilities,
           weight, infrastructure_score, interconnection, transmission_details)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -188,20 +199,26 @@ router.post('/api/expert-analysis', async (req, res) => {
           weight || 15.00,
           infrastructureScore || 0.00,
           interconnection || '2-No upgrades needed (Unsecured)',
-          JSON.stringify(transmissionDetails || {})
+          JSON.stringify(transmissionDetails || {
+            poiVoltage: "115",
+            excessCapacity: 80,
+            injectionCapacity: 120,
+            constraints: ""
+          })
         ]
       );
     }
     
-    console.log('Successfully saved expert analysis');
+    console.log('[API] Expert analysis saved successfully');
     res.json({ 
       success: true, 
       message: 'Expert analysis saved successfully',
-      data: result.rows[0]
+      data: result.rows[0],
+      savedAt: new Date().toISOString()
     });
     
   } catch (error) {
-    console.error('Save error in POST /api/expert-analysis:', error);
+    console.error('[API ERROR] POST /expert-analysis:', error);
     res.status(500).json({ 
       error: 'Failed to save expert analysis',
       details: error.message,
@@ -210,34 +227,41 @@ router.post('/api/expert-analysis', async (req, res) => {
   }
 });
 
-// GET transmission data - FIXED PATH to match frontend
-// Frontend calls: GET /api/transmission-interconnection?project=Dartmouth%20Power%20Associates%20LP
-router.get('/api/transmission-interconnection', async (req, res) => {
+// GET transmission data - FRONTEND CALLS: GET /api/transmission-interconnection?project=Dartmouth%20Power%20Associates%20LP
+router.get('/transmission-interconnection', async (req, res) => {
   try {
     const { project } = req.query;
     
-    console.log(`Fetching transmission data for project: ${project}`);
+    console.log(`[API] GET /api/transmission-interconnection for project: ${project}`);
     
     if (!project) {
-      return res.status(400).json({ error: 'project query parameter is required' });
+      return res.status(400).json({ 
+        error: 'project query parameter is required' 
+      });
     }
 
     // First find the project by name
     const projectResult = await db.query(
-      'SELECT id, project_name FROM projects WHERE project_name ILIKE $1 LIMIT 1',
+      'SELECT id, project_name FROM pipeline_dashboard.projects WHERE project_name ILIKE $1 LIMIT 1',
       [`%${project}%`]
     );
     
+    console.log(`[API] Project search results: ${projectResult.rows.length} found`);
+    
     let projectId = null;
+    let projectName = null;
     if (projectResult.rows.length > 0) {
       projectId = projectResult.rows[0].id;
+      projectName = projectResult.rows[0].project_name;
+      console.log(`[API] Found project: ${projectName} (ID: ${projectId})`);
+    } else {
+      console.log(`[API] No exact project match found for "${project}"`);
     }
     
     let query;
     let params;
     
     if (projectId) {
-      // If project found, get transmission data for this project
       query = `
         SELECT 
           site, 
@@ -249,13 +273,13 @@ router.get('/api/transmission-interconnection', async (req, res) => {
           excess_ix_capacity as "excessIXCapacity",
           project_id as "projectId",
           notes
-        FROM transmission_interconnection 
+        FROM pipeline_dashboard.transmission_interconnection 
         WHERE project_id = $1 OR project_id IS NULL
         ORDER BY site, poi_voltage
       `;
       params = [projectId];
     } else {
-      // If project not found, return generic transmission data
+      
       query = `
         SELECT 
           site, 
@@ -267,7 +291,7 @@ router.get('/api/transmission-interconnection', async (req, res) => {
           excess_ix_capacity as "excessIXCapacity",
           project_id as "projectId",
           notes
-        FROM transmission_interconnection 
+        FROM pipeline_dashboard.transmission_interconnection 
         WHERE project_id IS NULL
         ORDER BY site, poi_voltage
         LIMIT 10
@@ -275,6 +299,7 @@ router.get('/api/transmission-interconnection', async (req, res) => {
       params = [];
     }
 
+    console.log(`[API] Running query: ${query}`);
     const result = await db.query(query, params);
     
     // Format to match frontend table structure
@@ -287,14 +312,15 @@ router.get('/api/transmission-interconnection', async (req, res) => {
       constraints: row.constraints || '',
       actions: 'Remove', // Frontend expects actions column
       projectId: row.projectId,
+      projectName: projectName,
       notes: row.notes || ''
     }));
     
-    console.log(`Returning ${formattedData.length} transmission records`);
+    console.log(`[API] Returning ${formattedData.length} transmission records`);
     res.json(formattedData);
     
   } catch (error) {
-    console.error('Database error in GET /api/transmission-interconnection:', error);
+    console.error('[API ERROR] GET /transmission-interconnection:', error);
     res.status(500).json({ 
       error: 'Internal server error',
       details: error.message 
@@ -303,34 +329,38 @@ router.get('/api/transmission-interconnection', async (req, res) => {
 });
 
 // POST to save transmission data
-router.post('/api/transmission-interconnection', async (req, res) => {
+router.post('/transmission-interconnection', async (req, res) => {
   try {
+    console.log('[API] POST /api/transmission-interconnection received');
+    
     const { projectId, transmissionData } = req.body;
     
     if (!projectId || !transmissionData) {
       return res.status(400).json({ error: 'Project ID and transmission data are required' });
     }
 
+    console.log(`[API] Saving ${transmissionData.length} transmission items for project ${projectId}`);
+
     await db.query('BEGIN');
     
     // First, clear existing data for this project
     await db.query(
-      'DELETE FROM transmission_interconnection WHERE project_id = $1',
+      'DELETE FROM pipeline_dashboard.transmission_interconnection WHERE project_id = $1',
       [projectId]
     );
     
     // Insert new data
     for (const item of transmissionData) {
       await db.query(
-        `INSERT INTO transmission_interconnection 
+        `INSERT INTO pipeline_dashboard.transmission_interconnection 
          (site, poi_voltage, excess_injection_capacity, excess_withdrawal_capacity, 
           constraints, excess_ix_capacity, project_id, notes)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
-          item.site,
-          item.poiVoltage,
-          item.excessCapacity || item.excessInjectionCapacity,
-          item.withdrawalCapacity || item.excessWithdrawalCapacity,
+          item.site || '',
+          item.poiVoltage || '',
+          item.excessCapacity || item.excessInjectionCapacity || 0,
+          item.withdrawalCapacity || item.excessWithdrawalCapacity || 0,
           item.constraints || '',
           item.excessIXCapacity || true,
           projectId,
@@ -341,33 +371,41 @@ router.post('/api/transmission-interconnection', async (req, res) => {
     
     await db.query('COMMIT');
     
-    res.json({ success: true, message: 'Transmission data saved successfully' });
+    console.log('[API] Transmission data saved successfully');
+    res.json({ 
+      success: true, 
+      message: 'Transmission data saved successfully',
+      count: transmissionData.length 
+    });
     
   } catch (error) {
     await db.query('ROLLBACK');
-    console.error('Save error in POST /api/transmission-interconnection:', error);
-    res.status(500).json({ error: 'Failed to save transmission data' });
+    console.error('[API ERROR] POST /transmission-interconnection:', error);
+    res.status(500).json({ 
+      error: 'Failed to save transmission data',
+      details: error.message 
+    });
   }
 });
 
-// ============================================================================
-// HEALTH CHECK (keep this endpoint for monitoring)
-// ============================================================================
 router.get('/health', (req, res) => {
   res.json({
     status: 'healthy',
     service: 'Expert Analysis API',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    routes: [
+      'GET /expert-analysis?projectId=33',
+      'POST /expert-analysis',
+      'GET /transmission-interconnection?project=Dartmouth',
+      'POST /transmission-interconnection'
+    ]
   });
 });
 
-// ============================================================================
-// DEBUG ENDPOINTS (optional, for troubleshooting)
-// ============================================================================
-router.get('/api/debug/projects/:id', async (req, res) => {
+router.get('/debug/projects/:id', async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT id, project_name, plant_owner, iso, location FROM projects WHERE id = $1',
+      'SELECT id, project_name, plant_owner, iso, location FROM pipeline_dashboard.projects WHERE id = $1',
       [req.params.id]
     );
     
@@ -382,17 +420,19 @@ router.get('/api/debug/projects/:id', async (req, res) => {
   }
 });
 
-router.get('/api/debug/expert-analysis-table', async (req, res) => {
+router.get('/debug/check-project/:name', async (req, res) => {
   try {
-    const result = await db.query(`
-      SELECT column_name, data_type 
-      FROM information_schema.columns 
-      WHERE table_name = 'expert_analysis'
-      ORDER BY ordinal_position
-    `);
-    res.json(result.rows);
+    const result = await db.query(
+      'SELECT id, project_name FROM pipeline_dashboard.projects WHERE project_name ILIKE $1',
+      [`%${req.params.name}%`]
+    );
+    
+    res.json({
+      found: result.rows.length,
+      projects: result.rows
+    });
   } catch (error) {
-    res.json({ error: error.message, tableExists: false });
+    res.status(500).json({ error: error.message });
   }
 });
 
