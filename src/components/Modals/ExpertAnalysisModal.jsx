@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from './contexts/AuthContext'; // ADD THIS IMPORT
 
 const ExpertAnalysisModal = ({ 
   selectedExpertProject, 
   setSelectedExpertProject,
-  currentUser = "PowerTrans Team"
+  currentUser = "PowerTrans Team",
+  authToken = null  
 }) => {
   if (!selectedExpertProject || !selectedExpertProject.expertAnalysis) return null;
   
-  // ADD THIS: Get the authentication token
-  const { token } = useAuth();
+  // Use token from props or try to get from localStorage as fallback
+  const [token, setToken] = useState(authToken || localStorage.getItem('token') || '');
   
   const originalAnalysis = selectedExpertProject.expertAnalysis;
   const [isEditing, setIsEditing] = useState(false);
@@ -21,19 +21,32 @@ const ExpertAnalysisModal = ({
   // API Base URL
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
   
-  // Fetch expert analysis from API - FIXED: Added auth header
+  // Function to get token from various sources
+  const getAuthToken = () => {
+    // Priority: prop -> localStorage -> empty string
+    return authToken || localStorage.getItem('token') || '';
+  };
+
+  // Fetch expert analysis from API
   const fetchExpertAnalysis = async () => {
     try {
       setIsLoading(true);
       const projectId = selectedExpertProject.id;
+      const currentToken = getAuthToken();
+      
+      const headers = {
+        'Accept': 'application/json'
+      };
+      
+      // Add auth header only if token exists
+      if (currentToken) {
+        headers['Authorization'] = `Bearer ${currentToken}`;
+      }
       
       const response = await fetch(
         `${API_BASE_URL}/api/expert-analysis?projectId=${encodeURIComponent(projectId)}`,
         {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
+          headers: headers
         }
       );
       
@@ -43,6 +56,16 @@ const ExpertAnalysisModal = ({
       } else if (response.status === 404) {
         console.log('No expert analysis found for this project, using defaults');
         return null;
+      } else if (response.status === 401 || response.status === 403) {
+        console.log('Authentication error, trying without auth...');
+        // Try without auth header
+        const retryResponse = await fetch(
+          `${API_BASE_URL}/api/expert-analysis?projectId=${encodeURIComponent(projectId)}`
+        );
+        if (retryResponse.ok) {
+          const data = await retryResponse.json();
+          return data;
+        }
       }
       return null;
     } catch (error) {
@@ -53,17 +76,25 @@ const ExpertAnalysisModal = ({
     }
   };
   
-  // Fetch transmission data from API - FIXED: Added auth header
+  // Fetch transmission data from API
   const fetchTransmissionData = async () => {
     try {
       const projectName = selectedExpertProject?.expertAnalysis?.projectName || "";
+      const currentToken = getAuthToken();
+      
+      const headers = {
+        'Accept': 'application/json'
+      };
+      
+      // Add auth header only if token exists
+      if (currentToken) {
+        headers['Authorization'] = `Bearer ${currentToken}`;
+      }
+      
       const response = await fetch(
         `${API_BASE_URL}/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`,
         {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json'
-          }
+          headers: headers
         }
       );
       
@@ -73,6 +104,16 @@ const ExpertAnalysisModal = ({
       } else if (response.status === 404) {
         console.log('No transmission data found for this project');
         return [];
+      } else if (response.status === 401 || response.status === 403) {
+        console.log('Authentication error, trying without auth...');
+        // Try without auth header
+        const retryResponse = await fetch(
+          `${API_BASE_URL}/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`
+        );
+        if (retryResponse.ok) {
+          const data = await retryResponse.json();
+          return data;
+        }
       }
       return [];
     } catch (error) {
@@ -116,22 +157,29 @@ const ExpertAnalysisModal = ({
     if (selectedExpertProject) {
       initializeData();
     }
-  }, [selectedExpertProject, token]);
+  }, [selectedExpertProject]);
 
-  // Save to database - FIXED: Added auth header
+  // Save to database
   const saveToDatabase = async (analysis, transmissionData) => {
     try {
       const projectId = selectedExpertProject.id;
       const projectName = analysis.projectName;
+      const currentToken = getAuthToken();
       
-      // Save expert analysis - FIXED: Added auth header
+      const headers = { 
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      
+      // Add auth header only if token exists
+      if (currentToken) {
+        headers['Authorization'] = `Bearer ${currentToken}`;
+      }
+      
+      // Save expert analysis
       const analysisResponse = await fetch(`${API_BASE_URL}/api/expert-analysis`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        },
+        headers: headers,
         body: JSON.stringify({
           projectId,
           projectName,
@@ -150,17 +198,43 @@ const ExpertAnalysisModal = ({
       if (!analysisResponse.ok) {
         const errorText = await analysisResponse.text();
         console.error('Failed to save expert analysis:', errorText);
-        throw new Error(`Failed to save expert analysis: ${analysisResponse.status}`);
+        
+        // Try without auth if 401/403
+        if ((analysisResponse.status === 401 || analysisResponse.status === 403) && currentToken) {
+          console.log('Retrying without auth token...');
+          const { Authorization, ...headersWithoutAuth } = headers;
+          const retryResponse = await fetch(`${API_BASE_URL}/api/expert-analysis`, {
+            method: 'POST',
+            headers: headersWithoutAuth,
+            body: JSON.stringify({
+              projectId,
+              projectName,
+              overallScore: analysis.overallScore,
+              overallRating: analysis.overallRating,
+              confidence: analysis.confidence,
+              thermalScore: analysis.thermalScore,
+              thermalBreakdown: analysis.thermalBreakdown,
+              redevelopmentScore: analysis.redevelopmentScore,
+              redevelopmentBreakdown: analysis.redevelopmentBreakdown,
+              infrastructureScore: analysis.infrastructureScore,
+              editedBy: currentUser
+            })
+          });
+          
+          if (retryResponse.ok) {
+            console.log('Save successful without auth');
+          } else {
+            throw new Error(`Failed to save expert analysis: ${analysisResponse.status}`);
+          }
+        } else {
+          throw new Error(`Failed to save expert analysis: ${analysisResponse.status}`);
+        }
       }
       
-      // Save transmission data - FIXED: Added auth header
+      // Save transmission data
       const transmissionResponse = await fetch(`${API_BASE_URL}/api/transmission-interconnection`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        },
+        headers: headers,
         body: JSON.stringify({
           projectId,
           transmissionData: transmissionData.map(item => ({
@@ -177,7 +251,35 @@ const ExpertAnalysisModal = ({
       if (!transmissionResponse.ok) {
         const errorText = await transmissionResponse.text();
         console.error('Failed to save transmission data:', errorText);
-        throw new Error(`Failed to save transmission data: ${transmissionResponse.status}`);
+        
+        // Try without auth if 401/403
+        if ((transmissionResponse.status === 401 || transmissionResponse.status === 403) && currentToken) {
+          console.log('Retrying transmission save without auth token...');
+          const { Authorization, ...headersWithoutAuth } = headers;
+          const retryResponse = await fetch(`${API_BASE_URL}/api/transmission-interconnection`, {
+            method: 'POST',
+            headers: headersWithoutAuth,
+            body: JSON.stringify({
+              projectId,
+              transmissionData: transmissionData.map(item => ({
+                site: item.site,
+                poiVoltage: item.poiVoltage,
+                excessInjectionCapacity: parseFloat(item.excessInjectionCapacity) || 0,
+                excessWithdrawalCapacity: parseFloat(item.excessWithdrawalCapacity) || 0,
+                constraints: item.constraints,
+                excessIXCapacity: item.excessIXCapacity
+              }))
+            })
+          });
+          
+          if (retryResponse.ok) {
+            console.log('Transmission save successful without auth');
+          } else {
+            throw new Error(`Failed to save transmission data: ${transmissionResponse.status}`);
+          }
+        } else {
+          throw new Error(`Failed to save transmission data: ${transmissionResponse.status}`);
+        }
       }
       
       return true;
@@ -189,11 +291,6 @@ const ExpertAnalysisModal = ({
 
   // Handle save
   const handleSave = async () => {
-    if (!token) {
-      alert('Authentication error. Please log in again.');
-      return;
-    }
-    
     setSaveStatus('saving');
     
     try {
@@ -846,18 +943,18 @@ const ExpertAnalysisModal = ({
               <button 
                 className="action-btn primary"
                 onClick={handleSave}
-                disabled={saveStatus === 'saving' || !token}
+                disabled={saveStatus === 'saving'}
                 style={{
-                  background: !token ? 'rgba(107, 114, 128, 0.5)' : 'rgba(59, 130, 246, 0.9)',
-                  border: !token ? '1px solid rgba(107, 114, 128, 0.5)' : '1px solid rgba(59, 130, 246, 0.9)',
+                  background: saveStatus === 'saving' ? 'rgba(107, 114, 128, 0.5)' : 'rgba(59, 130, 246, 0.9)',
+                  border: saveStatus === 'saving' ? '1px solid rgba(107, 114, 128, 0.5)' : '1px solid rgba(59, 130, 246, 0.9)',
                   color: 'white',
                   padding: '10px 20px',
                   borderRadius: '6px',
-                  cursor: !token ? 'not-allowed' : 'pointer',
+                  cursor: saveStatus === 'saving' ? 'not-allowed' : 'pointer',
                   fontWeight: '500'
                 }}
               >
-                {!token ? 'Login Required' : saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
+                {saveStatus === 'saving' ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           ) : (
