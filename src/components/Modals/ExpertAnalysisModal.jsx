@@ -4,20 +4,73 @@ const ExpertAnalysisModal = ({
   selectedExpertProject, 
   setSelectedExpertProject,
   currentUser = "PowerTrans Team",
-  authToken = null  
+  authToken = null,
+  fetchExpertAnalysis,
+  saveExpertAnalysis,
+  fetchTransmissionInterconnection,
+  saveTransmissionInterconnection
 }) => {
-  if (!selectedExpertProject || !selectedExpertProject.expertAnalysis) return null;
+  // Remove the early return condition or make it more flexible
+  if (!selectedExpertProject) return null;
+  
+  // Check if we have expert analysis data
+  const hasExpertAnalysis = selectedExpertProject.expertAnalysis || 
+                           selectedExpertProject.detailData?.expertAnalysis ||
+                           (selectedExpertProject.detailData && 
+                            (selectedExpertProject.detailData["Overall Project Score"] || 
+                             selectedExpertProject.detailData["Thermal Operating Score"] || 
+                             selectedExpertProject.detailData["Redevelopment Score"]));
+  
+  if (!hasExpertAnalysis) {
+    console.log('No expert analysis data available for this project');
+    // You could show a loading state or create default analysis here
+    // For now, we'll show the modal with default data
+  }
   
   // Use token from props or try to get from localStorage as fallback
   const [token, setToken] = useState(authToken || localStorage.getItem('token') || '');
   
-  const originalAnalysis = selectedExpertProject.expertAnalysis;
+  const originalAnalysis = selectedExpertProject.expertAnalysis || generateDefaultAnalysis(selectedExpertProject);
   const [isEditing, setIsEditing] = useState(false);
   const [editedAnalysis, setEditedAnalysis] = useState(null);
   const [saveStatus, setSaveStatus] = useState(null);
   const [editedTransmissionData, setEditedTransmissionData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [analysisData, setAnalysisData] = useState(originalAnalysis);
   
+  // Generate default analysis if none exists
+  function generateDefaultAnalysis(project) {
+    const overallScore = parseFloat(project.detailData?.["Overall Project Score"] || project.overall || "0").toFixed(1);
+    const thermalScore = parseFloat(project.detailData?.["Thermal Operating Score"] || project.thermal || "0").toFixed(1);
+    const redevelopmentScore = parseFloat(project.detailData?.["Redevelopment Score"] || project.redev || "0").toFixed(1);
+    
+    return {
+      overallScore: overallScore,
+      overallRating: overallScore >= 4.5 ? "Strong" : 
+                    overallScore >= 3.0 ? "Moderate" : "Weak",
+      ratingClass: overallScore >= 4.5 ? "strong" : 
+                  overallScore >= 3.0 ? "moderate" : "weak",
+      thermalScore: thermalScore,
+      redevelopmentScore: redevelopmentScore,
+      projectName: project.detailData?.["Project Name"] || 
+                  project.detailData?.["Project Codename"] || 
+                  project.asset || 
+                  `Project ${project.id || ""}`,
+      projectId: project.id || project.detailData?.id || "N/A",
+      thermalBreakdown: {
+        thermal_optimization: { score: 1 },
+        environmental: { score: 2 }
+      },
+      redevelopmentBreakdown: {
+        redev_market: { score: 2 },
+        land_availability: { score: 2 },
+        utilities: { score: 2 },
+        interconnection: { score: 2 }
+      },
+      infrastructureScore: 2.0
+    };
+  }
+
   // API Base URL
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
   
@@ -27,19 +80,33 @@ const ExpertAnalysisModal = ({
     return authToken || localStorage.getItem('token') || '';
   };
 
-  // Fetch expert analysis from API
-  const fetchExpertAnalysis = async () => {
+  // Fetch expert analysis from API - using provided function or our own
+  const fetchExpertAnalysisData = async () => {
     try {
       setIsLoading(true);
       const projectId = selectedExpertProject.id;
       const currentToken = getAuthToken();
       
+      // Use provided function if available
+      if (fetchExpertAnalysis && typeof fetchExpertAnalysis === 'function') {
+        try {
+          const data = await fetchExpertAnalysis(projectId);
+          if (data) {
+            console.log('Expert analysis fetched via provided function:', data);
+            return data;
+          }
+        } catch (error) {
+          console.warn('Provided fetch function failed, falling back:', error);
+        }
+      }
+      
+      // Fallback to direct API call
       const headers = {
         'Accept': 'application/json'
       };
       
       // Add auth header only if token exists
-      if (currentToken) {
+      if (currentToken && currentToken.trim() !== '') {
         headers['Authorization'] = `Bearer ${currentToken}`;
       }
       
@@ -76,18 +143,35 @@ const ExpertAnalysisModal = ({
     }
   };
   
-  // Fetch transmission data from API
+  // Fetch transmission data from API - using provided function or our own
   const fetchTransmissionData = async () => {
     try {
-      const projectName = selectedExpertProject?.expertAnalysis?.projectName || "";
+      const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
+                         selectedExpertProject.detailData?.["Project Name"] ||
+                         selectedExpertProject.asset ||
+                         "";
       const currentToken = getAuthToken();
       
+      // Use provided function if available
+      if (fetchTransmissionInterconnection && typeof fetchTransmissionInterconnection === 'function') {
+        try {
+          const data = await fetchTransmissionInterconnection(projectName);
+          if (data && Array.isArray(data)) {
+            console.log('Transmission data fetched via provided function:', data);
+            return data;
+          }
+        } catch (error) {
+          console.warn('Provided transmission fetch function failed, falling back:', error);
+        }
+      }
+      
+      // Fallback to direct API call
       const headers = {
         'Accept': 'application/json'
       };
       
       // Add auth header only if token exists
-      if (currentToken) {
+      if (currentToken && currentToken.trim() !== '') {
         headers['Authorization'] = `Bearer ${currentToken}`;
       }
       
@@ -125,32 +209,29 @@ const ExpertAnalysisModal = ({
   // Initialize all data
   useEffect(() => {
     const initializeData = async () => {
-      const dbAnalysis = await fetchExpertAnalysis();
+      const dbAnalysis = await fetchExpertAnalysisData();
       const dbTransmission = await fetchTransmissionData();
       
+      let initialAnalysis = analysisData;
+      
       if (dbAnalysis) {
-        setEditedAnalysis({
-          ...originalAnalysis,
+        initialAnalysis = {
+          ...initialAnalysis,
           ...dbAnalysis,
-          thermalBreakdown: dbAnalysis.thermalBreakdown || originalAnalysis.thermalBreakdown || {},
-          redevelopmentBreakdown: dbAnalysis.redevelopmentBreakdown || originalAnalysis.redevelopmentBreakdown || {}
-        });
-      } else {
-        setEditedAnalysis({
-          ...originalAnalysis,
-          thermalBreakdown: originalAnalysis.thermalBreakdown || {
+          thermalBreakdown: dbAnalysis.thermalBreakdown || initialAnalysis.thermalBreakdown || {
             thermal_optimization: { score: 1 },
             environmental: { score: 2 }
           },
-          redevelopmentBreakdown: originalAnalysis.redevelopmentBreakdown || {
+          redevelopmentBreakdown: dbAnalysis.redevelopmentBreakdown || initialAnalysis.redevelopmentBreakdown || {
             redev_market: { score: 2 },
             land_availability: { score: 2 },
             utilities: { score: 2 },
             interconnection: { score: 2 }
           }
-        });
+        };
       }
       
+      setEditedAnalysis(initialAnalysis);
       setEditedTransmissionData(dbTransmission || []);
     };
     
@@ -166,118 +247,110 @@ const ExpertAnalysisModal = ({
       const projectName = analysis.projectName;
       const currentToken = getAuthToken();
       
+      // Use provided save functions if available
+      let analysisSaved = false;
+      let transmissionSaved = false;
+      
+      // Save expert analysis using provided function
+      if (saveExpertAnalysis && typeof saveExpertAnalysis === 'function') {
+        try {
+          const analysisDataToSave = {
+            projectId,
+            projectName,
+            overallScore: analysis.overallScore,
+            overallRating: analysis.overallRating,
+            confidence: analysis.confidence || 75,
+            thermalScore: analysis.thermalScore,
+            thermalBreakdown: analysis.thermalBreakdown,
+            redevelopmentScore: analysis.redevelopmentScore,
+            redevelopmentBreakdown: analysis.redevelopmentBreakdown,
+            infrastructureScore: analysis.infrastructureScore || 2.0,
+            editedBy: currentUser
+          };
+          
+          await saveExpertAnalysis(analysisDataToSave);
+          analysisSaved = true;
+          console.log('Expert analysis saved via provided function');
+        } catch (error) {
+          console.error('Failed to save expert analysis via provided function:', error);
+        }
+      }
+      
+      // Save transmission data using provided function
+      if (saveTransmissionInterconnection && typeof saveTransmissionInterconnection === 'function') {
+        try {
+          await saveTransmissionInterconnection(projectId, transmissionData);
+          transmissionSaved = true;
+          console.log('Transmission data saved via provided function');
+        } catch (error) {
+          console.error('Failed to save transmission data via provided function:', error);
+        }
+      }
+      
+      // If provided functions succeeded, return true
+      if (analysisSaved && transmissionSaved) {
+        return true;
+      }
+      
+      // Fallback to direct API calls if provided functions failed or weren't provided
       const headers = { 
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       };
       
       // Add auth header only if token exists
-      if (currentToken) {
+      if (currentToken && currentToken.trim() !== '') {
         headers['Authorization'] = `Bearer ${currentToken}`;
       }
       
-      // Save expert analysis
-      const analysisResponse = await fetch(`${API_BASE_URL}/api/expert-analysis`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-          projectId,
-          projectName,
-          overallScore: analysis.overallScore,
-          overallRating: analysis.overallRating,
-          confidence: analysis.confidence,
-          thermalScore: analysis.thermalScore,
-          thermalBreakdown: analysis.thermalBreakdown,
-          redevelopmentScore: analysis.redevelopmentScore,
-          redevelopmentBreakdown: analysis.redevelopmentBreakdown,
-          infrastructureScore: analysis.infrastructureScore,
-          editedBy: currentUser
-        })
-      });
-      
-      if (!analysisResponse.ok) {
-        const errorText = await analysisResponse.text();
-        console.error('Failed to save expert analysis:', errorText);
+      // Save expert analysis directly
+      if (!analysisSaved) {
+        const analysisResponse = await fetch(`${API_BASE_URL}/api/expert-analysis`, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            projectId,
+            projectName,
+            overallScore: analysis.overallScore,
+            overallRating: analysis.overallRating,
+            confidence: analysis.confidence || 75,
+            thermalScore: analysis.thermalScore,
+            thermalBreakdown: analysis.thermalBreakdown,
+            redevelopmentScore: analysis.redevelopmentScore,
+            redevelopmentBreakdown: analysis.redevelopmentBreakdown,
+            infrastructureScore: analysis.infrastructureScore || 2.0,
+            editedBy: currentUser
+          })
+        });
         
-        // Try without auth if 401/403
-        if ((analysisResponse.status === 401 || analysisResponse.status === 403) && currentToken) {
-          console.log('Retrying without auth token...');
-          const { Authorization, ...headersWithoutAuth } = headers;
-          const retryResponse = await fetch(`${API_BASE_URL}/api/expert-analysis`, {
-            method: 'POST',
-            headers: headersWithoutAuth,
-            body: JSON.stringify({
-              projectId,
-              projectName,
-              overallScore: analysis.overallScore,
-              overallRating: analysis.overallRating,
-              confidence: analysis.confidence,
-              thermalScore: analysis.thermalScore,
-              thermalBreakdown: analysis.thermalBreakdown,
-              redevelopmentScore: analysis.redevelopmentScore,
-              redevelopmentBreakdown: analysis.redevelopmentBreakdown,
-              infrastructureScore: analysis.infrastructureScore,
-              editedBy: currentUser
-            })
-          });
-          
-          if (retryResponse.ok) {
-            console.log('Save successful without auth');
-          } else {
-            throw new Error(`Failed to save expert analysis: ${analysisResponse.status}`);
-          }
-        } else {
+        if (!analysisResponse.ok) {
+          const errorText = await analysisResponse.text();
+          console.error('Failed to save expert analysis:', errorText);
           throw new Error(`Failed to save expert analysis: ${analysisResponse.status}`);
         }
       }
       
-      // Save transmission data
-      const transmissionResponse = await fetch(`${API_BASE_URL}/api/transmission-interconnection`, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify({
-          projectId,
-          transmissionData: transmissionData.map(item => ({
-            site: item.site,
-            poiVoltage: item.poiVoltage,
-            excessInjectionCapacity: parseFloat(item.excessInjectionCapacity) || 0,
-            excessWithdrawalCapacity: parseFloat(item.excessWithdrawalCapacity) || 0,
-            constraints: item.constraints,
-            excessIXCapacity: item.excessIXCapacity
-          }))
-        })
-      });
-      
-      if (!transmissionResponse.ok) {
-        const errorText = await transmissionResponse.text();
-        console.error('Failed to save transmission data:', errorText);
+      // Save transmission data directly
+      if (!transmissionSaved) {
+        const transmissionResponse = await fetch(`${API_BASE_URL}/api/transmission-interconnection`, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            projectId,
+            transmissionData: transmissionData.map(item => ({
+              site: item.site || projectName,
+              poiVoltage: item.poiVoltage,
+              excessInjectionCapacity: parseFloat(item.excessInjectionCapacity) || 0,
+              excessWithdrawalCapacity: parseFloat(item.excessWithdrawalCapacity) || 0,
+              constraints: item.constraints || "-",
+              excessIXCapacity: item.excessIXCapacity || true
+            }))
+          })
+        });
         
-        // Try without auth if 401/403
-        if ((transmissionResponse.status === 401 || transmissionResponse.status === 403) && currentToken) {
-          console.log('Retrying transmission save without auth token...');
-          const { Authorization, ...headersWithoutAuth } = headers;
-          const retryResponse = await fetch(`${API_BASE_URL}/api/transmission-interconnection`, {
-            method: 'POST',
-            headers: headersWithoutAuth,
-            body: JSON.stringify({
-              projectId,
-              transmissionData: transmissionData.map(item => ({
-                site: item.site,
-                poiVoltage: item.poiVoltage,
-                excessInjectionCapacity: parseFloat(item.excessInjectionCapacity) || 0,
-                excessWithdrawalCapacity: parseFloat(item.excessWithdrawalCapacity) || 0,
-                constraints: item.constraints,
-                excessIXCapacity: item.excessIXCapacity
-              }))
-            })
-          });
-          
-          if (retryResponse.ok) {
-            console.log('Transmission save successful without auth');
-          } else {
-            throw new Error(`Failed to save transmission data: ${transmissionResponse.status}`);
-          }
-        } else {
+        if (!transmissionResponse.ok) {
+          const errorText = await transmissionResponse.text();
+          console.error('Failed to save transmission data:', errorText);
           throw new Error(`Failed to save transmission data: ${transmissionResponse.status}`);
         }
       }
@@ -302,23 +375,30 @@ const ExpertAnalysisModal = ({
       
       if (success) {
         setEditedAnalysis(updatedAnalysis);
+        setAnalysisData(updatedAnalysis);
         setIsEditing(false);
         setSaveStatus('success');
         
-        // Refresh data from server
-        const freshAnalysis = await fetchExpertAnalysis();
-        const freshTransmission = await fetchTransmissionData();
-        
-        if (freshAnalysis) {
-          setEditedAnalysis(prev => ({
-            ...prev,
-            ...freshAnalysis
-          }));
-        }
-        
-        if (freshTransmission) {
-          setEditedTransmissionData(freshTransmission);
-        }
+        // Refresh data from server after a short delay
+        setTimeout(async () => {
+          const freshAnalysis = await fetchExpertAnalysisData();
+          const freshTransmission = await fetchTransmissionData();
+          
+          if (freshAnalysis) {
+            setEditedAnalysis(prev => ({
+              ...prev,
+              ...freshAnalysis
+            }));
+            setAnalysisData(prev => ({
+              ...prev,
+              ...freshAnalysis
+            }));
+          }
+          
+          if (freshTransmission) {
+            setEditedTransmissionData(freshTransmission);
+          }
+        }, 500);
         
         setTimeout(() => {
           setSaveStatus(null);
@@ -450,7 +530,10 @@ const ExpertAnalysisModal = ({
     if (!isEditing) return;
     e.preventDefault();
     
-    const projectName = selectedExpertProject?.expertAnalysis?.projectName || "";
+    const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
+                       selectedExpertProject.detailData?.["Project Name"] ||
+                       selectedExpertProject.asset ||
+                       "";
     
     setEditedTransmissionData(prev => [
       ...prev,
@@ -476,10 +559,13 @@ const ExpertAnalysisModal = ({
     });
   };
 
+  // Use editedAnalysis if available, otherwise use analysisData
+  const currentAnalysis = editedAnalysis || analysisData;
+  
   // Calculate scores
-  const thermalScore = parseFloat(editedAnalysis?.thermalScore) || 0;
-  const redevScore = parseFloat(editedAnalysis?.redevelopmentScore) || 0;
-  const overallScore = parseFloat(editedAnalysis?.overallScore) || 0;
+  const thermalScore = parseFloat(currentAnalysis?.thermalScore) || 0;
+  const redevScore = parseFloat(currentAnalysis?.redevelopmentScore) || 0;
+  const overallScore = parseFloat(currentAnalysis?.overallScore) || 0;
   
   if (isLoading) {
     return (
@@ -497,7 +583,7 @@ const ExpertAnalysisModal = ({
         {/* Header */}
         <div className="modal-header">
           <div className="header-top">
-            <h2>{editedAnalysis?.projectName || 'Project'} - Expert Analysis</h2>
+            <h2>{currentAnalysis?.projectName || 'Project'} - Expert Analysis</h2>
             <button className="close-btn" onClick={() => setSelectedExpertProject(null)}>×</button>
           </div>
           <p className="subtitle">AI-powered assessment of all pipeline projects</p>
@@ -537,8 +623,8 @@ const ExpertAnalysisModal = ({
                 {overallScore}/6.0
               </div>
               <div className="score-percent">{Math.round((overallScore / 6) * 100)}%</div>
-              <div className="score-rating" style={{ color: getRatingColor(editedAnalysis?.overallRating) }}>
-                {editedAnalysis?.overallRating || 'N/A'}
+              <div className="score-rating" style={{ color: getRatingColor(currentAnalysis?.overallRating) }}>
+                {currentAnalysis?.overallRating || 'N/A'}
               </div>
             </div>
             
@@ -587,7 +673,7 @@ const ExpertAnalysisModal = ({
                     {isEditing ? (
                       <select 
                         className="score-select"
-                        value={editedAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
+                        value={currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
                         onChange={(e) => handleScoreChange('thermal', 'thermal_optimization', e.target.value)}
                       >
                         <option value="1">1 - No identifiable value add</option>
@@ -595,13 +681,13 @@ const ExpertAnalysisModal = ({
                       </select>
                     ) : (
                       <div className="score-display">
-                        Score: {editedAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
+                        Score: {currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
                       </div>
                     )}
                     <div className="field-details">
                       <span className="weight">Weight: 5%</span>
                       <span className="contribution">
-                        Contribution: {((editedAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1) * 0.05).toFixed(2)}
+                        Contribution: {((currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1) * 0.05).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -617,7 +703,7 @@ const ExpertAnalysisModal = ({
                     {isEditing ? (
                       <select 
                         className="score-select"
-                        value={editedAnalysis?.thermalBreakdown?.environmental?.score || 2}
+                        value={currentAnalysis?.thermalBreakdown?.environmental?.score || 2}
                         onChange={(e) => handleScoreChange('thermal', 'environmental', e.target.value)}
                       >
                         <option value="0">0 - Known and not mitigable</option>
@@ -627,7 +713,7 @@ const ExpertAnalysisModal = ({
                       </select>
                     ) : (
                       <div className="score-display">
-                        Score: {editedAnalysis?.thermalBreakdown?.environmental?.score || 2}
+                        Score: {currentAnalysis?.thermalBreakdown?.environmental?.score || 2}
                       </div>
                     )}
                     <div className="field-details">
@@ -657,7 +743,7 @@ const ExpertAnalysisModal = ({
                     {isEditing ? (
                       <select 
                         className="score-select"
-                        value={editedAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
+                        value={currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
                         onChange={(e) => handleScoreChange('redevelopment', 'redev_market', e.target.value)}
                       >
                         <option value="0">0 - Challenging</option>
@@ -667,13 +753,13 @@ const ExpertAnalysisModal = ({
                       </select>
                     ) : (
                       <div className="score-display">
-                        Score: {editedAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
+                        Score: {currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
                       </div>
                     )}
                     <div className="field-details">
                       <span className="weight">Weight: 40%</span>
                       <span className="contribution">
-                        Contribution: {((editedAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2) * 0.40).toFixed(2)}
+                        Contribution: {((currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2) * 0.40).toFixed(2)}
                       </span>
                     </div>
                   </div>
@@ -688,7 +774,7 @@ const ExpertAnalysisModal = ({
                       {isEditing ? (
                         <select 
                           className="score-select"
-                          value={editedAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
+                          value={currentAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
                           onChange={(e) => handleScoreChange('redevelopment', 'land_availability', e.target.value)}
                         >
                           <option value="0">0 - No land available</option>
@@ -698,7 +784,7 @@ const ExpertAnalysisModal = ({
                         </select>
                       ) : (
                         <div className="score-display">
-                          Score: {editedAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
+                          Score: {currentAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
                         </div>
                       )}
                     </div>
@@ -707,7 +793,7 @@ const ExpertAnalysisModal = ({
                       {isEditing ? (
                         <select 
                           className="score-select"
-                          value={editedAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
+                          value={currentAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
                           onChange={(e) => handleScoreChange('redevelopment', 'utilities', e.target.value)}
                         >
                           <option value="-1">-1 - N/A - BESS and Solar</option>
@@ -718,15 +804,15 @@ const ExpertAnalysisModal = ({
                         </select>
                       ) : (
                         <div className="score-display">
-                          Score: {editedAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
+                          Score: {currentAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
                         </div>
                       )}
                     </div>
                   </div>
                   <div className="infra-total">
                     <span>Infrastructure Score:</span>
-                    <span className={`infra-value ${getScoreColorClass(editedAnalysis?.infrastructureScore || 0)}`}>
-                      {(editedAnalysis?.infrastructureScore || 0).toFixed(2)}/3.0
+                    <span className={`infra-value ${getScoreColorClass(currentAnalysis?.infrastructureScore || 0)}`}>
+                      {(currentAnalysis?.infrastructureScore || 0).toFixed(2)}/3.0
                     </span>
                   </div>
                 </div>
@@ -741,7 +827,7 @@ const ExpertAnalysisModal = ({
                     {isEditing ? (
                       <select 
                         className="score-select"
-                        value={editedAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                        value={currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
                         onChange={(e) => handleScoreChange('redevelopment', 'interconnection', e.target.value)}
                       >
                         <option value="0">0 - Major upgrades needed</option>
@@ -751,7 +837,7 @@ const ExpertAnalysisModal = ({
                       </select>
                     ) : (
                       <div className="score-display">
-                        Score: {editedAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                        Score: {currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
                       </div>
                     )}
                     <div className="field-details">
