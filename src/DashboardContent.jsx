@@ -156,6 +156,161 @@ function DashboardContent() {
   // Auth context
   const { token } = useAuth();
 
+  // ============================================================================
+  // NEW: ADDED MISSING API CALL FUNCTIONS
+  // ============================================================================
+
+  // Fetch expert analysis for a project
+  const fetchExpertAnalysis = async (projectId) => {
+    try {
+      console.log(`[Frontend] Fetching expert analysis for project ID: ${projectId}`);
+      
+      const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/expert-analysis?projectId=${projectId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch expert analysis: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Frontend] Expert analysis data received:', data);
+      return data;
+    } catch (error) {
+      console.error('[Frontend] Error fetching expert analysis:', error);
+      return null;
+    }
+  };
+
+  // Save expert analysis
+  const saveExpertAnalysis = async (analysisData) => {
+    try {
+      console.log('[Frontend] Saving expert analysis:', analysisData);
+      
+      const response = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/expert-analysis', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(analysisData)
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Frontend] Save failed:', errorText);
+        throw new Error(`Failed to save expert analysis: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Frontend] Expert analysis saved successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('[Frontend] Error saving expert analysis:', error);
+      throw error;
+    }
+  };
+
+  // Fetch transmission interconnection data
+  const fetchTransmissionInterconnection = async (projectName) => {
+    try {
+      console.log(`[Frontend] Fetching transmission data for project: ${projectName}`);
+      
+      const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        console.log(`[Frontend] Transmission data not found for ${projectName}, status: ${response.status}`);
+        return [];
+      }
+      
+      const data = await response.json();
+      console.log('[Frontend] Transmission data received:', data);
+      return data;
+    } catch (error) {
+      console.error('[Frontend] Error fetching transmission data:', error);
+      return [];
+    }
+  };
+
+  // Save transmission interconnection data
+  const saveTransmissionInterconnection = async (projectId, transmissionData) => {
+    try {
+      console.log(`[Frontend] Saving transmission data for project ${projectId}:`, transmissionData);
+      
+      const response = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/transmission-interconnection', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          projectId,
+          transmissionData
+        })
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[Frontend] Save transmission failed:', errorText);
+        throw new Error(`Failed to save transmission data: ${response.status} - ${errorText}`);
+      }
+      
+      const data = await response.json();
+      console.log('[Frontend] Transmission data saved successfully:', data);
+      return data;
+    } catch (error) {
+      console.error('[Frontend] Error saving transmission data:', error);
+      throw error;
+    }
+  };
+
+  // Test API endpoints
+  const testEndpoints = async () => {
+    console.log('[Frontend] Testing API endpoints...');
+    
+    try {
+      // Test expert analysis GET
+      console.log('[Frontend] Testing GET /api/expert-analysis?projectId=33');
+      const expertResponse = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/expert-analysis?projectId=33', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      console.log('[Frontend] Expert analysis GET status:', expertResponse.status);
+      if (expertResponse.ok) {
+        const expertData = await expertResponse.json();
+        console.log('[Frontend] Expert analysis data:', expertData);
+      }
+      
+      // Test transmission GET
+      console.log('[Frontend] Testing GET /api/transmission-interconnection?project=Dartmouth');
+      const transmissionResponse = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/transmission-interconnection?project=Dartmouth', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      console.log('[Frontend] Transmission GET status:', transmissionResponse.status);
+      if (transmissionResponse.ok) {
+        const transmissionData = await transmissionResponse.json();
+        console.log('[Frontend] Transmission data:', transmissionData);
+      }
+      
+      console.log('[Frontend] API endpoint tests completed');
+    } catch (error) {
+      console.error('[Frontend] Test failed:', error);
+    }
+  };
+
+  // ============================================================================
+  // END OF NEW API CALL FUNCTIONS
+  // ============================================================================
+
   // Extract dropdown options for use in components
   const {
     // From lookup tables:
@@ -1520,6 +1675,11 @@ const handleUpdateProject = async (updatedData) => {
       handleEditProject: typeof handleEditProject,
       handleDeleteProject: typeof handleDeleteProject
     });
+    
+    // NEW: Test API endpoints on mount
+    console.log('[Frontend] DashboardContent mounted, testing API endpoints...');
+    // Uncomment to test endpoints automatically
+    // testEndpoints();
   }, []);
 
   // Initial data loading
@@ -2129,6 +2289,11 @@ const handleUpdateProject = async (updatedData) => {
             setSelectedExpertProject={setSelectedExpertProject}
             setSelectedProject={setSelectedProject}
             setShowProjectDetail={setShowProjectDetail}
+            // NEW: Pass the API functions to the modal
+            fetchExpertAnalysis={fetchExpertAnalysis}
+            saveExpertAnalysis={saveExpertAnalysis}
+            fetchTransmissionInterconnection={fetchTransmissionInterconnection}
+            saveTransmissionInterconnection={saveTransmissionInterconnection}
           />
         )}
       </div>
