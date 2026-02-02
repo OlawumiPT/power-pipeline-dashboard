@@ -1511,7 +1511,6 @@ app.get('/api/debug/routes', (req, res) => {
   });
 });
 
-// ========== ERROR HANDLING ==========
 
 // Global error handler
 app.use((err, req, res, next) => {
