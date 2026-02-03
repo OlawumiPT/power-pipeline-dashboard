@@ -1,91 +1,35 @@
 import React, { useState, useEffect, useRef } from 'react';
 
-const hasEdits = (projectId) => {
-  try {
-    const allEdits = JSON.parse(localStorage.getItem('projectEdits') || '{}');
-    return !!allEdits[projectId];
-  } catch {
-    return false;
-  }
-};
-
-// Helper to get capacity info in a clean format
-const getCapacityInfo = (project) => {
-  const legacyMW = project["Legacy Nameplate Capacity (MW)"] || project.mw || "N/A";
-  const redevMW = project["Redevelopment Base Case"] || "";
-  const tech = project["Tech"] || project.tech || "";
-  
-  let capacityText = `${legacyMW} MW`;
-  if (tech) capacityText += ` ${tech}`;
-  if (redevMW) capacityText += ` → ${redevMW}`;
-  
-  return capacityText;
-};
-
-// Helper to get market info
-const getMarketInfo = (project) => {
-  const iso = project["ISO"] || project.mkt || "";
-  const zone = project["Zone/Submarket"] || project.zone || "";
-  
-  if (!iso) return "";
-  return zone ? `${iso} ${zone}` : iso;
-};
-
-// Helper to get rating text (Strong/Moderate/Weak)
-const getRatingText = (ratingClass) => {
-  switch(ratingClass) {
-    case 'strong': return 'Strong';
-    case 'moderate': return 'Moderate';
-    case 'weak': return 'Weak';
-    default: return 'Not Rated';
-  }
-};
-
-// Helper to get rating color
-const getRatingColor = (rating) => {
-  switch(rating?.toLowerCase()) {
-    case 'strong': return '#10b981';
-    case 'moderate': return '#f59e0b';
-    case 'weak': return '#ef4444';
-    default: return '#6b7280';
-  }
-};
-
 const ExpertScoresPanel = ({ 
   showExpertScores, 
   setShowExpertScores, 
   getAllExpertAnalyses: getAnalyses,
   expertAnalysisFilter,
   setExpertAnalysisFilter,
-  setSelectedExpertProject,
-  refreshExpertData = null
+  setSelectedExpertProject
 }) => {
   
   if (!showExpertScores) return null;
 
   const [localExpertProjects, setLocalExpertProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [lastUpdateTime, setLastUpdateTime] = useState(null);
-  const panelOpenedTime = useRef(Date.now());
-  const hasRefreshedOnOpen = useRef(false);
+  const [forceRefresh, setForceRefresh] = useState(0);
 
-  // SIMPLE FIX: ALWAYS refresh when panel opens
+  // CRITICAL: Always refresh when panel opens
   useEffect(() => {
-    if (showExpertScores && !hasRefreshedOnOpen.current) {
+    if (showExpertScores) {
       console.log('🔄 ExpertScoresPanel: Panel opened, FORCING refresh');
       setIsLoading(true);
       
-      // Clear old data
+      // Clear old data first
       setLocalExpertProjects([]);
       
-      // Get fresh data
+      // Get fresh data with a small delay
       setTimeout(() => {
         try {
           const projects = getAnalyses();
-          console.log('✅ Loaded', projects.length, 'fresh projects');
+          console.log('✅ Loaded fresh projects:', projects.length);
           setLocalExpertProjects(projects);
-          setLastUpdateTime(new Date());
-          hasRefreshedOnOpen.current = true;
         } catch (error) {
           console.error('Error loading projects:', error);
         } finally {
@@ -93,56 +37,39 @@ const ExpertScoresPanel = ({
         }
       }, 300);
     }
-  }, [showExpertScores, getAnalyses]);
-
-  // Reset when panel closes
-  useEffect(() => {
-    if (!showExpertScores) {
-      hasRefreshedOnOpen.current = false;
-    }
-  }, [showExpertScores]);
+  }, [showExpertScores, getAnalyses, forceRefresh]);
 
   // Listen for save events
   useEffect(() => {
     const handleSaveEvent = () => {
-      console.log('💾 Save event received, refreshing...');
-      setIsLoading(true);
-      setTimeout(() => {
-        const projects = getAnalyses();
-        setLocalExpertProjects(projects);
-        setLastUpdateTime(new Date());
-        setIsLoading(false);
-      }, 500);
+      console.log('💾 Save event received, incrementing forceRefresh');
+      // Force a refresh by incrementing the counter
+      setForceRefresh(prev => prev + 1);
     };
     
     window.addEventListener('expertAnalysisSaved', handleSaveEvent);
-    return () => window.removeEventListener('expertAnalysisSaved', handleSaveEvent);
-  }, [getAnalyses]);
+    
+    return () => {
+      window.removeEventListener('expertAnalysisSaved', handleSaveEvent);
+    };
+  }, []);
 
   const handleProjectSelect = (project) => {
     console.log('👉 Selecting project:', project.id);
     
-    // Add a simple callback for when modal saves
+    // Add callback for when modal saves
     const enhancedProject = {
       ...project,
       onSaveSuccess: () => {
         console.log('✅ Modal saved, triggering refresh');
+        // Force refresh by incrementing counter
+        setForceRefresh(prev => prev + 1);
+        // Also dispatch event for other components
         window.dispatchEvent(new Event('expertAnalysisSaved'));
       }
     };
     
     setSelectedExpertProject(enhancedProject);
-  };
-
-  const handleManualRefresh = () => {
-    console.log('🔄 Manual refresh');
-    setIsLoading(true);
-    setTimeout(() => {
-      const projects = getAnalyses();
-      setLocalExpertProjects(projects);
-      setLastUpdateTime(new Date());
-      setIsLoading(false);
-    }, 300);
   };
 
   // Filter projects
@@ -175,15 +102,10 @@ const ExpertScoresPanel = ({
             <p className="expert-scores-subtitle dark-subtitle">
               AI-powered assessment of all pipeline projects
             </p>
-            {lastUpdateTime && (
-              <p className="last-updated dark-subtitle" style={{ fontSize: '11px', color: '#a0aec0', marginTop: '4px' }}>
-                Data loaded: {lastUpdateTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-              </p>
-            )}
           </div>
           <div className="header-right">
             <button 
-              onClick={handleManualRefresh}
+              onClick={() => setForceRefresh(prev => prev + 1)}
               disabled={isLoading}
               style={{
                 background: isLoading ? '#4a5568' : '#2d3748',
@@ -191,12 +113,12 @@ const ExpertScoresPanel = ({
                 padding: '6px 12px',
                 borderRadius: '4px',
                 border: '1px solid #4a5568',
-                cursor: isLoading ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 fontSize: '12px',
                 marginRight: '10px'
               }}
             >
-              {isLoading ? 'Refreshing...' : '🔄 Refresh'}
+              {isLoading ? 'Loading...' : '🔄 Refresh'}
             </button>
             <button className="modal-close dark-close" onClick={() => setShowExpertScores(false)}>×</button>
           </div>
@@ -209,6 +131,11 @@ const ExpertScoresPanel = ({
               <h3 className="expert-scores-title dark-section-title">Project Assessments</h3>
               <p className="expert-scores-subtitle dark-count">
                 {sortedProjects.length} of {localExpertProjects.length} projects
+                {forceRefresh > 0 && (
+                  <span style={{ color: '#10b981', marginLeft: '8px', fontSize: '12px' }}>
+                    ✓ Refreshed {forceRefresh} time{forceRefresh !== 1 ? 's' : ''}
+                  </span>
+                )}
               </p>
             </div>
             <div className="expert-scores-actions">
@@ -265,13 +192,6 @@ const ExpertScoresPanel = ({
                 const analysis = project.expertAnalysis;
                 if (!analysis) return null;
                 
-                const capacityText = getCapacityInfo(project);
-                const marketText = getMarketInfo(project);
-                const location = project["Location"] || project.location || "";
-                const owner = project["Plant Owner"] || "";
-                const ratingText = getRatingText(analysis.ratingClass);
-                const ratingColor = getRatingColor(analysis.ratingClass);
-                
                 return (
                   <div 
                     key={project.id}
@@ -290,7 +210,8 @@ const ExpertScoresPanel = ({
                           {analysis.projectName}
                         </h4>
                         <span style={{ 
-                          backgroundColor: ratingColor,
+                          backgroundColor: analysis.ratingClass === 'strong' ? '#10b981' : 
+                                        analysis.ratingClass === 'moderate' ? '#f59e0b' : '#ef4444',
                           color: 'white',
                           padding: '4px 10px',
                           borderRadius: '20px',
@@ -298,7 +219,8 @@ const ExpertScoresPanel = ({
                           fontWeight: '600',
                           marginLeft: '10px'
                         }}>
-                          {ratingText}
+                          {analysis.ratingClass === 'strong' ? 'Strong' : 
+                           analysis.ratingClass === 'moderate' ? 'Moderate' : 'Weak'}
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -318,33 +240,6 @@ const ExpertScoresPanel = ({
                           Score: {analysis.overallScore}/6.0
                         </span>
                       </div>
-                    </div>
-                    
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
-                      {location && (
-                        <div>
-                          <div style={{ color: '#a0aec0', fontSize: '11px', fontWeight: '500', marginBottom: '4px' }}>📍 Location</div>
-                          <div style={{ color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>{location}</div>
-                        </div>
-                      )}
-                      {owner && (
-                        <div>
-                          <div style={{ color: '#a0aec0', fontSize: '11px', fontWeight: '500', marginBottom: '4px' }}>👤 Plant Owner</div>
-                          <div style={{ color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>{owner}</div>
-                        </div>
-                      )}
-                      {capacityText && capacityText !== "N/A MW" && (
-                        <div>
-                          <div style={{ color: '#a0aec0', fontSize: '11px', fontWeight: '500', marginBottom: '4px' }}>⚡ Capacity</div>
-                          <div style={{ color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>{capacityText}</div>
-                        </div>
-                      )}
-                      {marketText && (
-                        <div>
-                          <div style={{ color: '#a0aec0', fontSize: '11px', fontWeight: '500', marginBottom: '4px' }}>🌐 Market</div>
-                          <div style={{ color: '#e2e8f0', fontSize: '14px', fontWeight: '500' }}>{marketText}</div>
-                        </div>
-                      )}
                     </div>
                     
                     <div style={{ background: 'rgba(0, 0, 0, 0.2)', borderRadius: '6px', padding: '12px', marginBottom: '16px' }}>
