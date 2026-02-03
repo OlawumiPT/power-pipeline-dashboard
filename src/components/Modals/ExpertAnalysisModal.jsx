@@ -8,7 +8,8 @@ const ExpertAnalysisModal = ({
   fetchExpertAnalysis,
   saveExpertAnalysis,
   fetchTransmissionInterconnection,
-  saveTransmissionInterconnection
+  saveTransmissionInterconnection,
+  onSaveSuccess // NEW: callback for parent component
 }) => {
   if (!selectedExpertProject) return null;
   
@@ -263,54 +264,57 @@ const ExpertAnalysisModal = ({
     }
   }, [selectedExpertProject, fetchTransmissionInterconnection]);
   
-  // Initialize all data - FIXED: Reset state when project changes
+  // Initialize all data - FIXED: Only fetch when project changes, not on every mount
   useEffect(() => {
     const initializeData = async () => {
       if (!selectedExpertProject) return;
       
       const currentProjectId = selectedExpertProject.id;
       
-      // Reset states when project changes
-      if (lastProjectIdRef.current !== currentProjectId) {
+      // Only fetch data if it's a new project or first load
+      if (lastProjectIdRef.current !== currentProjectId || isInitialLoad.current) {
+        console.log('🔄 Initializing data for project:', currentProjectId);
+        
         setIsEditing(false);
         setSaveStatus(null);
-        isInitialLoad.current = true;
+        isInitialLoad.current = false;
         lastProjectIdRef.current = currentProjectId;
+        
+        let dbAnalysis = await fetchExpertAnalysisData();
+        let dbTransmission = await fetchTransmissionData();
+        
+        let initialAnalysis = generateDefaultAnalysis(selectedExpertProject);
+        
+        if (dbAnalysis) {
+          initialAnalysis = {
+            ...initialAnalysis,
+            ...dbAnalysis,
+            thermalBreakdown: dbAnalysis.thermalBreakdown || initialAnalysis.thermalBreakdown,
+            redevelopmentBreakdown: dbAnalysis.redevelopmentBreakdown || initialAnalysis.redevelopmentBreakdown
+          };
+        }
+        
+        // Store original data for change detection
+        originalAnalysisRef.current = JSON.parse(JSON.stringify(initialAnalysis));
+        originalTransmissionRef.current = JSON.parse(JSON.stringify(dbTransmission || []));
+        
+        setEditedAnalysis(initialAnalysis);
+        setAnalysisData(initialAnalysis);
+        setEditedTransmissionData(dbTransmission || []);
+        setLocalTransmissionData(dbTransmission || []);
+      } else {
+        console.log('📝 Same project, keeping existing state');
+        // Keep existing state for same project
       }
-      
-      let dbAnalysis = await fetchExpertAnalysisData();
-      let dbTransmission = await fetchTransmissionData();
-      
-      let initialAnalysis = generateDefaultAnalysis(selectedExpertProject);
-      
-      if (dbAnalysis) {
-        initialAnalysis = {
-          ...initialAnalysis,
-          ...dbAnalysis,
-          thermalBreakdown: dbAnalysis.thermalBreakdown || initialAnalysis.thermalBreakdown,
-          redevelopmentBreakdown: dbAnalysis.redevelopmentBreakdown || initialAnalysis.redevelopmentBreakdown
-        };
-      }
-      
-      // Store original data for change detection
-      originalAnalysisRef.current = JSON.parse(JSON.stringify(initialAnalysis));
-      originalTransmissionRef.current = JSON.parse(JSON.stringify(dbTransmission || []));
-      
-      setEditedAnalysis(initialAnalysis);
-      setAnalysisData(initialAnalysis);
-      setEditedTransmissionData(dbTransmission || []);
-      setLocalTransmissionData(dbTransmission || []);
-      
-      isInitialLoad.current = false;
     };
     
     initializeData();
     
-    // Cleanup function
+    // Cleanup function - reset isInitialLoad when modal closes
     return () => {
-      // Optional: Reset some states when component unmounts
+      isInitialLoad.current = true;
     };
-  }, [selectedExpertProject]);
+  }, [selectedExpertProject?.id]); // Only depend on project ID
 
   // Recalculate scores
   const recalculateScores = useCallback((analysisData) => {
@@ -353,7 +357,7 @@ const ExpertAnalysisModal = ({
     return result;
   }, []);
 
-  // Handle save - FIXED: Exit edit mode after save
+  // Handle save - FIXED: Update parent component and persist state
   const handleSave = useCallback(async () => {
     console.log('💾 Save button clicked');
     
@@ -424,20 +428,32 @@ const ExpertAnalysisModal = ({
         // Update all states with saved data
         setAnalysisData(updatedAnalysis);
         setEditedAnalysis(updatedAnalysis);
-       
+        
         setIsEditing(false);
         
         setSaveStatus('success');
 
-      if (selectedExpertProject.onSaveSuccess) {
-        selectedExpertProject.onSaveSuccess();
-      }
+        // CRITICAL FIX: Notify parent components about the save
+        if (selectedExpertProject.onSaveSuccess) {
+          selectedExpertProject.onSaveSuccess();
+        }
 
-      window.dispatchEvent(new Event('expertAnalysisUpdated'));
+        // Call parent callback if provided
+        if (onSaveSuccess) {
+          onSaveSuccess({
+            ...saveData,
+            thermalBreakdown: updatedAnalysis.thermalBreakdown,
+            redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown,
+            ratingClass: updatedAnalysis.overallRating?.toLowerCase()
+          });
+        }
 
-      if (window.refreshDashboardData) {
-        window.refreshDashboardData();
-      }
+        // Dispatch global event for other components
+        window.dispatchEvent(new Event('expertAnalysisUpdated'));
+
+        if (window.refreshDashboardData) {
+          window.refreshDashboardData();
+        }
         
         // Save transmission data
         if (localTransmissionData.length > 0) {
@@ -472,7 +488,19 @@ const ExpertAnalysisModal = ({
         alert(`❌ ${errorMessage}`);
       }, 100);
     }
-  }, [selectedExpertProject, editedAnalysis, analysisData, saveStatus, recalculateScores, saveExpertAnalysis, saveTransmissionInterconnection, localTransmissionData, currentUser, hasChanges]);
+  }, [
+    selectedExpertProject, 
+    editedAnalysis, 
+    analysisData, 
+    saveStatus, 
+    recalculateScores, 
+    saveExpertAnalysis, 
+    saveTransmissionInterconnection, 
+    localTransmissionData, 
+    currentUser, 
+    hasChanges,
+    onSaveSuccess // Added dependency
+  ]);
 
   // Handle modal close
   const handleClose = useCallback(() => {
@@ -1390,7 +1418,6 @@ const ExpertAnalysisModal = ({
                     <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Interconnection (IX)</h5>
                   </div>
                   <div>
-
                     
                     {/* In the Interconnection section, change the select options to: */}
                   {isEditing ? (
