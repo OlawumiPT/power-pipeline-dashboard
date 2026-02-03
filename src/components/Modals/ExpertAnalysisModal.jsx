@@ -174,51 +174,53 @@ const ExpertAnalysisModal = ({
   };
   
   // Fetch transmission data from API - USING THE PROVIDED FUNCTION
-  const fetchTransmissionData = async () => {
-    try {
-      const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
-                         selectedExpertProject.detailData?.["Project Name"] ||
-                         selectedExpertProject.detailData?.project_name ||
-                         selectedExpertProject.asset ||
-                         "";
-      
-      if (!projectName) {
-        console.log('No project name available for transmission data');
-        return [];
-      }
-      
-      // Use provided function if available
-      if (fetchTransmissionInterconnection && typeof fetchTransmissionInterconnection === 'function') {
-        try {
-          const data = await fetchTransmissionInterconnection(projectName);
-          
-          // Debug: Log the raw data
-          console.log('Raw transmission data from API:', data);
-          
-          if (data && Array.isArray(data)) {
-            // Transform data from database format to frontend format
-            const transformedData = data.map(item => ({
-              site: item.site || '',
-              poiVoltage: item.poi_voltage || item.poiVoltage || '',
-              excessInjectionCapacity: item.excess_injection_capacity || item.excessInjectionCapacity || 0,
-              excessWithdrawalCapacity: item.excess_withdrawal_capacity || item.excessWithdrawalCapacity || 0,
-              constraints: item.constraints || '-',
-              excessIXCapacity: item.excess_ix_capacity || true,
-              project_id: item.project_id || null
-            }));
-            
-            console.log('Transformed transmission data:', transformedData);
-            return transformedData;
-          } else {
-            console.log('No transmission data returned from provided function');
-            return [];
-          }
-        } catch (error) {
-          console.warn('Provided transmission fetch function failed:', error);
+  // In ExpertAnalysisModal.jsx, update the fetchTransmissionData function:
+
+const fetchTransmissionData = async () => {
+  try {
+    const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
+                       selectedExpertProject.detailData?.["Project Name"] ||
+                       selectedExpertProject.detailData?.project_name ||
+                       selectedExpertProject.asset ||
+                       "";
+    
+    if (!projectName) {
+      console.log('No project name available for transmission data');
+      return [];
+    }
+    
+    // Use provided function if available
+    if (fetchTransmissionInterconnection && typeof fetchTransmissionInterconnection === 'function') {
+      try {
+        console.log(`[Modal] Calling fetchTransmissionInterconnection for: ${projectName}`);
+        const data = await fetchTransmissionInterconnection(projectName);
+        
+        console.log('[Modal] Transmission data received:', data);
+        console.log('[Modal] Data type:', typeof data);
+        console.log('[Modal] Is array?', Array.isArray(data));
+        console.log('[Modal] Array length:', Array.isArray(data) ? data.length : 'N/A');
+        
+        if (data && Array.isArray(data)) {
+          console.log('[Modal] First item:', data[0]);
+          return data;
+        } else {
+          console.log('[Modal] No transmission data returned or not an array');
           return [];
         }
+      } catch (error) {
+        console.warn('[Modal] Provided transmission fetch function failed:', error);
+        return [];
       }
-      
+    }
+    
+    console.log('[Modal] No transmission fetch function provided');
+    return [];
+    
+  } catch (error) {
+    console.error('[Modal] Error fetching transmission data:', error);
+    return [];
+  }
+};
       console.log('No transmission fetch function provided, trying direct fetch...');
       
       // Try direct fetch as fallback
