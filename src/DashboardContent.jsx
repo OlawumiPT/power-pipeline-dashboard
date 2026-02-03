@@ -216,7 +216,7 @@ function DashboardContent() {
   };
 
   // Fetch transmission interconnection data
- // Find this function in your DashboardContent.jsx and replace it:
+ // Find and replace the fetchTransmissionInterconnection function:
 
 // Fetch transmission interconnection data - FIXED VERSION
 const fetchTransmissionInterconnection = async (projectName) => {
@@ -235,50 +235,31 @@ const fetchTransmissionInterconnection = async (projectName) => {
       return [];
     }
     
-    const data = await response.json();
-    console.log('[Frontend] Transmission data received (RAW):', data);
-    console.log('[Frontend] Transmission data type:', typeof data);
-    console.log('[Frontend] Is array?:', Array.isArray(data));
+    const result = await response.json();
+    console.log('[Frontend] Transmission API response:', result);
     
-    // Handle both array and object responses
+    // Extract data from the response structure
     let transmissionArray = [];
     
-    if (Array.isArray(data)) {
-      transmissionArray = data;
-    } else if (data && typeof data === 'object') {
-      // If it's an object, check for common properties that might contain the array
-      if (data.data && Array.isArray(data.data)) {
-        transmissionArray = data.data;
-      } else if (data.transmissionData && Array.isArray(data.transmissionData)) {
-        transmissionArray = data.transmissionData;
-      } else if (data.records && Array.isArray(data.records)) {
-        transmissionArray = data.records;
-      } else if (data.results && Array.isArray(data.results)) {
-        transmissionArray = data.results;
-      } else {
-        // Try to extract array from object values
-        const values = Object.values(data);
-        transmissionArray = values.filter(item => Array.isArray(item)).flat();
-        
-        // If still no array, try to see if the object itself is a transmission record
-        if (transmissionArray.length === 0 && data.site) {
-          // This might be a single record object, wrap it in an array
-          transmissionArray = [data];
-        }
-      }
+    if (result.success && Array.isArray(result.data)) {
+      transmissionArray = result.data;
+    } else if (Array.isArray(result)) {
+      transmissionArray = result;
+    } else if (result.data && Array.isArray(result.data)) {
+      transmissionArray = result.data;
     }
     
-    console.log('[Frontend] Processed transmission array:', transmissionArray);
+    console.log(`[Frontend] Found ${transmissionArray.length} transmission records for ${projectName}`);
     
-    // Transform database format to frontend format
+    // Transform data to frontend format
     const transformedData = transmissionArray.map(item => ({
       site: item.site || '',
-      poiVoltage: item.poi_voltage || item.poiVoltage || '',
-      excessInjectionCapacity: item.excess_injection_capacity || item.excessInjectionCapacity || 0,
-      excessWithdrawalCapacity: item.excess_withdrawal_capacity || item.excessWithdrawalCapacity || 0,
+      poiVoltage: item.poiVoltage || item.poi_voltage || '',
+      excessInjectionCapacity: item.excessInjectionCapacity || item.excess_injection_capacity || 0,
+      excessWithdrawalCapacity: item.excessWithdrawalCapacity || item.excess_withdrawal_capacity || 0,
       constraints: item.constraints || '-',
-      excessIXCapacity: item.excess_ix_capacity || item.excessIXCapacity || true,
-      project_id: item.project_id || null
+      excessIXCapacity: item.excessIXCapacity || item.excess_ix_capacity || true,
+      project_id: item.projectId || item.project_id || null
     }));
     
     console.log('[Frontend] Transformed transmission data:', transformedData);
