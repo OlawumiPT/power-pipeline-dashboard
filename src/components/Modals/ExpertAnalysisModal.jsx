@@ -139,12 +139,12 @@ const ExpertAnalysisModal = ({
       console.log('No fetch function provided, trying direct fetch...');
       
       // Direct fetch as fallback
-      const token = getAuthToken();
-      if (token) {
+      const authToken = getAuthToken();
+      if (authToken) {
         try {
           const response = await fetch(`${API_BASE_URL}/api/expert-analysis?projectId=${projectId}`, {
             headers: {
-              'Authorization': `Bearer ${token}`,
+              'Authorization': `Bearer ${authToken}`,
               'Accept': 'application/json'
             }
           });
@@ -174,62 +174,52 @@ const ExpertAnalysisModal = ({
   };
   
   // Fetch transmission data from API - USING THE PROVIDED FUNCTION
-  // In ExpertAnalysisModal.jsx, update the fetchTransmissionData function:
-
-const fetchTransmissionData = async () => {
-  try {
-    const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
+  const fetchTransmissionData = async () => {
+    try {
+      const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
                        selectedExpertProject.detailData?.["Project Name"] ||
                        selectedExpertProject.detailData?.project_name ||
                        selectedExpertProject.asset ||
                        "";
-    
-    if (!projectName) {
-      console.log('No project name available for transmission data');
-      return [];
-    }
-    
-    // Use provided function if available
-    if (fetchTransmissionInterconnection && typeof fetchTransmissionInterconnection === 'function') {
-      try {
-        console.log(`[Modal] Calling fetchTransmissionInterconnection for: ${projectName}`);
-        const data = await fetchTransmissionInterconnection(projectName);
-        
-        console.log('[Modal] Transmission data received:', data);
-        console.log('[Modal] Data type:', typeof data);
-        console.log('[Modal] Is array?', Array.isArray(data));
-        console.log('[Modal] Array length:', Array.isArray(data) ? data.length : 'N/A');
-        
-        if (data && Array.isArray(data)) {
-          console.log('[Modal] First item:', data[0]);
-          return data;
-        } else {
-          console.log('[Modal] No transmission data returned or not an array');
-          return [];
-        }
-      } catch (error) {
-        console.warn('[Modal] Provided transmission fetch function failed:', error);
+      
+      if (!projectName) {
+        console.log('No project name available for transmission data');
         return [];
       }
-    }
-    
-    console.log('[Modal] No transmission fetch function provided');
-    return [];
-    
-  } catch (error) {
-    console.error('[Modal] Error fetching transmission data:', error);
-    return [];
-  }
-};
-      console.log('No transmission fetch function provided, trying direct fetch...');
+      
+      // Use provided function if available
+      if (fetchTransmissionInterconnection && typeof fetchTransmissionInterconnection === 'function') {
+        try {
+          console.log(`[Modal] Calling fetchTransmissionInterconnection for: ${projectName}`);
+          const data = await fetchTransmissionInterconnection(projectName);
+          
+          console.log('[Modal] Transmission data received:', data);
+          console.log('[Modal] Data type:', typeof data);
+          console.log('[Modal] Is array?', Array.isArray(data));
+          console.log('[Modal] Array length:', Array.isArray(data) ? data.length : 'N/A');
+          
+          if (data && Array.isArray(data)) {
+            console.log('[Modal] First item:', data[0]);
+            return data;
+          } else {
+            console.log('[Modal] No transmission data returned or not an array');
+            return [];
+          }
+        } catch (error) {
+          console.warn('[Modal] Provided transmission fetch function failed:', error);
+          return [];
+        }
+      }
+      
+      console.log('[Modal] No transmission fetch function provided, trying direct fetch...');
       
       // Try direct fetch as fallback
-      const token = getAuthToken();
-      if (token) {
+      const authToken = getAuthToken();
+      if (authToken) {
         try {
           const response = await fetch(`${API_BASE_URL}/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
             headers: {
-              'Authorization': `Bearer ${token}`,
+              'Authorization': `Bearer ${authToken}`,
               'Accept': 'application/json'
             }
           });
@@ -597,13 +587,13 @@ const fetchTransmissionData = async () => {
     const projectName = selectedExpertProject.asset || selectedExpertProject.expertAnalysis?.projectName;
     console.log('Querying for project name:', projectName);
     
-    const token = getAuthToken();
-    if (token) {
+    const authToken = getAuthToken();
+    if (authToken) {
       try {
         console.log('Trying direct API call...');
         const response = await fetch(`${API_BASE_URL}/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': `Bearer ${authToken}`,
             'Accept': 'application/json'
           }
         });
@@ -1467,211 +1457,211 @@ const fetchTransmissionData = async () => {
           }
           
           .score-field-group:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-            padding-bottom: 0;
+            border-bottom: none,
+            margin-bottom: 0,
+            padding-bottom: 0
           }
           
           .field-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 12px;
+            display: flex,
+            align-items: center,
+            gap: 8px,
+            margin-bottom: 12px
           }
           
           .field-icon {
-            background: #4a5568;
-            color: #e2e8f0;
-            width: 24px;
-            height: 24px;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-            font-weight: 600;
+            background: #4a5568,
+            color: #e2e8f0,
+            width: 24px,
+            height: 24px,
+            border-radius: 4px,
+            display: flex,
+            align-items: center,
+            justify-content: center,
+            font-size: 12px,
+            font-weight: 600
           }
           
           h5 {
-            margin: 0;
-            color: #e2e8f0;
-            font-size: 14px;
-            font-weight: 600;
+            margin: 0,
+            color: #e2e8f0,
+            font-size: 14px,
+            font-weight: 600
           }
           
           .score-select {
-            width: 100%;
-            padding: 10px 12px;
-            background: #1a202c;
-            border: 1px solid #4a5568;
-            border-radius: 6px;
-            color: #e2e8f0;
-            font-size: 14px;
-            margin-bottom: 8px;
+            width: 100%,
+            padding: 10px 12px,
+            background: #1a202c,
+            border: 1px solid #4a5568,
+            border-radius: 6px,
+            color: #e2e8f0,
+            font-size: 14px,
+            margin-bottom: 8px
           }
           
           .score-select:focus {
-            outline: none;
-            border-color: #63b3ed;
-            box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.1);
+            outline: none,
+            border-color: #63b3ed,
+            box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.1)
           }
           
           .score-display {
-            background: #1a202c;
-            border: 1px solid #4a5568;
-            border-radius: 6px;
-            padding: 10px 12px;
-            margin-bottom: 8px;
-            color: #e2e8f0;
-            font-weight: 500;
+            background: #1a202c,
+            border: 1px solid #4a5568,
+            border-radius: 6px,
+            padding: 10px 12px,
+            margin-bottom: 8px,
+            color: #e2e8f0,
+            font-weight: 500
           }
           
           .field-details {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-            color: #a0aec0;
+            display: flex,
+            justify-content: space-between,
+            font-size: 12px,
+            color: #a0aec0
           }
           
           .infrastructure-section {
-            margin-bottom: 20px;
-            padding-bottom: 20px;
-            border-bottom: 1px solid #4a5568;
+            margin-bottom: 20px,
+            padding-bottom: 20px,
+            border-bottom: 1px solid #4a5568
           }
           
           .infra-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
-            margin-bottom: 12px;
+            display: grid,
+            grid-template-columns: repeat(2, 1fr),
+            gap: 16px,
+            margin-bottom: 12px
           }
           
           .infra-field label {
-            display: block;
-            color: #a0aec0;
-            font-size: 12px;
-            margin-bottom: 6px;
-            font-weight: 500;
+            display: block,
+            color: #a0aec0,
+            font-size: 12px,
+            margin-bottom: 6px,
+            font-weight: 500
           }
           
           .infra-total {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-top: 12px;
-            border-top: 1px solid #4a5568;
-            font-weight: 500;
+            display: flex,
+            justify-content: space-between,
+            align-items: center,
+            padding-top: 12px,
+            border-top: 1px solid #4a5568,
+            font-weight: 500
           }
           
           .infra-value {
-            font-weight: 600;
+            font-weight: 600
           }
           
           .transmission-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #4a5568;
+            margin-top: 20px,
+            padding-top: 20px,
+            border-top: 1px solid #4a5568
           }
           
           .transmission-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
+            display: flex,
+            justify-content: space-between,
+            align-items: center,
+            margin-bottom: 16px
           }
           
           .capacity-badge {
-            background: rgba(34, 197, 94, 0.1);
-            border: 1px solid rgba(34, 197, 94, 0.3);
-            color: #86efac;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 6px;
+            background: rgba(34, 197, 94, 0.1),
+            border: 1px solid rgba(34, 197, 94, 0.3),
+            color: #86efac,
+            padding: 6px 12px,
+            border-radius: 20px,
+            font-size: 12px,
+            font-weight: 500,
+            display: flex,
+            align-items: center,
+            gap: 6px
           }
           
           .badge-dot {
-            color: #22c55e;
-            font-size: 16px;
+            color: #22c55e,
+            font-size: 16px
           }
           
           .transmission-table-container {
-            overflow-x: auto;
-            margin-bottom: 16px;
+            overflow-x: auto,
+            margin-bottom: 16px
           }
           
           .transmission-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
+            width: 100%,
+            border-collapse: collapse,
+            font-size: 14px
           }
           
           .transmission-table th {
-            background: #1a202c;
-            color: #a0aec0;
-            font-weight: 600;
-            text-align: left;
-            padding: 12px;
-            border-bottom: 2px solid #4a5568;
+            background: #1a202c,
+            color: #a0aec0,
+            font-weight: 600,
+            text-align: left,
+            padding: 12px,
+            border-bottom: 2px solid #4a5568
           }
           
           .transmission-table td {
-            padding: 12px;
-            border-bottom: 1px solid #4a5568;
-            color: #e2e8f0;
+            padding: 12px,
+            border-bottom: 1px solid #4a5568,
+            color: #e2e8f0
           }
           
           .transmission-table tr:hover {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(255, 255, 255, 0.05)
           }
           
           .transmission-input {
-            width: 100%;
-            padding: 10px 12px;
-            background: #1a202c;
-            border: 1px solid #4a5568;
-            border-radius: 6px;
-            color: #e2e8f0;
-            font-size: 14px;
+            width: 100%,
+            padding: 10px 12px,
+            background: #1a202c,
+            border: 1px solid #4a5568,
+            border-radius: 6px,
+            color: #e2e8f0,
+            font-size: 14px
           }
           
           .transmission-input:focus {
-            outline: none;
-            border-color: #63b3ed;
-            box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.1);
+            outline: none,
+            border-color: #63b3ed,
+            box-shadow: 0 0 0 3px rgba(99, 179, 237, 0.1)
           }
           
           .action-buttons {
-            padding: 20px;
-            border-top: 1px solid #4a5568;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 0 0 12px 12px;
+            padding: 20px,
+            border-top: 1px solid #4a5568,
+            background: rgba(0, 0, 0, 0.2),
+            border-radius: 0 0 12px 12px
           }
           
           .edit-actions, .view-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
+            display: flex,
+            justify-content: flex-end,
+            gap: 12px
           }
           
           .action-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
+            opacity: 0.5,
+            cursor: not-allowed
           }
           
           .edit-mode-indicator {
-            display: flex;
-            align-items: center;
-            gap: 12px;
+            display: flex,
+            align-items: center,
+            gap: 12px
           }
           
           .loading-spinner {
-            padding: 40px;
-            text-align: center;
-            color: #a0aec0;
+            padding: 40px,
+            text-align: center,
+            color: #a0aec0
           }
         `}</style>
       </div>
