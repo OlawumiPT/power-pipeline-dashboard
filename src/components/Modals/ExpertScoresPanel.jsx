@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 const hasEdits = (projectId) => {
   try {
@@ -58,86 +58,74 @@ const ExpertScoresPanel = ({
   expertAnalysisFilter,
   setExpertAnalysisFilter,
   setSelectedExpertProject,
-  // ADD THIS: Function to refresh data after edits
   refreshExpertData = null
 }) => {
   
   if (!showExpertScores) return null;
 
-  // Add state to track when to refresh
-  const [refreshKey, setRefreshKey] = useState(0);
   const [localExpertProjects, setLocalExpertProjects] = useState([]);
-  
-  // Listen for refresh events from child modals
+  const [isLoading, setIsLoading] = useState(false);
+  const lastRefreshTime = useRef(0);
+  const lastClickTime = useRef(0);
+
+  // Load data when panel opens
+  useEffect(() => {
+    if (showExpertScores) {
+      console.log('🔄 ExpertScoresPanel: Loading data...');
+      setIsLoading(true);
+      
+      const loadData = () => {
+        try {
+          const projects = getAnalyses();
+          console.log('📊 ExpertScoresPanel: Loaded', projects.length, 'projects');
+          setLocalExpertProjects(projects);
+        } catch (error) {
+          console.error('❌ ExpertScoresPanel: Error loading projects:', error);
+        } finally {
+          setTimeout(() => setIsLoading(false), 100);
+        }
+      };
+      
+      loadData();
+    }
+  }, [showExpertScores, getAnalyses]);
+
+  // Listen for refresh events
   useEffect(() => {
     const handleRefresh = () => {
       console.log('🔄 ExpertScoresPanel: Received refresh event');
-      setRefreshKey(prev => prev + 1);
-      
-      // Also call external refresh if provided
-      if (refreshExpertData) {
-        console.log('🔄 ExpertScoresPanel: Calling external refresh');
-        refreshExpertData();
+      if (showExpertScores) {
+        setIsLoading(true);
+        setTimeout(() => {
+          const projects = getAnalyses();
+          setLocalExpertProjects(projects);
+          setIsLoading(false);
+        }, 100);
       }
     };
     
-    // Listen for refresh events
     window.addEventListener('expertAnalysisUpdated', handleRefresh);
-    
-    // Also refresh when the panel opens
-    if (showExpertScores) {
-      console.log('🔄 ExpertScoresPanel: Panel opened, refreshing data');
-      handleRefresh();
-    }
     
     return () => {
       window.removeEventListener('expertAnalysisUpdated', handleRefresh);
     };
-  }, [showExpertScores, refreshExpertData]);
-  
-  // Refresh data when refreshKey changes
-  useEffect(() => {
-    if (showExpertScores) {
-      console.log('🔄 ExpertScoresPanel: Refreshing project data, key:', refreshKey);
-      try {
-        const projects = getAnalyses();
-        console.log('📊 ExpertScoresPanel: Loaded', projects.length, 'projects');
-        setLocalExpertProjects(projects);
-      } catch (error) {
-        console.error('❌ ExpertScoresPanel: Error loading projects:', error);
-      }
-    }
-  }, [showExpertScores, refreshKey, getAnalyses]);
+  }, [showExpertScores, getAnalyses]);
 
-  // When a project is selected, pass additional data
   const handleProjectSelect = (project) => {
-    console.log('👉 ExpertScoresPanel: Project selected:', project.id, project.expertAnalysis?.projectName);
+    // Debounce clicks
+    if (Date.now() - lastClickTime.current < 300) return;
+    lastClickTime.current = Date.now();
     
-    // Pass the refresh function to the modal
+    console.log('👉 ExpertScoresPanel: Project selected:', project.id);
+    
     const enhancedProject = {
       ...project,
       onSaveSuccess: () => {
         console.log('✅ ExpertScoresPanel: Received save success from modal');
-        
-        // Trigger refresh in parent
-        setRefreshKey(prev => prev + 1);
-        
-        // Also call external refresh if provided
-        if (refreshExpertData) {
-          console.log('🔄 ExpertScoresPanel: Calling external refresh');
-          refreshExpertData();
-        }
-        
-        // Dispatch event for other components
         window.dispatchEvent(new Event('expertAnalysisUpdated'));
-        
-        // Force UI update
-        setTimeout(() => {
-          const projects = getAnalyses();
-          setLocalExpertProjects(projects);
-        }, 100);
       }
     };
+    
     setSelectedExpertProject(enhancedProject);
   };
 
@@ -158,8 +146,6 @@ const ExpertScoresPanel = ({
     return scoreB - scoreA;
   });
 
-  console.log('📊 ExpertScoresPanel: Rendering', sortedProjects.length, 'filtered projects');
-
   return (
     <div className="modal-overlay dark-overlay" onClick={() => setShowExpertScores(false)}>
       <div className="modal-content expert-scores-panel dark-theme" onClick={(e) => e.stopPropagation()}>
@@ -173,10 +159,11 @@ const ExpertScoresPanel = ({
           </div>
           <div className="header-right">
             <button 
-              className="refresh-btn dark-refresh-btn"
               onClick={() => {
+                if (Date.now() - lastRefreshTime.current < 1000) return;
+                lastRefreshTime.current = Date.now();
                 console.log('🔄 Manual refresh triggered');
-                setRefreshKey(prev => prev + 1);
+                window.dispatchEvent(new Event('expertAnalysisUpdated'));
                 if (refreshExpertData) refreshExpertData();
               }}
               title="Refresh data"
@@ -205,11 +192,6 @@ const ExpertScoresPanel = ({
               <h3 className="expert-scores-title dark-section-title">Project Assessments</h3>
               <p className="expert-scores-subtitle dark-count">
                 {sortedProjects.length} of {localExpertProjects.length} projects
-                {refreshKey > 0 && (
-                  <span style={{ marginLeft: '10px', fontSize: '12px', color: '#93c5fd' }}>
-                    (Refreshed {refreshKey} times)
-                  </span>
-                )}
               </p>
             </div>
             <div className="expert-scores-actions">
@@ -235,27 +217,23 @@ const ExpertScoresPanel = ({
           </div>
           
           {/* Projects Grid */}
-          {sortedProjects.length === 0 ? (
+          {isLoading ? (
+            <div style={{ textAlign: 'center', padding: '60px', color: '#a0aec0' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                border: '3px solid rgba(255,255,255,0.1)',
+                borderTopColor: '#3b82f6',
+                borderRadius: '50%',
+                margin: '0 auto 20px',
+                animation: 'spin 1s linear infinite'
+              }} />
+              <p>Loading expert analysis data...</p>
+            </div>
+          ) : sortedProjects.length === 0 ? (
             <div className="expert-no-projects dark-no-projects" style={{ textAlign: 'center', padding: '40px' }}>
               <h3 className="dark-title" style={{ color: '#e2e8f0', marginBottom: '10px' }}>No Projects Found</h3>
               <p className="dark-subtitle" style={{ color: '#a0aec0' }}>Adjust your filters to see expert analyses.</p>
-              <button 
-                onClick={() => {
-                  setRefreshKey(prev => prev + 1);
-                  if (refreshExpertData) refreshExpertData();
-                }}
-                style={{
-                  background: 'rgba(59, 130, 246, 0.9)',
-                  border: '1px solid rgba(59, 130, 246, 0.9)',
-                  color: 'white',
-                  padding: '10px 20px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  marginTop: '20px'
-                }}
-              >
-                🔄 Refresh Data
-              </button>
             </div>
           ) : (
             <div className="expert-projects-grid dark-projects-grid" style={{ 
@@ -286,8 +264,7 @@ const ExpertScoresPanel = ({
                       borderRadius: '8px',
                       padding: '20px',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      position: 'relative'
+                      transition: 'all 0.2s ease'
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.transform = 'translateY(-2px)';
@@ -315,7 +292,8 @@ const ExpertScoresPanel = ({
                             flex: 1
                           }}>
                             {analysis.projectName}
-                          </h4>
+                          </h4
+                          
                           <span 
                             className="rating-badge dark-rating-badge"
                             style={{ 
