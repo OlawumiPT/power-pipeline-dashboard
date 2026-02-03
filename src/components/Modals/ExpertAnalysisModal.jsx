@@ -22,6 +22,7 @@ const ExpertAnalysisModal = ({
   
   // Track if we need to refresh data on next mount
   const lastProjectIdRef = useRef(null);
+  const hasInitializedRef = useRef(false); // NEW: Track if we've initialized for this project
   
   // Generate default analysis
   const generateDefaultAnalysis = useCallback((project) => {
@@ -98,15 +99,14 @@ const ExpertAnalysisModal = ({
   const [editedTransmissionData, setEditedTransmissionData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [analysisData, setAnalysisData] = useState(() => {
+    // Use the project's existing expert analysis data
     const initialAnalysis = selectedExpertProject.expertAnalysis || generateDefaultAnalysis(selectedExpertProject);
+    console.log('📝 Initial analysis data from props:', initialAnalysis);
     return initialAnalysis;
   });
   
   // Local state for transmission inputs
   const [localTransmissionData, setLocalTransmissionData] = useState([]);
-  
-  // API Base URL
-  const API_BASE_URL = 'https://pt-power-pipeline-api.azurewebsites.net';
   
   // Get token
   const getAuthToken = useCallback(() => {
@@ -214,6 +214,7 @@ const ExpertAnalysisModal = ({
         try {
           const data = await fetchExpertAnalysis(projectId);
           if (data) {
+            console.log('📊 Fetched analysis from DB:', data);
             return data;
           }
         } catch (error) {
@@ -249,6 +250,7 @@ const ExpertAnalysisModal = ({
           const data = await fetchTransmissionInterconnection(projectName);
           
           if (data && Array.isArray(data)) {
+            console.log('📊 Fetched transmission from DB:', data.length, 'items');
             return data;
           }
         } catch (error) {
@@ -264,44 +266,60 @@ const ExpertAnalysisModal = ({
     }
   }, [selectedExpertProject, fetchTransmissionInterconnection]);
   
-  // Initialize all data - FIXED: Only fetch when project changes, not on every mount
+  // Initialize all data - FIXED: Only fetch from DB when explicitly needed
   useEffect(() => {
     const initializeData = async () => {
       if (!selectedExpertProject) return;
       
       const currentProjectId = selectedExpertProject.id;
+      console.log('🔄 Initializing data for project:', currentProjectId, 'hasInitialized:', hasInitializedRef.current);
       
-      // Only fetch data if it's a new project or first load
-      if (lastProjectIdRef.current !== currentProjectId || isInitialLoad.current) {
-        console.log('🔄 Initializing data for project:', currentProjectId);
+      // Only initialize once per project session
+      if (!hasInitializedRef.current || lastProjectIdRef.current !== currentProjectId) {
+        console.log('📝 Initializing fresh data for project');
         
         setIsEditing(false);
         setSaveStatus(null);
-        isInitialLoad.current = false;
+        isInitialLoad.current = true;
         lastProjectIdRef.current = currentProjectId;
+        hasInitializedRef.current = true;
         
-        let dbAnalysis = await fetchExpertAnalysisData();
-        let dbTransmission = await fetchTransmissionData();
+        // Start with the data passed in props (which should already have saved changes)
+        let initialAnalysis = selectedExpertProject.expertAnalysis || generateDefaultAnalysis(selectedExpertProject);
+        let initialTransmission = [];
         
-        let initialAnalysis = generateDefaultAnalysis(selectedExpertProject);
-        
-        if (dbAnalysis) {
-          initialAnalysis = {
-            ...initialAnalysis,
-            ...dbAnalysis,
-            thermalBreakdown: dbAnalysis.thermalBreakdown || initialAnalysis.thermalBreakdown,
-            redevelopmentBreakdown: dbAnalysis.redevelopmentBreakdown || initialAnalysis.redevelopmentBreakdown
-          };
+        // Only fetch from DB if we don't have analysis data
+        if (!selectedExpertProject.expertAnalysis) {
+          console.log('📊 No analysis in props, fetching from DB');
+          const dbAnalysis = await fetchExpertAnalysisData();
+          const dbTransmission = await fetchTransmissionData();
+          
+          if (dbAnalysis) {
+            initialAnalysis = {
+              ...initialAnalysis,
+              ...dbAnalysis,
+              thermalBreakdown: dbAnalysis.thermalBreakdown || initialAnalysis.thermalBreakdown,
+              redevelopmentBreakdown: dbAnalysis.redevelopmentBreakdown || initialAnalysis.redevelopmentBreakdown
+            };
+          }
+          
+          if (dbTransmission) {
+            initialTransmission = dbTransmission;
+          }
+        } else {
+          console.log('✅ Using analysis data from props:', initialAnalysis);
         }
         
         // Store original data for change detection
         originalAnalysisRef.current = JSON.parse(JSON.stringify(initialAnalysis));
-        originalTransmissionRef.current = JSON.parse(JSON.stringify(dbTransmission || []));
+        originalTransmissionRef.current = JSON.parse(JSON.stringify(initialTransmission));
         
         setEditedAnalysis(initialAnalysis);
         setAnalysisData(initialAnalysis);
-        setEditedTransmissionData(dbTransmission || []);
-        setLocalTransmissionData(dbTransmission || []);
+        setEditedTransmissionData(initialTransmission);
+        setLocalTransmissionData(initialTransmission);
+        
+        isInitialLoad.current = false;
       } else {
         console.log('📝 Same project, keeping existing state');
         // Keep existing state for same project
@@ -310,11 +328,19 @@ const ExpertAnalysisModal = ({
     
     initializeData();
     
-    // Cleanup function - reset isInitialLoad when modal closes
+    // Cleanup function - reset when modal closes
     return () => {
-      isInitialLoad.current = true;
+      // Don't reset hasInitializedRef here - we want to keep it across opens/closes
+      // Reset only when project changes
     };
   }, [selectedExpertProject?.id]); // Only depend on project ID
+
+  // Reset initialization when project changes
+  useEffect(() => {
+    if (selectedExpertProject?.id !== lastProjectIdRef.current) {
+      hasInitializedRef.current = false;
+    }
+  }, [selectedExpertProject?.id]);
 
   // Recalculate scores
   const recalculateScores = useCallback((analysisData) => {
@@ -418,6 +444,7 @@ const ExpertAnalysisModal = ({
       };
       
       if (saveExpertAnalysis) {
+        console.log('💾 Saving data to API:', saveData);
         const savedResult = await saveExpertAnalysis(saveData);
         console.log('✅ Save successful:', savedResult);
         
@@ -433,23 +460,26 @@ const ExpertAnalysisModal = ({
         
         setSaveStatus('success');
 
-        // CRITICAL FIX: Notify parent components about the save
+        // CRITICAL FIX: Update the project prop with saved data
+        const updatedProject = {
+          ...selectedExpertProject,
+          expertAnalysis: updatedAnalysis
+        };
+
+        // Call parent callback if provided
+        if (onSaveSuccess) {
+          onSaveSuccess(updatedProject);
+        }
+
+        // Also call the onSaveSuccess from the project if it exists
         if (selectedExpertProject.onSaveSuccess) {
           selectedExpertProject.onSaveSuccess();
         }
 
-        // Call parent callback if provided
-        if (onSaveSuccess) {
-          onSaveSuccess({
-            ...saveData,
-            thermalBreakdown: updatedAnalysis.thermalBreakdown,
-            redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown,
-            ratingClass: updatedAnalysis.overallRating?.toLowerCase()
-          });
-        }
-
         // Dispatch global event for other components
-        window.dispatchEvent(new Event('expertAnalysisUpdated'));
+        window.dispatchEvent(new CustomEvent('expertAnalysisUpdated', { 
+          detail: { projectId, updatedAnalysis } 
+        }));
 
         if (window.refreshDashboardData) {
           window.refreshDashboardData();
@@ -504,12 +534,17 @@ const ExpertAnalysisModal = ({
 
   // Handle modal close
   const handleClose = useCallback(() => {
+    // Reset initialization flag when closing
+    if (selectedExpertProject?.id === lastProjectIdRef.current) {
+      hasInitializedRef.current = false;
+    }
+    
     if (isEditing && window.refreshDashboardData) {
       window.refreshDashboardData();
     }
     
     setSelectedExpertProject(null);
-  }, [isEditing, setSelectedExpertProject]);
+  }, [isEditing, setSelectedExpertProject, selectedExpertProject?.id]);
 
   // Manual refresh
   const handleManualRefresh = useCallback(async () => {
