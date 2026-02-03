@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { expertAnalysisService } from '../services/expertAnalysisService';
+//import { expertAnalysisService } from '../services/expertAnalysisService';
+import { expertAnalysisService } from '../../services/expertAnalysisService';
 
 const ExpertAnalysisModal = ({ 
   selectedExpertProject, 
