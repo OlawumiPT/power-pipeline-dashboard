@@ -58,9 +58,7 @@ const ExpertScoresPanel = ({
   expertAnalysisFilter,
   setExpertAnalysisFilter,
   setSelectedExpertProject,
-  refreshExpertData = null,
-  expertProjects, // NEW: Receive expert projects from parent
-  setExpertProjects // NEW: Update function from parent
+  refreshExpertData = null
 }) => {
   
   if (!showExpertScores) return null;
@@ -69,24 +67,19 @@ const ExpertScoresPanel = ({
   const [isLoading, setIsLoading] = useState(false);
   const lastRefreshTime = useRef(0);
   const lastClickTime = useRef(0);
+  const hasReceivedUpdate = useRef(false); // Track if we received an update
 
-  // Load data when panel opens - FIXED: Use parent data if available
+  // Load data when panel opens
   useEffect(() => {
     if (showExpertScores) {
       console.log('🔄 ExpertScoresPanel: Loading data...');
       setIsLoading(true);
+      hasReceivedUpdate.current = false; // Reset update flag
       
       const loadData = () => {
         try {
-          // Use parent data if provided, otherwise fetch
-          let projects;
-          if (expertProjects && expertProjects.length > 0) {
-            projects = expertProjects;
-            console.log('📊 ExpertScoresPanel: Using parent data', projects.length, 'projects');
-          } else {
-            projects = getAnalyses();
-            console.log('📊 ExpertScoresPanel: Fetched data', projects.length, 'projects');
-          }
+          const projects = getAnalyses();
+          console.log('📊 ExpertScoresPanel: Loaded', projects.length, 'projects');
           setLocalExpertProjects(projects);
         } catch (error) {
           console.error('❌ ExpertScoresPanel: Error loading projects:', error);
@@ -97,23 +90,65 @@ const ExpertScoresPanel = ({
       
       loadData();
     }
-  }, [showExpertScores, getAnalyses, expertProjects]);
+  }, [showExpertScores, getAnalyses]);
 
-  // Listen for refresh events - FIXED: Also update parent if provided
+  // Listen for refresh events - FIXED: Handle updates properly
   useEffect(() => {
-    const handleRefresh = () => {
-      console.log('🔄 ExpertScoresPanel: Received refresh event');
+    const handleRefresh = (event) => {
+      console.log('🔄 ExpertScoresPanel: Received refresh event', event.detail);
       if (showExpertScores) {
         setIsLoading(true);
-        setTimeout(() => {
+        
+        // If we have specific project data in the event, update just that project
+        if (event.detail && event.detail.projectId) {
+          console.log('📝 ExpertScoresPanel: Updating specific project:', event.detail.projectId);
+          
+          // Get fresh data
+          const freshProjects = getAnalyses();
+          
+          // Find the updated project
+          const updatedProject = freshProjects.find(p => p.id === event.detail.projectId);
+          
+          if (updatedProject) {
+            console.log('✅ Found updated project in fresh data');
+            // Update the local state with the updated project
+            setLocalExpertProjects(prev => {
+              const newProjects = prev.map(project => {
+                if (project.id === event.detail.projectId) {
+                  console.log('🔄 Updating project in local state:', project.id);
+                  return {
+                    ...project,
+                    expertAnalysis: updatedProject.expertAnalysis,
+                    // Update other fields that might have changed
+                    overall: updatedProject.overall,
+                    thermal: updatedProject.thermal,
+                    redev: updatedProject.redev
+                  };
+                }
+                return project;
+              });
+              
+              // If project wasn't in the list (filtered out), add it
+              if (!prev.some(p => p.id === event.detail.projectId)) {
+                console.log('➕ Adding updated project to list (was filtered out)');
+                return [...newProjects, updatedProject];
+              }
+              
+              return newProjects;
+            });
+          } else {
+            console.log('⚠️ Updated project not found in fresh data, using all fresh data');
+            setLocalExpertProjects(freshProjects);
+          }
+        } else {
+          // No specific project, refresh all data
+          console.log('🔄 Refreshing all expert data');
           const projects = getAnalyses();
           setLocalExpertProjects(projects);
-          // Update parent state if callback provided
-          if (setExpertProjects) {
-            setExpertProjects(projects);
-          }
-          setIsLoading(false);
-        }, 100);
+        }
+        
+        setIsLoading(false);
+        hasReceivedUpdate.current = true;
       }
     };
     
@@ -122,79 +157,57 @@ const ExpertScoresPanel = ({
     return () => {
       window.removeEventListener('expertAnalysisUpdated', handleRefresh);
     };
-  }, [showExpertScores, getAnalyses, setExpertProjects]);
-
-  // Handle update from parent when modal saves
-  const handleUpdateProject = useRef((updatedData) => {
-    console.log('🔄 ExpertScoresPanel: Updating project with saved data:', updatedData.projectId);
-    
-    setLocalExpertProjects(prev => prev.map(project => {
-      if (project.id === updatedData.projectId) {
-        return {
-          ...project,
-          expertAnalysis: {
-            ...project.expertAnalysis,
-            ...updatedData,
-            ratingClass: updatedData.overallRating?.toLowerCase()
-          }
-        };
-      }
-      return project;
-    }));
-    
-    // Also update parent if callback provided
-    if (setExpertProjects) {
-      setExpertProjects(prev => prev.map(project => {
-        if (project.id === updatedData.projectId) {
-          return {
-            ...project,
-            expertAnalysis: {
-              ...project.expertAnalysis,
-              ...updatedData,
-              ratingClass: updatedData.overallRating?.toLowerCase()
-            }
-          };
-        }
-        return project;
-      }));
-    }
-  }).current;
+  }, [showExpertScores, getAnalyses]);
 
   const handleProjectSelect = (project) => {
     // Debounce clicks
     if (Date.now() - lastClickTime.current < 300) return;
     lastClickTime.current = Date.now();
     
-    console.log('👉 ExpertScoresPanel: Project selected:', project.id);
+    console.log('👉 ExpertScoresPanel: Project selected:', project.id, project.expertAnalysis);
     
+    // Ensure the project has all necessary data
     const enhancedProject = {
       ...project,
       onSaveSuccess: () => {
         console.log('✅ ExpertScoresPanel: Received save success from modal');
-        window.dispatchEvent(new Event('expertAnalysisUpdated'));
-      },
-      onAnalysisUpdate: handleUpdateProject // Pass callback for updates
+        // Dispatch event with project ID for targeted update
+        window.dispatchEvent(new CustomEvent('expertAnalysisUpdated', {
+          detail: { projectId: project.id }
+        }));
+      }
     };
     
     setSelectedExpertProject(enhancedProject);
   };
 
+  // Filter projects based on rating - FIXED: Handle null/undefined ratings
   const filteredProjects = localExpertProjects.filter(project => {
     const analysis = project.expertAnalysis;
     if (!analysis) return false;
     
     if (expertAnalysisFilter === "all") return true;
-    if (expertAnalysisFilter === "strong") return analysis.ratingClass === "strong";
-    if (expertAnalysisFilter === "moderate") return analysis.ratingClass === "moderate";
-    if (expertAnalysisFilter === "weak") return analysis.ratingClass === "weak";
+    
+    const ratingClass = analysis.ratingClass;
+    if (!ratingClass) return false;
+    
+    if (expertAnalysisFilter === "strong") return ratingClass === "strong";
+    if (expertAnalysisFilter === "moderate") return ratingClass === "moderate";
+    if (expertAnalysisFilter === "weak") return ratingClass === "weak";
+    
     return true;
   });
   
+  // Sort projects - FIXED: Handle null scores
   const sortedProjects = [...filteredProjects].sort((a, b) => {
-    const scoreA = a.expertAnalysis?.overallScore || 0;
-    const scoreB = b.expertAnalysis?.overallScore || 0;
+    const scoreA = parseFloat(a.expertAnalysis?.overallScore) || 0;
+    const scoreB = parseFloat(b.expertAnalysis?.overallScore) || 0;
     return scoreB - scoreA;
   });
+
+  console.log('📊 ExpertScoresPanel: Showing', sortedProjects.length, 'filtered projects out of', localExpertProjects.length, 'total');
+  console.log('📊 Filter:', expertAnalysisFilter);
+  console.log('📊 First project analysis:', sortedProjects[0]?.expertAnalysis);
 
   return (
     <div className="modal-overlay dark-overlay" onClick={() => setShowExpertScores(false)}>
@@ -242,13 +255,21 @@ const ExpertScoresPanel = ({
               <h3 className="expert-scores-title dark-section-title">Project Assessments</h3>
               <p className="expert-scores-subtitle dark-count">
                 {sortedProjects.length} of {localExpertProjects.length} projects
+                {hasReceivedUpdate.current && (
+                  <span style={{ color: '#10b981', marginLeft: '8px', fontSize: '12px' }}>
+                    ✓ Updated
+                  </span>
+                )}
               </p>
             </div>
             <div className="expert-scores-actions">
               <select 
                 className="expert-scores-filter dark-filter"
                 value={expertAnalysisFilter}
-                onChange={(e) => setExpertAnalysisFilter(e.target.value)}
+                onChange={(e) => {
+                  console.log('🔽 Changing filter to:', e.target.value);
+                  setExpertAnalysisFilter(e.target.value);
+                }}
                 style={{
                   padding: '8px 12px',
                   backgroundColor: '#2d3748',
@@ -283,7 +304,28 @@ const ExpertScoresPanel = ({
           ) : sortedProjects.length === 0 ? (
             <div className="expert-no-projects dark-no-projects" style={{ textAlign: 'center', padding: '40px' }}>
               <h3 className="dark-title" style={{ color: '#e2e8f0', marginBottom: '10px' }}>No Projects Found</h3>
-              <p className="dark-subtitle" style={{ color: '#a0aec0' }}>Adjust your filters to see expert analyses.</p>
+              <p className="dark-subtitle" style={{ color: '#a0aec0', marginBottom: '20px' }}>
+                {expertAnalysisFilter !== "all" 
+                  ? `No projects with "${expertAnalysisFilter}" rating. Try changing the filter.`
+                  : "No expert analysis data available."}
+              </p>
+              {expertAnalysisFilter !== "all" && (
+                <button
+                  onClick={() => setExpertAnalysisFilter("all")}
+                  style={{
+                    background: 'rgba(59, 130, 246, 0.9)',
+                    border: '1px solid rgba(59, 130, 246, 0.9)',
+                    color: 'white',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: '500',
+                    fontSize: '14px'
+                  }}
+                >
+                  Show All Projects
+                </button>
+              )}
             </div>
           ) : (
             <div className="expert-projects-grid dark-projects-grid" style={{ 
