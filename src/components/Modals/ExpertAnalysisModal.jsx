@@ -384,153 +384,155 @@ const ExpertAnalysisModal = ({
   }, []);
 
   // Handle save - FIXED: Update parent component and persist state
-  const handleSave = useCallback(async () => {
-    console.log('💾 Save button clicked');
+  // In ExpertAnalysisModal.jsx, update the handleSave function (around line 150):
+
+const handleSave = useCallback(async () => {
+  console.log('💾 Save button clicked');
+  
+  // Check if there are changes
+  if (!hasChanges()) {
+    setSaveStatus('no-changes');
+    setTimeout(() => {
+      setSaveStatus(null);
+    }, 2000);
+    return;
+  }
+  
+  if (saveStatus === 'saving') return;
+  
+  setSaveStatus('saving');
+  
+  try {
+    const currentAnalysisToSave = editedAnalysis || analysisData;
     
-    // Check if there are changes
-    if (!hasChanges()) {
-      setSaveStatus('no-changes');
+    if (!currentAnalysisToSave) {
+      throw new Error('No analysis data to save');
+    }
+    
+    const updatedAnalysis = recalculateScores(currentAnalysisToSave);
+    
+    const projectId = selectedExpertProject.id || 
+                     selectedExpertProject.detailData?.id || 
+                     selectedExpertProject.expertAnalysis?.projectId;
+    
+    if (!projectId) {
+      throw new Error('Project ID not found');
+    }
+    
+    // Sync local transmission data to parent state before saving
+    setEditedTransmissionData(localTransmissionData);
+    
+    const saveData = {
+      projectId: projectId,
+      projectName: updatedAnalysis.projectName,
+      overallScore: parseFloat(updatedAnalysis.overallScore) || 0,
+      overallRating: updatedAnalysis.overallRating || 'Moderate',
+      confidence: updatedAnalysis.confidence || 75,
+      thermalOperatingScore: parseFloat(updatedAnalysis.thermalScore) || 0,
+      thermalBreakdown: updatedAnalysis.thermalBreakdown || {
+        thermal_optimization: { score: 1 },
+        environmental: { score: 2 }
+      },
+      redevelopmentScore: parseFloat(updatedAnalysis.redevelopmentScore) || 0,
+      redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || {
+        redev_market: { score: 2 },
+        land_availability: { score: 2 },
+        utilities: { score: 2 },
+        interconnection: { score: 2 }
+      },
+      infrastructureScore: parseFloat(updatedAnalysis.infrastructureScore) || 0,
+      editedBy: currentUser,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    if (saveExpertAnalysis) {
+      console.log('💾 Saving data to API:', saveData);
+      const savedResult = await saveExpertAnalysis(saveData);
+      console.log('✅ Save successful:', savedResult);
+      
+      // Update original references with saved data
+      originalAnalysisRef.current = JSON.parse(JSON.stringify(updatedAnalysis));
+      originalTransmissionRef.current = JSON.parse(JSON.stringify(localTransmissionData));
+      
+      // Update all states with saved data
+      setAnalysisData(updatedAnalysis);
+      setEditedAnalysis(updatedAnalysis);
+      
+      setIsEditing(false);
+      setSaveStatus('success');
+
+      // CRITICAL: Create the updated project object
+      const updatedProject = {
+        ...selectedExpertProject,
+        expertAnalysis: updatedAnalysis,
+        lastUpdated: new Date().toISOString()
+      };
+
+      // Call parent callback if provided (THIS IS KEY!)
+      if (onSaveSuccess) {
+        console.log('📢 Notifying parent of save success');
+        onSaveSuccess(updatedProject);
+      }
+
+      // Dispatch event for other components
+      window.dispatchEvent(new CustomEvent('expertAnalysisUpdated', { 
+        detail: { 
+          projectId: projectId,
+          updatedAnalysis: updatedAnalysis,
+          action: 'saved',
+          timestamp: Date.now()
+        } 
+      }));
+
+      // Also dispatch a force refresh event
+      window.dispatchEvent(new Event('forceRefreshExpertScores'));
+
+      // Save transmission data
+      if (localTransmissionData.length > 0) {
+        if (saveTransmissionInterconnection) {
+          saveTransmissionInterconnection(projectId, localTransmissionData)
+            .then(() => console.log('✅ Transmission data saved'))
+            .catch(error => console.error('Transmission save error:', error));
+        }
+      }
+      
+      // Clear success message
       setTimeout(() => {
         setSaveStatus(null);
       }, 2000);
-      return;
+      
+    } else {
+      throw new Error('No save function provided');
     }
     
-    if (saveStatus === 'saving') return;
+  } catch (error) {
+    console.error('❌ Save error:', error);
     
-    setSaveStatus('saving');
+    setSaveStatus('error');
     
-    try {
-      const currentAnalysisToSave = editedAnalysis || analysisData;
+    setTimeout(() => {
+      const errorMessage = error.message.includes('404') 
+        ? 'Save failed: API endpoint not found.'
+        : error.message.includes('401') || error.message.includes('403')
+        ? 'Save failed: Authentication error.'
+        : `Save failed: ${error.message}`;
       
-      if (!currentAnalysisToSave) {
-        throw new Error('No analysis data to save');
-      }
-      
-      const updatedAnalysis = recalculateScores(currentAnalysisToSave);
-      
-      const projectId = selectedExpertProject.id || 
-                       selectedExpertProject.detailData?.id || 
-                       selectedExpertProject.expertAnalysis?.projectId;
-      
-      if (!projectId) {
-        throw new Error('Project ID not found');
-      }
-      
-      // Sync local transmission data to parent state before saving
-      setEditedTransmissionData(localTransmissionData);
-      
-      const saveData = {
-        projectId: projectId,
-        projectName: updatedAnalysis.projectName,
-        overallScore: parseFloat(updatedAnalysis.overallScore) || 0,
-        overallRating: updatedAnalysis.overallRating || 'Moderate',
-        confidence: updatedAnalysis.confidence || 75,
-        thermalOperatingScore: parseFloat(updatedAnalysis.thermalScore) || 0,
-        thermalBreakdown: updatedAnalysis.thermalBreakdown || {
-          thermal_optimization: { score: 1 },
-          environmental: { score: 2 }
-        },
-        redevelopmentScore: parseFloat(updatedAnalysis.redevelopmentScore) || 0,
-        redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || {
-          redev_market: { score: 2 },
-          land_availability: { score: 2 },
-          utilities: { score: 2 },
-          interconnection: { score: 2 }
-        },
-        infrastructureScore: parseFloat(updatedAnalysis.infrastructureScore) || 0,
-        editedBy: currentUser,
-        lastUpdated: new Date().toISOString()
-      };
-      
-      if (saveExpertAnalysis) {
-        console.log('💾 Saving data to API:', saveData);
-        const savedResult = await saveExpertAnalysis(saveData);
-        console.log('✅ Save successful:', savedResult);
-        
-        // Update original references with saved data
-        originalAnalysisRef.current = JSON.parse(JSON.stringify(updatedAnalysis));
-        originalTransmissionRef.current = JSON.parse(JSON.stringify(localTransmissionData));
-        
-        // Update all states with saved data
-        setAnalysisData(updatedAnalysis);
-        setEditedAnalysis(updatedAnalysis);
-        
-        setIsEditing(false);
-        
-        setSaveStatus('success');
-
-        // CRITICAL FIX: Update the project prop with saved data
-        const updatedProject = {
-          ...selectedExpertProject,
-          expertAnalysis: updatedAnalysis
-        };
-
-        // Call parent callback if provided
-        if (onSaveSuccess) {
-          onSaveSuccess(updatedProject);
-        }
-
-        // Also call the onSaveSuccess from the project if it exists
-        if (selectedExpertProject.onSaveSuccess) {
-          selectedExpertProject.onSaveSuccess();
-        }
-
-        // Dispatch global event for other components
-        window.dispatchEvent(new CustomEvent('expertAnalysisUpdated', { 
-          detail: { projectId, updatedAnalysis } 
-        }));
-
-        if (window.refreshDashboardData) {
-          window.refreshDashboardData();
-        }
-        
-        // Save transmission data
-        if (localTransmissionData.length > 0) {
-          if (saveTransmissionInterconnection) {
-            saveTransmissionInterconnection(projectId, localTransmissionData)
-              .then(() => console.log('✅ Transmission data saved'))
-              .catch(error => console.error('Transmission save error:', error));
-          }
-        }
-        
-        // Clear success message
-        setTimeout(() => {
-          setSaveStatus(null);
-        }, 2000);
-        
-      } else {
-        throw new Error('No save function provided');
-      }
-      
-    } catch (error) {
-      console.error('❌ Save error:', error);
-      
-      setSaveStatus('error');
-      
-      setTimeout(() => {
-        const errorMessage = error.message.includes('404') 
-          ? 'Save failed: API endpoint not found.'
-          : error.message.includes('401') || error.message.includes('403')
-          ? 'Save failed: Authentication error.'
-          : `Save failed: ${error.message}`;
-        
-        alert(`❌ ${errorMessage}`);
-      }, 100);
-    }
-  }, [
-    selectedExpertProject, 
-    editedAnalysis, 
-    analysisData, 
-    saveStatus, 
-    recalculateScores, 
-    saveExpertAnalysis, 
-    saveTransmissionInterconnection, 
-    localTransmissionData, 
-    currentUser, 
-    hasChanges,
-    onSaveSuccess // Added dependency
-  ]);
+      alert(`❌ ${errorMessage}`);
+    }, 100);
+  }
+}, [
+  selectedExpertProject, 
+  editedAnalysis, 
+  analysisData, 
+  saveStatus, 
+  recalculateScores, 
+  saveExpertAnalysis, 
+  saveTransmissionInterconnection, 
+  localTransmissionData, 
+  currentUser, 
+  hasChanges,
+  onSaveSuccess // Make sure this is in dependencies
+]);
 
   // Handle modal close
   const handleClose = useCallback(() => {
