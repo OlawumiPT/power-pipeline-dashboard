@@ -10,39 +10,24 @@ const ProjectDetailModal = ({ selectedProject, closeProjectDetail }) => {
 
   const detailData = selectedProject.detailData || {};
 
-  // =========================================================
-  // ✅ FIX HELPERS (ADDED)
-  // - show 0 correctly
-  // - handle Excel keys with \n, \r, trailing spaces
-  // =========================================================
+ 
   const isPresent = (v) => {
-    if (v === 0) return true;        // ✅ allow 0
-    if (v === false) return true;    // ✅ allow false
+    if (v === 0) return true;       
+    if (v === false) return true;    
     if (v === undefined || v === null) return false;
     if (typeof v === 'number' && Number.isNaN(v)) return false;
     if (typeof v === 'string' && v.trim() === '') return false;
     return true;
   };
 
-  /**
-   * ✅ IMPORTANT FIX:
-   * Previously, if obj has key "Redev Tier" but value is "" (empty),
-   * getLoose would return "" immediately and never check "Redev Tier " (trailing space)
-   * or other normalized variants that actually contain 0.
-   *
-   * Now: getLoose returns the first value that isPresent().
-   */
-  const getLoose = (obj, key) => {
+   const getLoose = (obj, key) => {
     if (!obj || !key) return undefined;
 
-    // 1) direct key (only if present)
     if (Object.prototype.hasOwnProperty.call(obj, key)) {
       const v = obj[key];
       if (isPresent(v)) return v;
-      // if not present, keep searching
     }
 
-    // 2) common Excel newline variants (only if present)
     const variants = [`${key}\n`, `${key}\r`, `${key}\r\n`];
     for (const k of variants) {
       if (Object.prototype.hasOwnProperty.call(obj, k)) {
@@ -51,7 +36,6 @@ const ProjectDetailModal = ({ selectedProject, closeProjectDetail }) => {
       }
     }
 
-    // 3) loose match (trim + lowercase) - return first present value
     const wanted = String(key).trim().toLowerCase();
     const matches = Object.keys(obj).filter(
       (k) => String(k).trim().toLowerCase() === wanted

@@ -424,11 +424,20 @@ const ExpertAnalysisModal = ({
         // Update all states with saved data
         setAnalysisData(updatedAnalysis);
         setEditedAnalysis(updatedAnalysis);
-        
-        // CRITICAL FIX: Exit edit mode after successful save
+       
         setIsEditing(false);
         
         setSaveStatus('success');
+
+      if (selectedExpertProject.onSaveSuccess) {
+        selectedExpertProject.onSaveSuccess();
+      }
+
+      window.dispatchEvent(new Event('expertAnalysisUpdated'));
+
+      if (window.refreshDashboardData) {
+        window.refreshDashboardData();
+      }
         
         // Save transmission data
         if (localTransmissionData.length > 0) {
@@ -1381,37 +1390,41 @@ const ExpertAnalysisModal = ({
                     <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Interconnection (IX)</h5>
                   </div>
                   <div>
-                    {isEditing ? (
-                      <select 
-                        value={currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
-                        onChange={(e) => handleScoreChange('redevelopment', 'interconnection', e.target.value)}
-                        style={{
-                          width: '100%',
-                          padding: '12px',
-                          fontSize: '14px',
-                          backgroundColor: '#2d3748',
-                          color: 'white',
-                          border: '1px solid #4a5568',
-                          borderRadius: '6px',
-                          marginBottom: '8px'
-                        }}
-                      >
-                        <option value="0">0 - Major upgrades needed</option>
-                        <option value="1">1 - Minimal upgrades needed</option>
-                        <option value="2">2 - No upgrades needed (Unsecured)</option>
-                        <option value="3">3 - Secured IX Rights</option>
-                      </select>
-                    ) : (
-                      <div style={{
+
+                    
+                    {/* In the Interconnection section, change the select options to: */}
+                  {isEditing ? (
+                    <select 
+                      value={currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                      onChange={(e) => handleScoreChange('redevelopment', 'interconnection', e.target.value)}
+                      style={{
+                        width: '100%',
                         padding: '12px',
+                        fontSize: '14px',
                         backgroundColor: '#2d3748',
-                        borderRadius: '6px',
+                        color: 'white',
                         border: '1px solid #4a5568',
+                        borderRadius: '6px',
                         marginBottom: '8px'
-                      }}>
-                        Score: {currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
-                      </div>
-                    )}
+                      }}
+                    >
+                      <option value="0">0 - Major upgrades needed</option>
+                      <option value="1">1 - Minimal upgrades needed</option>
+                      <option value="2">2 - No upgrades needed (Unsecured)</option>
+                      <option value="3">3 - Secured IX Rights</option>
+                    </select>
+                  ) : (
+                    <div style={{
+                      padding: '12px',
+                      backgroundColor: '#2d3748',
+                      borderRadius: '6px',
+                      border: '1px solid #4a5568',
+                      marginBottom: '8px'
+                    }}>
+                      Score: {currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                    </div>
+                  )}
+
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 30%</span>
                     </div>

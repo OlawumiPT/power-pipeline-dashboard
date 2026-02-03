@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import './Dashboard.css';
 import Header from './components/Header';
 import KPISection from './components/Sections/KPISection';
@@ -216,59 +216,56 @@ function DashboardContent() {
   };
 
   // Fetch transmission interconnection data
- // Find and replace the fetchTransmissionInterconnection function:
-
-// Fetch transmission interconnection data - FIXED VERSION
-const fetchTransmissionInterconnection = async (projectName) => {
-  try {
-    console.log(`[Frontend] Fetching transmission data for project: ${projectName}`);
-    
-    const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
+  const fetchTransmissionInterconnection = async (projectName) => {
+    try {
+      console.log(`[Frontend] Fetching transmission data for project: ${projectName}`);
+      
+      const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        console.log(`[Frontend] Transmission data not found for ${projectName}, status: ${response.status}`);
+        return [];
       }
-    });
-    
-    if (!response.ok) {
-      console.log(`[Frontend] Transmission data not found for ${projectName}, status: ${response.status}`);
+      
+      const result = await response.json();
+      console.log('[Frontend] Transmission API response:', result);
+      
+      // Extract data from the response structure
+      let transmissionArray = [];
+      
+      if (result.success && Array.isArray(result.data)) {
+        transmissionArray = result.data;
+      } else if (Array.isArray(result)) {
+        transmissionArray = result;
+      } else if (result.data && Array.isArray(result.data)) {
+        transmissionArray = result.data;
+      }
+      
+      console.log(`[Frontend] Found ${transmissionArray.length} transmission records for ${projectName}`);
+      
+      // Transform data to frontend format
+      const transformedData = transmissionArray.map(item => ({
+        site: item.site || '',
+        poiVoltage: item.poiVoltage || item.poi_voltage || '',
+        excessInjectionCapacity: item.excessInjectionCapacity || item.excess_injection_capacity || 0,
+        excessWithdrawalCapacity: item.excessWithdrawalCapacity || item.excess_withdrawal_capacity || 0,
+        constraints: item.constraints || '-',
+        excessIXCapacity: item.excessIXCapacity || item.excess_ix_capacity || true,
+        project_id: item.projectId || item.project_id || null
+      }));
+      
+      console.log('[Frontend] Transformed transmission data:', transformedData);
+      return transformedData;
+    } catch (error) {
+      console.error('[Frontend] Error fetching transmission data:', error);
       return [];
     }
-    
-    const result = await response.json();
-    console.log('[Frontend] Transmission API response:', result);
-    
-    // Extract data from the response structure
-    let transmissionArray = [];
-    
-    if (result.success && Array.isArray(result.data)) {
-      transmissionArray = result.data;
-    } else if (Array.isArray(result)) {
-      transmissionArray = result;
-    } else if (result.data && Array.isArray(result.data)) {
-      transmissionArray = result.data;
-    }
-    
-    console.log(`[Frontend] Found ${transmissionArray.length} transmission records for ${projectName}`);
-    
-    // Transform data to frontend format
-    const transformedData = transmissionArray.map(item => ({
-      site: item.site || '',
-      poiVoltage: item.poiVoltage || item.poi_voltage || '',
-      excessInjectionCapacity: item.excessInjectionCapacity || item.excess_injection_capacity || 0,
-      excessWithdrawalCapacity: item.excessWithdrawalCapacity || item.excess_withdrawal_capacity || 0,
-      constraints: item.constraints || '-',
-      excessIXCapacity: item.excessIXCapacity || item.excess_ix_capacity || true,
-      project_id: item.projectId || item.project_id || null
-    }));
-    
-    console.log('[Frontend] Transformed transmission data:', transformedData);
-    return transformedData;
-  } catch (error) {
-    console.error('[Frontend] Error fetching transmission data:', error);
-    return [];
-  }
-};
+  };
 
   // Save transmission interconnection data
   const saveTransmissionInterconnection = async (projectId, transmissionData) => {
@@ -339,6 +336,22 @@ const fetchTransmissionInterconnection = async (projectName) => {
   // ============================================================================
   // END OF NEW API CALL FUNCTIONS
   // ============================================================================
+
+  // NEW: Function to refresh expert data
+  const refreshExpertData = useCallback(async () => {
+    console.log('🔄 DashboardContent: Refreshing expert data...');
+    try {
+      // Re-fetch all data
+      await fetchData();
+      
+      // Force re-render of expert scores
+      window.dispatchEvent(new Event('expertAnalysisUpdated'));
+      
+      console.log('✅ DashboardContent: Expert data refreshed');
+    } catch (error) {
+      console.error('❌ DashboardContent: Error refreshing expert data:', error);
+    }
+  }, []);
 
   // Extract dropdown options for use in components
   const {
@@ -825,15 +838,15 @@ const fetchTransmissionInterconnection = async (projectName) => {
         right: 20px;
         background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
         color: white;
-        padding: 12px 20px;
-        border-radius: 6px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        padding: '12px 20px';
+        border-radius: '6px';
+        box-shadow: '0 4px 12px rgba(0,0,0,0.15)';
         z-index: 9999;
-        font-size: 14px;
-        animation: slideIn 0.3s ease-out;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        font-size: '14px';
+        animation: 'slideIn 0.3s ease-out';
+        display: 'flex';
+        align-items: 'center';
+        gap: '8px';
       ">
         ${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'} ${message}
       </div>
@@ -2280,6 +2293,7 @@ const handleUpdateProject = async (updatedData) => {
             setExpertAnalysisFilter={setExpertAnalysisFilter}
             setSelectedExpertProject={setSelectedExpertProject}
             setShowScoringModal={setShowScoringModal}
+            refreshExpertData={refreshExpertData} // ADD THIS LINE
           />
         )}
         

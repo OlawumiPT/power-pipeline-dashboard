@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 const hasEdits = (projectId) => {
   try {
@@ -57,15 +57,94 @@ const ExpertScoresPanel = ({
   getAllExpertAnalyses: getAnalyses,
   expertAnalysisFilter,
   setExpertAnalysisFilter,
-  setSelectedExpertProject 
+  setSelectedExpertProject,
+  // ADD THIS: Function to refresh data after edits
+  refreshExpertData = null
 }) => {
   
   if (!showExpertScores) return null;
 
-  const expertProjects = getAnalyses();
+  // Add state to track when to refresh
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [localExpertProjects, setLocalExpertProjects] = useState([]);
   
-  const filteredProjects = expertProjects.filter(project => {
+  // Listen for refresh events from child modals
+  useEffect(() => {
+    const handleRefresh = () => {
+      console.log('🔄 ExpertScoresPanel: Received refresh event');
+      setRefreshKey(prev => prev + 1);
+      
+      // Also call external refresh if provided
+      if (refreshExpertData) {
+        console.log('🔄 ExpertScoresPanel: Calling external refresh');
+        refreshExpertData();
+      }
+    };
+    
+    // Listen for refresh events
+    window.addEventListener('expertAnalysisUpdated', handleRefresh);
+    
+    // Also refresh when the panel opens
+    if (showExpertScores) {
+      console.log('🔄 ExpertScoresPanel: Panel opened, refreshing data');
+      handleRefresh();
+    }
+    
+    return () => {
+      window.removeEventListener('expertAnalysisUpdated', handleRefresh);
+    };
+  }, [showExpertScores, refreshExpertData]);
+  
+  // Refresh data when refreshKey changes
+  useEffect(() => {
+    if (showExpertScores) {
+      console.log('🔄 ExpertScoresPanel: Refreshing project data, key:', refreshKey);
+      try {
+        const projects = getAnalyses();
+        console.log('📊 ExpertScoresPanel: Loaded', projects.length, 'projects');
+        setLocalExpertProjects(projects);
+      } catch (error) {
+        console.error('❌ ExpertScoresPanel: Error loading projects:', error);
+      }
+    }
+  }, [showExpertScores, refreshKey, getAnalyses]);
+
+  // When a project is selected, pass additional data
+  const handleProjectSelect = (project) => {
+    console.log('👉 ExpertScoresPanel: Project selected:', project.id, project.expertAnalysis?.projectName);
+    
+    // Pass the refresh function to the modal
+    const enhancedProject = {
+      ...project,
+      onSaveSuccess: () => {
+        console.log('✅ ExpertScoresPanel: Received save success from modal');
+        
+        // Trigger refresh in parent
+        setRefreshKey(prev => prev + 1);
+        
+        // Also call external refresh if provided
+        if (refreshExpertData) {
+          console.log('🔄 ExpertScoresPanel: Calling external refresh');
+          refreshExpertData();
+        }
+        
+        // Dispatch event for other components
+        window.dispatchEvent(new Event('expertAnalysisUpdated'));
+        
+        // Force UI update
+        setTimeout(() => {
+          const projects = getAnalyses();
+          setLocalExpertProjects(projects);
+        }, 100);
+      }
+    };
+    setSelectedExpertProject(enhancedProject);
+  };
+
+  const filteredProjects = localExpertProjects.filter(project => {
     const analysis = project.expertAnalysis;
+    if (!analysis) return false;
+    
     if (expertAnalysisFilter === "all") return true;
     if (expertAnalysisFilter === "strong") return analysis.ratingClass === "strong";
     if (expertAnalysisFilter === "moderate") return analysis.ratingClass === "moderate";
@@ -74,8 +153,12 @@ const ExpertScoresPanel = ({
   });
   
   const sortedProjects = [...filteredProjects].sort((a, b) => {
-    return b.expertAnalysis.overallScore - a.expertAnalysis.overallScore;
+    const scoreA = a.expertAnalysis?.overallScore || 0;
+    const scoreB = b.expertAnalysis?.overallScore || 0;
+    return scoreB - scoreA;
   });
+
+  console.log('📊 ExpertScoresPanel: Rendering', sortedProjects.length, 'filtered projects');
 
   return (
     <div className="modal-overlay dark-overlay" onClick={() => setShowExpertScores(false)}>
@@ -88,7 +171,30 @@ const ExpertScoresPanel = ({
               AI-powered assessment of all pipeline projects
             </p>
           </div>
-          <button className="modal-close dark-close" onClick={() => setShowExpertScores(false)}>×</button>
+          <div className="header-right">
+            <button 
+              className="refresh-btn dark-refresh-btn"
+              onClick={() => {
+                console.log('🔄 Manual refresh triggered');
+                setRefreshKey(prev => prev + 1);
+                if (refreshExpertData) refreshExpertData();
+              }}
+              title="Refresh data"
+              style={{
+                background: 'rgba(59, 130, 246, 0.1)',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                color: '#93c5fd',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                marginRight: '10px'
+              }}
+            >
+              🔄 Refresh
+            </button>
+            <button className="modal-close dark-close" onClick={() => setShowExpertScores(false)}>×</button>
+          </div>
         </div>
         
         {/* Body */}
@@ -98,7 +204,12 @@ const ExpertScoresPanel = ({
             <div className="header-info">
               <h3 className="expert-scores-title dark-section-title">Project Assessments</h3>
               <p className="expert-scores-subtitle dark-count">
-                {sortedProjects.length} of {expertProjects.length} projects
+                {sortedProjects.length} of {localExpertProjects.length} projects
+                {refreshKey > 0 && (
+                  <span style={{ marginLeft: '10px', fontSize: '12px', color: '#93c5fd' }}>
+                    (Refreshed {refreshKey} times)
+                  </span>
+                )}
               </p>
             </div>
             <div className="expert-scores-actions">
@@ -106,6 +217,14 @@ const ExpertScoresPanel = ({
                 className="expert-scores-filter dark-filter"
                 value={expertAnalysisFilter}
                 onChange={(e) => setExpertAnalysisFilter(e.target.value)}
+                style={{
+                  padding: '8px 12px',
+                  backgroundColor: '#2d3748',
+                  color: 'white',
+                  border: '1px solid #4a5568',
+                  borderRadius: '6px',
+                  fontSize: '14px'
+                }}
               >
                 <option value="all">All Ratings</option>
                 <option value="strong">Strong (≥4.5)</option>
@@ -117,14 +236,38 @@ const ExpertScoresPanel = ({
           
           {/* Projects Grid */}
           {sortedProjects.length === 0 ? (
-            <div className="expert-no-projects dark-no-projects">
-              <h3 className="dark-title">No Projects Found</h3>
-              <p className="dark-subtitle">Adjust your filters to see expert analyses.</p>
+            <div className="expert-no-projects dark-no-projects" style={{ textAlign: 'center', padding: '40px' }}>
+              <h3 className="dark-title" style={{ color: '#e2e8f0', marginBottom: '10px' }}>No Projects Found</h3>
+              <p className="dark-subtitle" style={{ color: '#a0aec0' }}>Adjust your filters to see expert analyses.</p>
+              <button 
+                onClick={() => {
+                  setRefreshKey(prev => prev + 1);
+                  if (refreshExpertData) refreshExpertData();
+                }}
+                style={{
+                  background: 'rgba(59, 130, 246, 0.9)',
+                  border: '1px solid rgba(59, 130, 246, 0.9)',
+                  color: 'white',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  marginTop: '20px'
+                }}
+              >
+                🔄 Refresh Data
+              </button>
             </div>
           ) : (
-            <div className="expert-projects-grid dark-projects-grid">
+            <div className="expert-projects-grid dark-projects-grid" style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', 
+              gap: '20px',
+              padding: '20px'
+            }}>
               {sortedProjects.map(project => {
                 const analysis = project.expertAnalysis;
+                if (!analysis) return null;
+                
                 const capacityText = getCapacityInfo(project);
                 const marketText = getMarketInfo(project);
                 const location = project["Location"] || project.location || "";
@@ -136,73 +279,211 @@ const ExpertScoresPanel = ({
                   <div 
                     key={project.id} 
                     className="expert-project-card dark-project-card"
-                    onClick={() => setSelectedExpertProject(project)}
+                    onClick={() => handleProjectSelect(project)}
+                    style={{
+                      background: '#2d3748',
+                      border: '1px solid #4a5568',
+                      borderRadius: '8px',
+                      padding: '20px',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      position: 'relative'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-2px)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
                   >
                     {/* Card Header */}
-                    <div className="project-card-header dark-card-header">
+                    <div className="project-card-header dark-card-header" style={{ marginBottom: '16px' }}>
                       <div className="project-title-section">
-                        <div className="project-title-row">
-                          <h4 className="project-title dark-project-title">
+                        <div className="project-title-row" style={{ 
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'flex-start',
+                          marginBottom: '8px'
+                        }}>
+                          <h4 className="project-title dark-project-title" style={{ 
+                            margin: '0', 
+                            color: '#ffffff', 
+                            fontSize: '18px',
+                            fontWeight: '600',
+                            flex: 1
+                          }}>
                             {analysis.projectName}
                           </h4>
                           <span 
                             className="rating-badge dark-rating-badge"
-                            style={{ backgroundColor: ratingColor }}
+                            style={{ 
+                              backgroundColor: ratingColor,
+                              color: 'white',
+                              padding: '4px 10px',
+                              borderRadius: '20px',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              marginLeft: '10px'
+                            }}
                           >
                             {ratingText}
                           </span>
                         </div>
-                        <div className="project-subtitle-row">
-                          <span className="project-id dark-project-id">#{analysis.projectId}</span>
+                        <div className="project-subtitle-row" style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '10px'
+                        }}>
+                          <span className="project-id dark-project-id" style={{ 
+                            color: '#a0aec0', 
+                            fontSize: '12px'
+                          }}>
+                            #{analysis.projectId}
+                          </span>
                           {hasEdits(project.id) && (
-                            <span className="edit-badge dark-edit-badge" title="Has unsaved edits">
+                            <span className="edit-badge dark-edit-badge" title="Has unsaved edits" style={{
+                              background: 'rgba(245, 158, 11, 0.15)',
+                              border: '1px solid rgba(245, 158, 11, 0.3)',
+                              color: '#fbbf24',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: '500'
+                            }}>
                               ✏️ Edited
                             </span>
                           )}
+                          <span className="score-badge dark-score-badge" style={{
+                            background: 'rgba(59, 130, 246, 0.15)',
+                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                            color: '#93c5fd',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            marginLeft: 'auto'
+                          }}>
+                            Score: {analysis.overallScore}/6.0
+                          </span>
                         </div>
                       </div>
                     </div>
                     
                     {/* Project Info */}
-                    <div className="project-info-grid dark-info-grid">
+                    <div className="project-info-grid dark-info-grid" style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: '1fr 1fr', 
+                      gap: '12px',
+                      marginBottom: '20px'
+                    }}>
                       {/* Location */}
-                      <div className="info-item dark-info-item">
-                        <div className="info-label dark-info-label">📍 Location</div>
-                        <div className="info-value dark-info-value">{location}</div>
-                      </div>
+                      {location && (
+                        <div className="info-item dark-info-item">
+                          <div className="info-label dark-info-label" style={{ 
+                            color: '#a0aec0', 
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            marginBottom: '4px'
+                          }}>📍 Location</div>
+                          <div className="info-value dark-info-value" style={{ 
+                            color: '#e2e8f0', 
+                            fontSize: '14px',
+                            fontWeight: '500'
+                          }}>{location}</div>
+                        </div>
+                      )}
                       
                       {/* Owner */}
                       {owner && (
                         <div className="info-item dark-info-item">
-                          <div className="info-label dark-info-label">👤 Plant Owner</div>
-                          <div className="info-value dark-info-value">{owner}</div>
+                          <div className="info-label dark-info-label" style={{ 
+                            color: '#a0aec0', 
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            marginBottom: '4px'
+                          }}>👤 Plant Owner</div>
+                          <div className="info-value dark-info-value" style={{ 
+                            color: '#e2e8f0', 
+                            fontSize: '14px',
+                            fontWeight: '500'
+                          }}>{owner}</div>
                         </div>
                       )}
                       
                       {/* Capacity */}
-                      {capacityText && (
+                      {capacityText && capacityText !== "N/A MW" && (
                         <div className="info-item dark-info-item">
-                          <div className="info-label dark-info-label">⚡ Capacity</div>
-                          <div className="info-value dark-info-value">{capacityText}</div>
+                          <div className="info-label dark-info-label" style={{ 
+                            color: '#a0aec0', 
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            marginBottom: '4px'
+                          }}>⚡ Capacity</div>
+                          <div className="info-value dark-info-value" style={{ 
+                            color: '#e2e8f0', 
+                            fontSize: '14px',
+                            fontWeight: '500'
+                          }}>{capacityText}</div>
                         </div>
                       )}
                       
                       {/* Market */}
                       {marketText && (
                         <div className="info-item dark-info-item">
-                          <div className="info-label dark-info-label">🌐 Market</div>
-                          <div className="info-value dark-info-value">{marketText}</div>
+                          <div className="info-label dark-info-label" style={{ 
+                            color: '#a0aec0', 
+                            fontSize: '11px',
+                            fontWeight: '500',
+                            marginBottom: '4px'
+                          }}>🌐 Market</div>
+                          <div className="info-value dark-info-value" style={{ 
+                            color: '#e2e8f0', 
+                            fontSize: '14px',
+                            fontWeight: '500'
+                          }}>{marketText}</div>
                         </div>
                       )}
-                       </div>
-                       
-                      {/* Overall Score */}
-                     {/* <div className="info-item dark-info-item">
-                        <div className="info-label dark-info-label">📊 Overall Score</div>
-                        <div className="info-value dark-info-value score-highlight">
-                          {analysis.overallScore}/6.0
-                        </div>
-                      </div>*}
+                    </div>
+                    
+                    {/* Score Breakdown */}
+                    <div className="score-breakdown dark-score-breakdown" style={{
+                      background: 'rgba(0, 0, 0, 0.2)',
+                      borderRadius: '6px',
+                      padding: '12px',
+                      marginBottom: '16px'
+                    }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between',
+                        marginBottom: '6px'
+                      }}>
+                        <span style={{ color: '#a0aec0', fontSize: '12px' }}>Thermal Score:</span>
+                        <span style={{ 
+                          color: parseFloat(analysis.thermalScore) >= 2.0 ? '#10b981' : 
+                                 parseFloat(analysis.thermalScore) >= 1.0 ? '#f59e0b' : '#ef4444',
+                          fontWeight: '600',
+                          fontSize: '13px'
+                        }}>
+                          {analysis.thermalScore}/3.0
+                        </span>
+                      </div>
+                      <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'space-between'
+                      }}>
+                        <span style={{ color: '#a0aec0', fontSize: '12px' }}>Redevelopment Score:</span>
+                        <span style={{ 
+                          color: parseFloat(analysis.redevelopmentScore) >= 2.0 ? '#10b981' : 
+                                 parseFloat(analysis.redevelopmentScore) >= 1.0 ? '#f59e0b' : '#ef4444',
+                          fontWeight: '600',
+                          fontSize: '13px'
+                        }}>
+                          {analysis.redevelopmentScore}/3.0
+                        </span>
+                      </div>
+                    </div>
                     
                     {/* Action Button */}
                     <div className="project-action dark-project-action">
@@ -210,7 +491,25 @@ const ExpertScoresPanel = ({
                         className="view-scores-btn dark-view-btn"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedExpertProject(project);
+                          handleProjectSelect(project);
+                        }}
+                        style={{
+                          width: '100%',
+                          background: 'rgba(59, 130, 246, 0.9)',
+                          border: '1px solid rgba(59, 130, 246, 0.9)',
+                          color: 'white',
+                          padding: '12px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontWeight: '500',
+                          fontSize: '14px',
+                          transition: 'all 0.2s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(59, 130, 246, 1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.9)';
                         }}
                       >
                         View Scores & Analysis
@@ -224,10 +523,24 @@ const ExpertScoresPanel = ({
         </div>
         
         {/* Footer */}
-        <div className="modal-footer dark-footer">
+        <div className="modal-footer dark-footer" style={{ 
+          padding: '20px', 
+          borderTop: '1px solid #4a5568', 
+          background: 'rgba(0, 0, 0, 0.2)'
+        }}>
           <button 
             className="back-btn dark-back-btn"
             onClick={() => setShowExpertScores(false)}
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              color: '#e2e8f0',
+              padding: '12px 24px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: '500',
+              fontSize: '14px'
+            }}
           >
             Back to Dashboard
           </button>
