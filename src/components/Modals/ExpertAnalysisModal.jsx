@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 
 const ExpertAnalysisModal = ({ 
@@ -101,24 +100,15 @@ const ExpertAnalysisModal = ({
     return initialAnalysis;
   });
   
-<<<<<<< HEAD
-  // API Base URL
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
-=======
   // API Base URL - Fixed to match your backend
   const API_BASE_URL = 'https://pt-power-pipeline-api.azurewebsites.net';
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
   
   // Function to get token from various sources
   const getAuthToken = () => {
     return authToken || localStorage.getItem('token') || '';
   };
 
-<<<<<<< HEAD
-  // Fetch expert analysis from API
-=======
   // Fetch expert analysis from API - USING THE PROVIDED FUNCTION
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
   const fetchExpertAnalysisData = async () => {
     try {
       setIsLoading(true);
@@ -146,9 +136,6 @@ const ExpertAnalysisModal = ({
         }
       }
       
-<<<<<<< HEAD
-      console.log('No fetch function provided, skipping API call');
-=======
       console.log('No fetch function provided, trying direct fetch...');
       
       // Direct fetch as fallback
@@ -176,7 +163,6 @@ const ExpertAnalysisModal = ({
         }
       }
       
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
       return null;
       
     } catch (error) {
@@ -187,11 +173,7 @@ const ExpertAnalysisModal = ({
     }
   };
   
-<<<<<<< HEAD
-  // Fetch transmission data from API
-=======
   // Fetch transmission data from API - USING THE PROVIDED FUNCTION
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
   const fetchTransmissionData = async () => {
     try {
       const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
@@ -209,11 +191,6 @@ const ExpertAnalysisModal = ({
       if (fetchTransmissionInterconnection && typeof fetchTransmissionInterconnection === 'function') {
         try {
           const data = await fetchTransmissionInterconnection(projectName);
-<<<<<<< HEAD
-          if (data && Array.isArray(data)) {
-            console.log('Transmission data fetched via provided function:', data);
-            return data;
-=======
           
           // Debug: Log the raw data
           console.log('Raw transmission data from API:', data);
@@ -232,7 +209,6 @@ const ExpertAnalysisModal = ({
             
             console.log('Transformed transmission data:', transformedData);
             return transformedData;
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
           } else {
             console.log('No transmission data returned from provided function');
             return [];
@@ -243,9 +219,6 @@ const ExpertAnalysisModal = ({
         }
       }
       
-<<<<<<< HEAD
-      console.log('No transmission fetch function provided, returning empty array');
-=======
       console.log('No transmission fetch function provided, trying direct fetch...');
       
       // Try direct fetch as fallback
@@ -284,7 +257,6 @@ const ExpertAnalysisModal = ({
         }
       }
       
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
       return [];
       
     } catch (error) {
@@ -292,19 +264,12 @@ const ExpertAnalysisModal = ({
       return [];
     }
   };
-<<<<<<< HEAD
-
-=======
   
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
   // Initialize all data
   useEffect(() => {
     const initializeData = async () => {
       console.log('Initializing expert analysis modal data...');
-<<<<<<< HEAD
-=======
       console.log('Selected project:', selectedExpertProject);
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
       
       // Try to get data by project name first
       let dbAnalysis = await fetchExpertAnalysisData();
@@ -336,10 +301,7 @@ const ExpertAnalysisModal = ({
       setAnalysisData(initialAnalysis);
       setEditedTransmissionData(dbTransmission || []);
       console.log('Initial analysis set:', initialAnalysis);
-<<<<<<< HEAD
-=======
       console.log('Transmission data set:', dbTransmission);
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
     };
     
     if (selectedExpertProject) {
@@ -466,9 +428,6 @@ const ExpertAnalysisModal = ({
       if (editedTransmissionData.length > 0) {
         if (saveTransmissionInterconnection && typeof saveTransmissionInterconnection === 'function') {
           try {
-<<<<<<< HEAD
-            await saveTransmissionInterconnection(selectedExpertProject.id, editedTransmissionData);
-=======
             // Transform data back to database format for saving
             const transmissionDataToSave = editedTransmissionData.map(item => ({
               site: item.site,
@@ -481,7 +440,6 @@ const ExpertAnalysisModal = ({
             }));
             
             await saveTransmissionInterconnection(selectedExpertProject.id, transmissionDataToSave);
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
             console.log('Transmission data saved via provided function');
           } catch (error) {
             console.error('Failed to save transmission data:', error);
@@ -625,8 +583,6 @@ const ExpertAnalysisModal = ({
     });
   };
 
-<<<<<<< HEAD
-=======
   // Debug function to force data reload
   const debugForceReloadData = async () => {
     console.log('=== DEBUG: Forcing data reload ===');
@@ -687,7 +643,6 @@ const ExpertAnalysisModal = ({
     }
   };
 
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
   // Use editedAnalysis if available, otherwise use analysisData
   const currentAnalysis = editedAnalysis || analysisData;
   
@@ -748,8 +703,6 @@ const ExpertAnalysisModal = ({
           </div>
         )}
         
-<<<<<<< HEAD
-=======
         {/* Debug Button - Only show in development */}
         {import.meta.env.DEV && (
           <div style={{ padding: '10px 20px', borderBottom: '1px solid #4a5568' }}>
@@ -774,7 +727,6 @@ const ExpertAnalysisModal = ({
           </div>
         )}
         
->>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
         {/* Overall Score Summary */}
         <div className="overall-score-section">
           <h3>Overall Score Summary</h3>
