@@ -17,7 +17,10 @@ const ExpertAnalysisModal = ({
   const isInitialLoad = useRef(true);
   const originalAnalysisRef = useRef(null);
   const originalTransmissionRef = useRef([]);
-  const transmissionInputRefs = useRef({}); // NEW: Store input refs
+  const transmissionInputRefs = useRef({});
+  
+  // Track if we need to refresh data on next mount
+  const lastProjectIdRef = useRef(null);
   
   // Generate default analysis
   const generateDefaultAnalysis = useCallback((project) => {
@@ -98,7 +101,7 @@ const ExpertAnalysisModal = ({
     return initialAnalysis;
   });
   
-  // NEW: Local state for transmission inputs to prevent parent re-renders
+  // Local state for transmission inputs
   const [localTransmissionData, setLocalTransmissionData] = useState([]);
   
   // API Base URL
@@ -144,23 +147,29 @@ const ExpertAnalysisModal = ({
         const freshAnalysis = await fetchExpertAnalysis(projectId);
         
         if (freshAnalysis) {
-          requestAnimationFrame(() => {
-            setAnalysisData(prev => ({
+          // Update analysis data
+          setAnalysisData(prev => ({
+            ...prev,
+            ...freshAnalysis,
+            thermalBreakdown: freshAnalysis.thermalBreakdown || prev.thermalBreakdown,
+            redevelopmentBreakdown: freshAnalysis.redevelopmentBreakdown || prev.redevelopmentBreakdown
+          }));
+          
+          // Update edited analysis if not in edit mode
+          if (!isEditing) {
+            setEditedAnalysis(prev => ({
               ...prev,
               ...freshAnalysis,
-              thermalBreakdown: freshAnalysis.thermalBreakdown || prev.thermalBreakdown,
-              redevelopmentBreakdown: freshAnalysis.redevelopmentBreakdown || prev.redevelopmentBreakdown
+              thermalBreakdown: freshAnalysis.thermalBreakdown || prev?.thermalBreakdown,
+              redevelopmentBreakdown: freshAnalysis.redevelopmentBreakdown || prev?.redevelopmentBreakdown
             }));
-            
-            if (!isEditing) {
-              setEditedAnalysis(prev => ({
-                ...prev,
-                ...freshAnalysis,
-                thermalBreakdown: freshAnalysis.thermalBreakdown || prev?.thermalBreakdown,
-                redevelopmentBreakdown: freshAnalysis.redevelopmentBreakdown || prev?.redevelopmentBreakdown
-              }));
-            }
-          });
+          }
+          
+          // Update original reference
+          originalAnalysisRef.current = JSON.parse(JSON.stringify({
+            ...(editedAnalysis || analysisData),
+            ...freshAnalysis
+          }));
         }
       }
       
@@ -175,21 +184,20 @@ const ExpertAnalysisModal = ({
         const freshTransmission = await fetchTransmissionInterconnection(projectName);
         
         if (freshTransmission && Array.isArray(freshTransmission)) {
-          requestAnimationFrame(() => {
-            setEditedTransmissionData(freshTransmission);
-            setLocalTransmissionData(freshTransmission); // Also update local state
-          });
+          setEditedTransmissionData(freshTransmission);
+          setLocalTransmissionData(freshTransmission);
+          
+          // Update original reference
+          originalTransmissionRef.current = JSON.parse(JSON.stringify(freshTransmission));
         }
       }
       
     } catch (error) {
       console.error('Error refreshing data:', error);
     } finally {
-      requestAnimationFrame(() => {
-        setIsLoading(false);
-      });
+      setIsLoading(false);
     }
-  }, [selectedExpertProject, fetchExpertAnalysis, fetchTransmissionInterconnection, isEditing]);
+  }, [selectedExpertProject, fetchExpertAnalysis, fetchTransmissionInterconnection, isEditing, analysisData, editedAnalysis]);
 
   // Fetch expert analysis
   const fetchExpertAnalysisData = useCallback(async () => {
@@ -218,9 +226,7 @@ const ExpertAnalysisModal = ({
       console.error('Error fetching expert analysis:', error);
       return null;
     } finally {
-      requestAnimationFrame(() => {
-        setIsLoading(false);
-      });
+      setIsLoading(false);
     }
   }, [selectedExpertProject, fetchExpertAnalysis]);
   
@@ -257,15 +263,25 @@ const ExpertAnalysisModal = ({
     }
   }, [selectedExpertProject, fetchTransmissionInterconnection]);
   
-  // Initialize all data
+  // Initialize all data - FIXED: Reset state when project changes
   useEffect(() => {
     const initializeData = async () => {
       if (!selectedExpertProject) return;
       
+      const currentProjectId = selectedExpertProject.id;
+      
+      // Reset states when project changes
+      if (lastProjectIdRef.current !== currentProjectId) {
+        setIsEditing(false);
+        setSaveStatus(null);
+        isInitialLoad.current = true;
+        lastProjectIdRef.current = currentProjectId;
+      }
+      
       let dbAnalysis = await fetchExpertAnalysisData();
       let dbTransmission = await fetchTransmissionData();
       
-      let initialAnalysis = analysisData;
+      let initialAnalysis = generateDefaultAnalysis(selectedExpertProject);
       
       if (dbAnalysis) {
         initialAnalysis = {
@@ -280,19 +296,20 @@ const ExpertAnalysisModal = ({
       originalAnalysisRef.current = JSON.parse(JSON.stringify(initialAnalysis));
       originalTransmissionRef.current = JSON.parse(JSON.stringify(dbTransmission || []));
       
-      requestAnimationFrame(() => {
-        setEditedAnalysis(initialAnalysis);
-        setAnalysisData(initialAnalysis);
-        setEditedTransmissionData(dbTransmission || []);
-        setLocalTransmissionData(dbTransmission || []); // Initialize local state
-      });
+      setEditedAnalysis(initialAnalysis);
+      setAnalysisData(initialAnalysis);
+      setEditedTransmissionData(dbTransmission || []);
+      setLocalTransmissionData(dbTransmission || []);
       
       isInitialLoad.current = false;
     };
     
-    if (selectedExpertProject && isInitialLoad.current) {
-      initializeData();
-    }
+    initializeData();
+    
+    // Cleanup function
+    return () => {
+      // Optional: Reset some states when component unmounts
+    };
   }, [selectedExpertProject]);
 
   // Recalculate scores
@@ -351,9 +368,7 @@ const ExpertAnalysisModal = ({
     
     if (saveStatus === 'saving') return;
     
-    requestAnimationFrame(() => {
-      setSaveStatus('saving');
-    });
+    setSaveStatus('saving');
     
     try {
       const currentAnalysisToSave = editedAnalysis || analysisData;
@@ -402,31 +417,18 @@ const ExpertAnalysisModal = ({
         const savedResult = await saveExpertAnalysis(saveData);
         console.log('✅ Save successful:', savedResult);
         
-        // Update original references
+        // Update original references with saved data
         originalAnalysisRef.current = JSON.parse(JSON.stringify(updatedAnalysis));
         originalTransmissionRef.current = JSON.parse(JSON.stringify(localTransmissionData));
         
-        // Batch state updates
-        requestAnimationFrame(() => {
-          setAnalysisData(prev => ({
-            ...prev,
-            ...updatedAnalysis,
-            thermalBreakdown: updatedAnalysis.thermalBreakdown || prev.thermalBreakdown,
-            redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || prev.redevelopmentBreakdown
-          }));
-          
-          setEditedAnalysis(prev => ({
-            ...prev,
-            ...updatedAnalysis,
-            thermalBreakdown: updatedAnalysis.thermalBreakdown || prev?.thermalBreakdown,
-            redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || prev?.redevelopmentBreakdown
-          }));
-          
-          // CRITICAL FIX: Exit edit mode after successful save
-          setIsEditing(false);
-          
-          setSaveStatus('success');
-        });
+        // Update all states with saved data
+        setAnalysisData(updatedAnalysis);
+        setEditedAnalysis(updatedAnalysis);
+        
+        // CRITICAL FIX: Exit edit mode after successful save
+        setIsEditing(false);
+        
+        setSaveStatus('success');
         
         // Save transmission data
         if (localTransmissionData.length > 0) {
@@ -439,9 +441,7 @@ const ExpertAnalysisModal = ({
         
         // Clear success message
         setTimeout(() => {
-          requestAnimationFrame(() => {
-            setSaveStatus(null);
-          });
+          setSaveStatus(null);
         }, 2000);
         
       } else {
@@ -451,9 +451,7 @@ const ExpertAnalysisModal = ({
     } catch (error) {
       console.error('❌ Save error:', error);
       
-      requestAnimationFrame(() => {
-        setSaveStatus('error');
-      });
+      setSaveStatus('error');
       
       setTimeout(() => {
         const errorMessage = error.message.includes('404') 
@@ -542,22 +540,18 @@ const ExpertAnalysisModal = ({
     
     const recalculated = recalculateScores(updated);
     
-    requestAnimationFrame(() => {
-      setEditedAnalysis(recalculated);
-    });
+    setEditedAnalysis(recalculated);
   }, [editedAnalysis, analysisData, recalculateScores]);
 
-  // handleLocalTransmissionChange 
-
-const handleLocalTransmissionChange = useCallback((index, field, value, event) => {
-  if (!isEditing) return;
-  
-  // Store the focused element before update
-  const focusedElement = document.activeElement;
-  const selectionStart = focusedElement.selectionStart;
-  const selectionEnd = focusedElement.selectionEnd;
-  
-  requestAnimationFrame(() => {
+  // Handle transmission change
+  const handleLocalTransmissionChange = useCallback((index, field, value, event) => {
+    if (!isEditing) return;
+    
+    // Store the focused element before update
+    const focusedElement = document.activeElement;
+    const selectionStart = focusedElement.selectionStart;
+    const selectionEnd = focusedElement.selectionEnd;
+    
     setLocalTransmissionData(prev => {
       const newData = [...prev];
       newData[index] = {
@@ -578,8 +572,7 @@ const handleLocalTransmissionChange = useCallback((index, field, value, event) =
         }
       }
     }, 0);
-  });
-}, [isEditing]);
+  }, [isEditing]);
 
   // Add new POI voltage entry
   const addNewTransmissionEntry = useCallback((e) => {
@@ -592,36 +585,32 @@ const handleLocalTransmissionChange = useCallback((index, field, value, event) =
                        selectedExpertProject.asset ||
                        "";
     
-    requestAnimationFrame(() => {
-      setLocalTransmissionData(prev => [
-        ...prev,
-        {
-          id: Date.now(),
-          site: projectName,
-          excessIXCapacity: true,
-          constraints: "-",
-          poiVoltage: "",
-          excessInjectionCapacity: 0,
-          excessWithdrawalCapacity: 0
-        }
-      ]);
-    });
+    setLocalTransmissionData(prev => [
+      ...prev,
+      {
+        id: Date.now(),
+        site: projectName,
+        excessIXCapacity: true,
+        constraints: "-",
+        poiVoltage: "",
+        excessInjectionCapacity: 0,
+        excessWithdrawalCapacity: 0
+      }
+    ]);
   }, [isEditing, selectedExpertProject]);
 
   // Remove POI voltage entry
   const removeTransmissionEntry = useCallback((index) => {
     if (!isEditing) return;
     
-    requestAnimationFrame(() => {
-      setLocalTransmissionData(prev => {
-        const newData = [...prev];
-        newData.splice(index, 1);
-        return newData;
-      });
+    setLocalTransmissionData(prev => {
+      const newData = [...prev];
+      newData.splice(index, 1);
+      return newData;
     });
   }, [isEditing]);
 
-  // Memoized Transmission Edit Table with COMPLETELY ISOLATED state
+  // Memoized Transmission Edit Table
   const TransmissionEditTable = React.memo(({ data, onFieldChange, onAdd, onRemove }) => {
     const handleChange = useCallback((index, field, value, event) => {
       onFieldChange(index, field, value, event);
@@ -641,100 +630,99 @@ const handleLocalTransmissionChange = useCallback((index, field, value, event) =
               </tr>
             </thead>
             <tbody>
-            
-{data.map((item, index) => (
-  <tr key={`transmission-${item.id || index}`} style={{ borderBottom: '1px solid #4a5568' }}>
-    <td style={{ padding: '12px' }}>
-      <input
-        type="text"
-        defaultValue={item.poiVoltage || ''}
-        onBlur={(e) => handleChange(index, 'poiVoltage', e.target.value)}
-        placeholder="e.g., 69 kV"
-        style={{ 
-          width: '100%', 
-          padding: '10px 12px', 
-          fontSize: '14px',
-          backgroundColor: '#2d3748',
-          color: 'white',
-          border: '1px solid #4a5568',
-          borderRadius: '6px'
-        }}
-      />
-    </td>
-    <td style={{ padding: '12px' }}>
-      <input
-        type="number"
-        defaultValue={item.excessInjectionCapacity || 0}
-        onBlur={(e) => handleChange(index, 'excessInjectionCapacity', e.target.value)}
-        placeholder="0.0"
-        step="0.1"
-        min="0"
-        style={{ 
-          width: '100%', 
-          padding: '10px 12px', 
-          fontSize: '14px',
-          backgroundColor: '#2d3748',
-          color: 'white',
-          border: '1px solid #4a5568',
-          borderRadius: '6px'
-        }}
-      />
-    </td>
-    <td style={{ padding: '12px' }}>
-      <input
-        type="number"
-        defaultValue={item.excessWithdrawalCapacity || 0}
-        onBlur={(e) => handleChange(index, 'excessWithdrawalCapacity', e.target.value)}
-        placeholder="0.0"
-        step="0.1"
-        min="0"
-        style={{ 
-          width: '100%', 
-          padding: '10px 12px', 
-          fontSize: '14px',
-          backgroundColor: '#2d3748',
-          color: 'white',
-          border: '1px solid #4a5568',
-          borderRadius: '6px'
-        }}
-      />
-    </td>
-    <td style={{ padding: '12px' }}>
-      <input
-        type="text"
-        defaultValue={item.constraints || '-'}
-        onBlur={(e) => handleChange(index, 'constraints', e.target.value)}
-        placeholder="e.g., None, 1, 2"
-        style={{ 
-          width: '100%', 
-          padding: '10px 12px', 
-          fontSize: '14px',
-          backgroundColor: '#2d3748',
-          color: 'white',
-          border: '1px solid #4a5568',
-          borderRadius: '6px'
-        }}
-      />
-    </td>
-    <td style={{ padding: '12px' }}>
-      <button 
-        onClick={() => onRemove(index)}
-        title="Remove this entry"
-        style={{ 
-          background: 'rgba(239, 68, 68, 0.1)',
-          border: '1px solid rgba(239, 68, 68, 0.3)',
-          color: '#fca5a5',
-          padding: '8px 12px',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          fontSize: '12px'
-        }}
-      >
-        🗑️ Remove
-      </button>
-    </td>
-  </tr>
-))}
+              {data.map((item, index) => (
+                <tr key={`transmission-${item.id || index}`} style={{ borderBottom: '1px solid #4a5568' }}>
+                  <td style={{ padding: '12px' }}>
+                    <input
+                      type="text"
+                      defaultValue={item.poiVoltage || ''}
+                      onBlur={(e) => handleChange(index, 'poiVoltage', e.target.value)}
+                      placeholder="e.g., 69 kV"
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        fontSize: '14px',
+                        backgroundColor: '#2d3748',
+                        color: 'white',
+                        border: '1px solid #4a5568',
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <input
+                      type="number"
+                      defaultValue={item.excessInjectionCapacity || 0}
+                      onBlur={(e) => handleChange(index, 'excessInjectionCapacity', e.target.value)}
+                      placeholder="0.0"
+                      step="0.1"
+                      min="0"
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        fontSize: '14px',
+                        backgroundColor: '#2d3748',
+                        color: 'white',
+                        border: '1px solid #4a5568',
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <input
+                      type="number"
+                      defaultValue={item.excessWithdrawalCapacity || 0}
+                      onBlur={(e) => handleChange(index, 'excessWithdrawalCapacity', e.target.value)}
+                      placeholder="0.0"
+                      step="0.1"
+                      min="0"
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        fontSize: '14px',
+                        backgroundColor: '#2d3748',
+                        color: 'white',
+                        border: '1px solid #4a5568',
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <input
+                      type="text"
+                      defaultValue={item.constraints || '-'}
+                      onBlur={(e) => handleChange(index, 'constraints', e.target.value)}
+                      placeholder="e.g., None, 1, 2"
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        fontSize: '14px',
+                        backgroundColor: '#2d3748',
+                        color: 'white',
+                        border: '1px solid #4a5568',
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <button 
+                      onClick={() => onRemove(index)}
+                      title="Remove this entry"
+                      style={{ 
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: '#fca5a5',
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      🗑️ Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
               
               {data.length === 0 && (
                 <tr>
@@ -1468,7 +1456,7 @@ const handleLocalTransmissionChange = useCallback((index, field, value, event) =
           </div>
         </div>
         
-        {/* Action Buttons - FIXED: Shows Back to Scores after save */}
+        {/* Action Buttons */}
         <div style={{ 
           padding: '20px', 
           borderTop: '1px solid #4a5568', 
