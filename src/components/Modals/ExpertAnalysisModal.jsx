@@ -10,19 +10,17 @@ const ExpertAnalysisModal = ({
   fetchTransmissionInterconnection,
   saveTransmissionInterconnection
 }) => {
-  // Remove the strict early return - only return null if no project at all
   if (!selectedExpertProject) return null;
   
-  // Create stable references
+  // Stable references
   const projectRef = useRef(selectedExpertProject);
   const isInitialLoad = useRef(true);
   const originalAnalysisRef = useRef(null);
   const originalTransmissionRef = useRef([]);
+  const transmissionInputRefs = useRef({}); // NEW: Store input refs
   
-  // Generate default analysis if none exists
+  // Generate default analysis
   const generateDefaultAnalysis = useCallback((project) => {
-    console.log('Generating default analysis for project:', project);
-    
     const getNumericValue = (value, defaultValue = 0) => {
       if (value === undefined || value === null) return defaultValue;
       const num = parseFloat(value);
@@ -85,7 +83,6 @@ const ExpertAnalysisModal = ({
       confidence: project.expertAnalysis?.confidence || 75
     };
     
-    console.log('Generated default analysis:', defaultAnalysis);
     return defaultAnalysis;
   }, []);
 
@@ -98,9 +95,11 @@ const ExpertAnalysisModal = ({
   const [isLoading, setIsLoading] = useState(false);
   const [analysisData, setAnalysisData] = useState(() => {
     const initialAnalysis = selectedExpertProject.expertAnalysis || generateDefaultAnalysis(selectedExpertProject);
-    console.log('Initial analysisData:', initialAnalysis);
     return initialAnalysis;
   });
+  
+  // NEW: Local state for transmission inputs to prevent parent re-renders
+  const [localTransmissionData, setLocalTransmissionData] = useState([]);
   
   // API Base URL
   const API_BASE_URL = 'https://pt-power-pipeline-api.azurewebsites.net';
@@ -120,32 +119,29 @@ const ExpertAnalysisModal = ({
       if (analysisChanged) return true;
     }
     
-    // Check transmission changes
-    if (originalTransmissionRef.current && editedTransmissionData) {
-      const transmissionChanged = JSON.stringify(originalTransmissionRef.current) !== JSON.stringify(editedTransmissionData);
+    // Check transmission changes - use localTransmissionData
+    if (originalTransmissionRef.current && localTransmissionData) {
+      const transmissionChanged = JSON.stringify(originalTransmissionRef.current) !== JSON.stringify(localTransmissionData);
       if (transmissionChanged) return true;
     }
     
     return false;
-  }, [isEditing, editedAnalysis, editedTransmissionData]);
+  }, [isEditing, editedAnalysis, localTransmissionData]);
 
   // Refresh data
   const refreshAllData = useCallback(async () => {
     try {
       setIsLoading(true);
-      console.log('🔄 Refreshing all data for project...');
       
       const projectId = selectedExpertProject.id;
       
       if (!projectId) {
-        console.log('No project ID available for refresh');
         return;
       }
       
       // Refresh expert analysis
       if (fetchExpertAnalysis) {
         const freshAnalysis = await fetchExpertAnalysis(projectId);
-        console.log('Fresh analysis data:', freshAnalysis);
         
         if (freshAnalysis) {
           requestAnimationFrame(() => {
@@ -177,11 +173,11 @@ const ExpertAnalysisModal = ({
                            "";
         
         const freshTransmission = await fetchTransmissionInterconnection(projectName);
-        console.log('Fresh transmission data:', freshTransmission);
         
         if (freshTransmission && Array.isArray(freshTransmission)) {
           requestAnimationFrame(() => {
             setEditedTransmissionData(freshTransmission);
+            setLocalTransmissionData(freshTransmission); // Also update local state
           });
         }
       }
@@ -202,15 +198,13 @@ const ExpertAnalysisModal = ({
       const projectId = selectedExpertProject.id;
       
       if (!projectId) {
-        console.log('No project ID available');
         return null;
       }
       
-      if (fetchExpertAnalysis && typeof fetchExpertAnalysis === 'function') {
+      if (fetchExpertAnalysis) {
         try {
           const data = await fetchExpertAnalysis(projectId);
           if (data) {
-            console.log('Expert analysis fetched:', data);
             return data;
           }
         } catch (error) {
@@ -240,16 +234,14 @@ const ExpertAnalysisModal = ({
                        "";
       
       if (!projectName) {
-        console.log('No project name available for transmission data');
         return [];
       }
       
-      if (fetchTransmissionInterconnection && typeof fetchTransmissionInterconnection === 'function') {
+      if (fetchTransmissionInterconnection) {
         try {
           const data = await fetchTransmissionInterconnection(projectName);
           
           if (data && Array.isArray(data)) {
-            console.log('Transmission data received:', data);
             return data;
           }
         } catch (error) {
@@ -269,8 +261,6 @@ const ExpertAnalysisModal = ({
   useEffect(() => {
     const initializeData = async () => {
       if (!selectedExpertProject) return;
-      
-      console.log('Initializing expert analysis modal data...');
       
       let dbAnalysis = await fetchExpertAnalysisData();
       let dbTransmission = await fetchTransmissionData();
@@ -294,6 +284,7 @@ const ExpertAnalysisModal = ({
         setEditedAnalysis(initialAnalysis);
         setAnalysisData(initialAnalysis);
         setEditedTransmissionData(dbTransmission || []);
+        setLocalTransmissionData(dbTransmission || []); // Initialize local state
       });
       
       isInitialLoad.current = false;
@@ -345,7 +336,7 @@ const ExpertAnalysisModal = ({
     return result;
   }, []);
 
-  // Handle save with change detection
+  // Handle save - FIXED: Exit edit mode after save
   const handleSave = useCallback(async () => {
     console.log('💾 Save button clicked');
     
@@ -358,7 +349,6 @@ const ExpertAnalysisModal = ({
       return;
     }
     
-    // Prevent double saves
     if (saveStatus === 'saving') return;
     
     requestAnimationFrame(() => {
@@ -381,6 +371,9 @@ const ExpertAnalysisModal = ({
       if (!projectId) {
         throw new Error('Project ID not found');
       }
+      
+      // Sync local transmission data to parent state before saving
+      setEditedTransmissionData(localTransmissionData);
       
       const saveData = {
         projectId: projectId,
@@ -405,14 +398,13 @@ const ExpertAnalysisModal = ({
         lastUpdated: new Date().toISOString()
       };
       
-      if (saveExpertAnalysis && typeof saveExpertAnalysis === 'function') {
-        console.log('📤 Calling saveExpertAnalysis function...');
+      if (saveExpertAnalysis) {
         const savedResult = await saveExpertAnalysis(saveData);
         console.log('✅ Save successful:', savedResult);
         
         // Update original references
         originalAnalysisRef.current = JSON.parse(JSON.stringify(updatedAnalysis));
-        originalTransmissionRef.current = JSON.parse(JSON.stringify(editedTransmissionData));
+        originalTransmissionRef.current = JSON.parse(JSON.stringify(localTransmissionData));
         
         // Batch state updates
         requestAnimationFrame(() => {
@@ -430,13 +422,16 @@ const ExpertAnalysisModal = ({
             redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || prev?.redevelopmentBreakdown
           }));
           
+          // CRITICAL FIX: Exit edit mode after successful save
+          setIsEditing(false);
+          
           setSaveStatus('success');
         });
         
         // Save transmission data
-        if (editedTransmissionData.length > 0) {
-          if (saveTransmissionInterconnection && typeof saveTransmissionInterconnection === 'function') {
-            saveTransmissionInterconnection(projectId, editedTransmissionData)
+        if (localTransmissionData.length > 0) {
+          if (saveTransmissionInterconnection) {
+            saveTransmissionInterconnection(projectId, localTransmissionData)
               .then(() => console.log('✅ Transmission data saved'))
               .catch(error => console.error('Transmission save error:', error));
           }
@@ -470,12 +465,10 @@ const ExpertAnalysisModal = ({
         alert(`❌ ${errorMessage}`);
       }, 100);
     }
-  }, [selectedExpertProject, editedAnalysis, analysisData, saveStatus, recalculateScores, saveExpertAnalysis, saveTransmissionInterconnection, editedTransmissionData, currentUser, hasChanges]);
+  }, [selectedExpertProject, editedAnalysis, analysisData, saveStatus, recalculateScores, saveExpertAnalysis, saveTransmissionInterconnection, localTransmissionData, currentUser, hasChanges]);
 
   // Handle modal close
   const handleClose = useCallback(() => {
-    console.log('🔒 Closing modal');
-    
     if (isEditing && window.refreshDashboardData) {
       window.refreshDashboardData();
     }
@@ -523,7 +516,7 @@ const ExpertAnalysisModal = ({
     }
   }, []);
 
-  // Handle score change with debouncing
+  // Handle score change
   const handleScoreChange = useCallback((category, component, value) => {
     const currentAnalysis = editedAnalysis || analysisData;
     
@@ -554,16 +547,12 @@ const ExpertAnalysisModal = ({
     });
   }, [editedAnalysis, analysisData, recalculateScores]);
 
-  // Handle transmission data field change with stable focus
-  const handleTransmissionFieldChange = useCallback((index, field, value, event) => {
+  // NEW: Handle local transmission data changes - COMPLETELY ISOLATED
+  const handleLocalTransmissionChange = useCallback((index, field, value) => {
     if (!isEditing) return;
     
-    if (event) {
-      event.persist?.();
-    }
-    
     requestAnimationFrame(() => {
-      setEditedTransmissionData(prev => {
+      setLocalTransmissionData(prev => {
         const newData = [...prev];
         newData[index] = {
           ...newData[index],
@@ -588,7 +577,7 @@ const ExpertAnalysisModal = ({
                        "";
     
     requestAnimationFrame(() => {
-      setEditedTransmissionData(prev => [
+      setLocalTransmissionData(prev => [
         ...prev,
         {
           id: Date.now(),
@@ -608,7 +597,7 @@ const ExpertAnalysisModal = ({
     if (!isEditing) return;
     
     requestAnimationFrame(() => {
-      setEditedTransmissionData(prev => {
+      setLocalTransmissionData(prev => {
         const newData = [...prev];
         newData.splice(index, 1);
         return newData;
@@ -616,10 +605,8 @@ const ExpertAnalysisModal = ({
     });
   }, [isEditing]);
 
-  // Memoized Transmission Edit Table with stable focus
+  // Memoized Transmission Edit Table with COMPLETELY ISOLATED state
   const TransmissionEditTable = React.memo(({ data, onFieldChange, onAdd, onRemove }) => {
-    const inputRefs = useRef([]);
-    
     const handleChange = useCallback((index, field, value, event) => {
       onFieldChange(index, field, value, event);
     }, [onFieldChange]);
@@ -627,7 +614,7 @@ const ExpertAnalysisModal = ({
     return (
       <div className="transmission-edit">
         <div className="transmission-table-container" style={{ overflowX: 'auto', marginBottom: '16px' }}>
-          <table className="transmission-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0', fontSize: '14px' }}>
+          <table className="transmission-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
             <thead>
               <tr>
                 <th style={{ width: '25%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>POI Voltage</th>
@@ -642,9 +629,8 @@ const ExpertAnalysisModal = ({
                 <tr key={`transmission-${item.id || index}`} style={{ borderBottom: '1px solid #4a5568' }}>
                   <td style={{ padding: '12px' }}>
                     <input
-                      ref={el => inputRefs.current[index] = el}
+                      ref={el => transmissionInputRefs.current[`${index}-poiVoltage`] = el}
                       type="text"
-                      className="transmission-input"
                       value={item.poiVoltage || ''}
                       onChange={(e) => handleChange(index, 'poiVoltage', e.target.value, e)}
                       placeholder="e.g., 69 kV"
@@ -661,8 +647,8 @@ const ExpertAnalysisModal = ({
                   </td>
                   <td style={{ padding: '12px' }}>
                     <input
+                      ref={el => transmissionInputRefs.current[`${index}-injection`] = el}
                       type="number"
-                      className="transmission-input"
                       value={item.excessInjectionCapacity || 0}
                       onChange={(e) => handleChange(index, 'excessInjectionCapacity', e.target.value, e)}
                       placeholder="0.0"
@@ -681,8 +667,8 @@ const ExpertAnalysisModal = ({
                   </td>
                   <td style={{ padding: '12px' }}>
                     <input
+                      ref={el => transmissionInputRefs.current[`${index}-withdrawal`] = el}
                       type="number"
-                      className="transmission-input"
                       value={item.excessWithdrawalCapacity || 0}
                       onChange={(e) => handleChange(index, 'excessWithdrawalCapacity', e.target.value, e)}
                       placeholder="0.0"
@@ -701,8 +687,8 @@ const ExpertAnalysisModal = ({
                   </td>
                   <td style={{ padding: '12px' }}>
                     <input
+                      ref={el => transmissionInputRefs.current[`${index}-constraints`] = el}
                       type="text"
-                      className="transmission-input"
                       value={item.constraints || '-'}
                       onChange={(e) => handleChange(index, 'constraints', e.target.value, e)}
                       placeholder="e.g., None, 1, 2"
@@ -719,7 +705,6 @@ const ExpertAnalysisModal = ({
                   </td>
                   <td style={{ padding: '12px' }}>
                     <button 
-                      className="remove-btn"
                       onClick={() => onRemove(index)}
                       title="Remove this entry"
                       style={{ 
@@ -750,7 +735,6 @@ const ExpertAnalysisModal = ({
         
         <div className="transmission-actions" style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
           <button 
-            className="add-btn"
             onClick={onAdd}
             style={{
               background: 'rgba(34, 197, 94, 0.1)',
@@ -768,6 +752,28 @@ const ExpertAnalysisModal = ({
         </div>
       </div>
     );
+  }, (prevProps, nextProps) => {
+    // Custom comparison to prevent unnecessary re-renders
+    if (prevProps.data.length !== nextProps.data.length) return false;
+    
+    // Check if any item actually changed
+    const prevData = prevProps.data;
+    const nextData = nextProps.data;
+    
+    for (let i = 0; i < prevData.length; i++) {
+      const prevItem = prevData[i];
+      const nextItem = nextData[i];
+      
+      // Compare only the values that matter for rendering
+      if (prevItem.poiVoltage !== nextItem.poiVoltage ||
+          prevItem.excessInjectionCapacity !== nextItem.excessInjectionCapacity ||
+          prevItem.excessWithdrawalCapacity !== nextItem.excessWithdrawalCapacity ||
+          prevItem.constraints !== nextItem.constraints) {
+        return false;
+      }
+    }
+    
+    return true;
   });
 
   const TransmissionViewTable = React.memo(({ data }) => (
@@ -807,6 +813,9 @@ const ExpertAnalysisModal = ({
   // Current analysis data
   const currentAnalysis = editedAnalysis || analysisData;
   
+  // Use localTransmissionData for editing, editedTransmissionData for viewing
+  const displayTransmissionData = isEditing ? localTransmissionData : editedTransmissionData;
+  
   // Loading overlay
   if (isLoading && isInitialLoad.current) {
     return (
@@ -815,8 +824,7 @@ const ExpertAnalysisModal = ({
           background: '#1a1a1a',
           borderRadius: '12px',
           padding: '40px',
-          textAlign: 'center',
-          animation: 'fadeIn 0.3s ease'
+          textAlign: 'center'
         }}>
           <div className="loading-spinner" style={{
             width: '40px',
@@ -848,8 +856,7 @@ const ExpertAnalysisModal = ({
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            zIndex: 10001,
-            animation: 'fadeIn 0.2s ease'
+            zIndex: 10001
           }}>
             <div style={{
               background: '#2d3748',
@@ -857,8 +864,7 @@ const ExpertAnalysisModal = ({
               borderRadius: '12px',
               border: '1px solid #4a5568',
               textAlign: 'center',
-              boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-              animation: 'scaleIn 0.3s ease'
+              boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
             }}>
               {saveStatus === 'saving' && (
                 <>
@@ -930,7 +936,6 @@ const ExpertAnalysisModal = ({
             </div>
             <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <button 
-                className="refresh-btn"
                 onClick={handleManualRefresh}
                 title="Refresh data from server"
                 style={{
@@ -945,7 +950,7 @@ const ExpertAnalysisModal = ({
               >
                 🔄 Refresh
               </button>
-              <button className="close-btn" onClick={handleClose} style={{
+              <button onClick={handleClose} style={{
                 background: 'none',
                 border: 'none',
                 color: '#a0aec0',
@@ -963,10 +968,11 @@ const ExpertAnalysisModal = ({
           
           <div className="edit-toggle" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {!isEditing ? (
-              <button className="edit-btn" onClick={() => {
+              <button onClick={() => {
                 // Store current state as original when entering edit mode
                 originalAnalysisRef.current = JSON.parse(JSON.stringify(currentAnalysis));
                 originalTransmissionRef.current = JSON.parse(JSON.stringify(editedTransmissionData));
+                setLocalTransmissionData(editedTransmissionData); // Sync local state
                 setIsEditing(true);
               }} style={{
                 background: 'rgba(59, 130, 246, 0.1)',
@@ -977,11 +983,11 @@ const ExpertAnalysisModal = ({
                 fontWeight: '500',
                 cursor: 'pointer'
               }}>
-                <span className="edit-icon">✏️</span> Enable Editing
+                <span>✏️</span> Enable Editing
               </button>
             ) : (
               <div className="edit-mode-indicator" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span className="edit-badge" style={{
+                <span style={{
                   background: 'rgba(245, 158, 11, 0.15)',
                   border: '1px solid rgba(245, 158, 11, 0.3)',
                   color: '#fbbf24',
@@ -990,10 +996,10 @@ const ExpertAnalysisModal = ({
                   fontSize: '12px',
                   fontWeight: '600'
                 }}>EDIT MODE</span>
-                <button className="cancel-btn" onClick={() => {
+                <button onClick={() => {
                   setIsEditing(false);
                   setEditedAnalysis(JSON.parse(JSON.stringify(originalAnalysisRef.current)));
-                  setEditedTransmissionData(JSON.parse(JSON.stringify(originalTransmissionRef.current)));
+                  setLocalTransmissionData(JSON.parse(JSON.stringify(originalTransmissionRef.current)));
                 }} style={{
                   background: 'rgba(239, 68, 68, 0.1)',
                   border: '1px solid rgba(239, 68, 68, 0.3)',
@@ -1020,10 +1026,10 @@ const ExpertAnalysisModal = ({
               border: '1px solid #4a5568',
               textAlign: 'center'
             }}>
-              <div className="score-label" style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 OVERALL SCORE
               </div>
-              <div className="score-value" style={{ 
+              <div style={{ 
                 fontSize: '28px', 
                 fontWeight: '700', 
                 marginBottom: '4px',
@@ -1033,10 +1039,10 @@ const ExpertAnalysisModal = ({
               }}>
                 {(parseFloat(currentAnalysis?.overallScore) || 0).toFixed(1)}/6.0
               </div>
-              <div className="score-percent" style={{ color: '#a0aec0', fontSize: '14px', marginBottom: '8px' }}>
+              <div style={{ color: '#a0aec0', fontSize: '14px', marginBottom: '8px' }}>
                 {Math.round(((parseFloat(currentAnalysis?.overallScore) || 0) / 6) * 100)}%
               </div>
-              <div className="score-rating" style={{ 
+              <div style={{ 
                 fontWeight: '600', 
                 fontSize: '14px',
                 color: getRatingColor(currentAnalysis?.overallRating)
@@ -1052,10 +1058,10 @@ const ExpertAnalysisModal = ({
               border: '1px solid #4a5568',
               textAlign: 'center'
             }}>
-              <div className="score-label" style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 THERMAL OPERATING SCORE
               </div>
-              <div className="score-value" style={{ 
+              <div style={{ 
                 fontSize: '28px', 
                 fontWeight: '700', 
                 marginBottom: '4px',
@@ -1065,10 +1071,10 @@ const ExpertAnalysisModal = ({
               }}>
                 {(parseFloat(currentAnalysis?.thermalScore) || 0).toFixed(2)}/3.0
               </div>
-              <div className="score-percent" style={{ color: '#a0aec0', fontSize: '14px', marginBottom: '8px' }}>
+              <div style={{ color: '#a0aec0', fontSize: '14px', marginBottom: '8px' }}>
                 {Math.round(((parseFloat(currentAnalysis?.thermalScore) || 0) / 3) * 100)}%
               </div>
-              <div className="score-rating" style={{ fontWeight: '600', fontSize: '14px' }}>
+              <div style={{ fontWeight: '600', fontSize: '14px' }}>
                 {getScoreText(parseFloat(currentAnalysis?.thermalScore) || 0)}
               </div>
             </div>
@@ -1080,10 +1086,10 @@ const ExpertAnalysisModal = ({
               border: '1px solid #4a5568',
               textAlign: 'center'
             }}>
-              <div className="score-label" style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <div style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 REDEVELOPMENT
               </div>
-              <div className="score-value" style={{ 
+              <div style={{ 
                 fontSize: '28px', 
                 fontWeight: '700', 
                 marginBottom: '4px',
@@ -1093,10 +1099,10 @@ const ExpertAnalysisModal = ({
               }}>
                 {(parseFloat(currentAnalysis?.redevelopmentScore) || 0).toFixed(2)}/3.0
               </div>
-              <div className="score-percent" style={{ color: '#a0aec0', fontSize: '14px', marginBottom: '8px' }}>
+              <div style={{ color: '#a0aec0', fontSize: '14px', marginBottom: '8px' }}>
                 {Math.round(((parseFloat(currentAnalysis?.redevelopmentScore) || 0) / 3) * 100)}%
               </div>
-              <div className="score-rating" style={{ fontWeight: '600', fontSize: '14px' }}>
+              <div style={{ fontWeight: '600', fontSize: '14px' }}>
                 {getScoreText(parseFloat(currentAnalysis?.redevelopmentScore) || 0)}
               </div>
             </div>
@@ -1106,33 +1112,33 @@ const ExpertAnalysisModal = ({
         {/* Expert Analysis Cards */}
         <div className="expert-cards-section" style={{ padding: '20px' }}>
           <h3 style={{ color: '#ffffff', margin: '0 0 8px 0', fontSize: '18px' }}>Expert Analysis Cards</h3>
-          <p className="section-subtitle" style={{ color: '#a0aec0', margin: '0 0 20px 0', fontSize: '14px' }}>
+          <p style={{ color: '#a0aec0', margin: '0 0 20px 0', fontSize: '14px' }}>
             Click info buttons for scoring criteria details
           </p>
           
           <div className="cards-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
             {/* Left Card - Thermal Operating Assessment */}
-            <div className="analysis-card" style={{ background: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px' }}>
-              <div className="card-header" style={{ padding: '16px', background: 'rgba(0, 0, 0, 0.2)', borderBottom: '1px solid #4a5568' }}>
+            <div style={{ background: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px' }}>
+              <div style={{ padding: '16px', background: 'rgba(0, 0, 0, 0.2)', borderBottom: '1px solid #4a5568' }}>
                 <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '16px' }}>Thermal Operating Assessment</h4>
-                <p className="card-subtitle" style={{ color: '#a0aec0', fontSize: '13px', margin: '0 0 8px 0' }}>
+                <p style={{ color: '#a0aec0', fontSize: '13px', margin: '0 0 8px 0' }}>
                   Evaluation of existing plant operations and market position
                 </p>
-                <span className="card-weight" style={{ display: 'inline-block', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
+                <span style={{ display: 'inline-block', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
                   Weight: 50%
                 </span>
               </div>
               
-              <div className="card-body" style={{ padding: '16px' }}>
+              <div style={{ padding: '16px' }}>
                 {/* M&A Thermal Optimization */}
-                <div className="score-field-group" style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
-                  <div className="field-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <span className="field-icon" style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
                       M&A
                     </span>
                     <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Thermal Optimization Potential</h5>
                   </div>
-                  <div className="field-controls">
+                  <div>
                     {isEditing ? (
                       <select 
                         value={currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
@@ -1152,7 +1158,7 @@ const ExpertAnalysisModal = ({
                         <option value="2">2 - Readily apparent value add</option>
                       </select>
                     ) : (
-                      <div className="score-display" style={{
+                      <div style={{
                         padding: '12px',
                         backgroundColor: '#2d3748',
                         borderRadius: '6px',
@@ -1162,9 +1168,9 @@ const ExpertAnalysisModal = ({
                         Score: {currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
                       </div>
                     )}
-                    <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span className="weight" style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 5%</span>
-                      <span className="contribution" style={{ color: '#a0aec0', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 5%</span>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>
                         Contribution: {(((currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1) * 0.05).toFixed(2))}
                       </span>
                     </div>
@@ -1172,14 +1178,14 @@ const ExpertAnalysisModal = ({
                 </div>
                 
                 {/* Environmental Considerations */}
-                <div className="score-field-group" style={{ marginBottom: '0' }}>
-                  <div className="field-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <span className="field-icon" style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                <div style={{ marginBottom: '0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
                       Env
                     </span>
                     <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Environmental Considerations</h5>
                   </div>
-                  <div className="field-controls">
+                  <div>
                     {isEditing ? (
                       <select 
                         value={currentAnalysis?.thermalBreakdown?.environmental?.score || 2}
@@ -1201,7 +1207,7 @@ const ExpertAnalysisModal = ({
                         <option value="3">3 - Known, mitigable, PT has cost advantage</option>
                       </select>
                     ) : (
-                      <div className="score-display" style={{
+                      <div style={{
                         padding: '12px',
                         backgroundColor: '#2d3748',
                         borderRadius: '6px',
@@ -1211,8 +1217,8 @@ const ExpertAnalysisModal = ({
                         Score: {currentAnalysis?.thermalBreakdown?.environmental?.score || 2}
                       </div>
                     )}
-                    <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span className="weight" style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 15%</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 15%</span>
                     </div>
                   </div>
                 </div>
@@ -1220,27 +1226,27 @@ const ExpertAnalysisModal = ({
             </div>
             
             {/* Right Card - Redevelopment Assessment */}
-            <div className="analysis-card" style={{ background: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px' }}>
-              <div className="card-header" style={{ padding: '16px', background: 'rgba(0, 0, 0, 0.2)', borderBottom: '1px solid #4a5568' }}>
+            <div style={{ background: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px' }}>
+              <div style={{ padding: '16px', background: 'rgba(0, 0, 0, 0.2)', borderBottom: '1px solid #4a5568' }}>
                 <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '16px' }}>Redevelopment Assessment</h4>
-                <p className="card-subtitle" style={{ color: '#a0aec0', fontSize: '13px', margin: '0 0 8px 0' }}>
+                <p style={{ color: '#a0aec0', fontSize: '13px', margin: '0 0 8px 0' }}>
                   Evaluation of future development potential and infrastructure
                 </p>
-                <span className="card-weight" style={{ display: 'inline-block', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
+                <span style={{ display: 'inline-block', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
                   Weight: 50%
                 </span>
               </div>
               
-              <div className="card-body" style={{ padding: '16px' }}>
+              <div style={{ padding: '16px' }}>
                 {/* Market Position */}
-                <div className="score-field-group" style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
-                  <div className="field-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <span className="field-icon" style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
                       Mkt
                     </span>
                     <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Market Position</h5>
                   </div>
-                  <div className="field-controls">
+                  <div>
                     {isEditing ? (
                       <select 
                         value={currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
@@ -1262,7 +1268,7 @@ const ExpertAnalysisModal = ({
                         <option value="3">3 - Primary</option>
                       </select>
                     ) : (
-                      <div className="score-display" style={{
+                      <div style={{
                         padding: '12px',
                         backgroundColor: '#2d3748',
                         borderRadius: '6px',
@@ -1272,9 +1278,9 @@ const ExpertAnalysisModal = ({
                         Score: {currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
                       </div>
                     )}
-                    <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span className="weight" style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 40%</span>
-                      <span className="contribution" style={{ color: '#a0aec0', fontSize: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 40%</span>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>
                         Contribution: {(((currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2) * 0.40).toFixed(2))}
                       </span>
                     </div>
@@ -1282,10 +1288,10 @@ const ExpertAnalysisModal = ({
                 </div>
                 
                 {/* Infrastructure */}
-                <div className="infrastructure-section" style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
+                <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
                   <h5 style={{ margin: '0 0 12px 0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Infrastructure</h5>
-                  <div className="infra-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '12px 0' }}>
-                    <div className="infra-field">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '12px 0' }}>
+                    <div>
                       <label style={{ display: 'block', marginBottom: '8px', color: '#a0aec0', fontSize: '12px', fontWeight: '500' }}>Land Availability</label>
                       {isEditing ? (
                         <select 
@@ -1307,7 +1313,7 @@ const ExpertAnalysisModal = ({
                           <option value="3">3 - Sufficient land onsite</option>
                         </select>
                       ) : (
-                        <div className="score-display" style={{
+                        <div style={{
                           padding: '12px',
                           backgroundColor: '#2d3748',
                           borderRadius: '6px',
@@ -1317,7 +1323,7 @@ const ExpertAnalysisModal = ({
                         </div>
                       )}
                     </div>
-                    <div className="infra-field">
+                    <div>
                       <label style={{ display: 'block', marginBottom: '8px', color: '#a0aec0', fontSize: '12px', fontWeight: '500' }}>Utilities</label>
                       {isEditing ? (
                         <select 
@@ -1340,7 +1346,7 @@ const ExpertAnalysisModal = ({
                           <option value="3">3 - Sufficient utilities onsite</option>
                         </select>
                       ) : (
-                        <div className="score-display" style={{
+                        <div style={{
                           padding: '12px',
                           backgroundColor: '#2d3748',
                           borderRadius: '6px',
@@ -1351,7 +1357,7 @@ const ExpertAnalysisModal = ({
                       )}
                     </div>
                   </div>
-                  <div className="infra-total" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid #4a5568' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid #4a5568' }}>
                     <span style={{ fontWeight: '500', color: '#e2e8f0' }}>Infrastructure Score:</span>
                     <span style={{ 
                       fontWeight: '600',
@@ -1365,14 +1371,14 @@ const ExpertAnalysisModal = ({
                 </div>
                 
                 {/* Interconnection */}
-                <div className="score-field-group" style={{ marginBottom: '20px' }}>
-                  <div className="field-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                    <span className="field-icon" style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
                       IX
                     </span>
                     <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Interconnection (IX)</h5>
                   </div>
-                  <div className="field-controls">
+                  <div>
                     {isEditing ? (
                       <select 
                         value={currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
@@ -1394,7 +1400,7 @@ const ExpertAnalysisModal = ({
                         <option value="3">3 - Secured IX Rights</option>
                       </select>
                     ) : (
-                      <div className="score-display" style={{
+                      <div style={{
                         padding: '12px',
                         backgroundColor: '#2d3748',
                         borderRadius: '6px',
@@ -1404,18 +1410,18 @@ const ExpertAnalysisModal = ({
                         Score: {currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
                       </div>
                     )}
-                    <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span className="weight" style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 30%</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 30%</span>
                     </div>
                   </div>
                 </div>
                 
                 {/* Transmission Data Section */}
-                <div className="transmission-section" style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #4a5568' }}>
-                  <div className="transmission-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #4a5568' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Transmission Interconnection Details</h5>
-                    {editedTransmissionData.length > 0 && (
-                      <span className="capacity-badge" style={{
+                    {displayTransmissionData.length > 0 && (
+                      <span style={{
                         background: 'rgba(34, 197, 94, 0.1)',
                         border: '1px solid rgba(34, 197, 94, 0.3)',
                         color: '#86efac',
@@ -1427,20 +1433,20 @@ const ExpertAnalysisModal = ({
                         alignItems: 'center',
                         gap: '6px'
                       }}>
-                        <span className="badge-dot" style={{ color: '#22c55e', fontSize: '16px' }}>●</span> Excess IX Capacity Available
+                        <span style={{ color: '#22c55e', fontSize: '16px' }}>●</span> Excess IX Capacity Available
                       </span>
                     )}
                   </div>
                   
                   {isEditing ? (
                     <TransmissionEditTable 
-                      data={editedTransmissionData}
-                      onFieldChange={handleTransmissionFieldChange}
+                      data={displayTransmissionData}
+                      onFieldChange={handleLocalTransmissionChange}
                       onAdd={addNewTransmissionEntry}
                       onRemove={removeTransmissionEntry}
                     />
                   ) : (
-                    <TransmissionViewTable data={editedTransmissionData} />
+                    <TransmissionViewTable data={displayTransmissionData} />
                   )}
                 </div>
               </div>
@@ -1448,17 +1454,16 @@ const ExpertAnalysisModal = ({
           </div>
         </div>
         
-        {/* Action Buttons - REMOVED CANCEL BUTTON */}
-        <div className="action-buttons" style={{ 
+        {/* Action Buttons - FIXED: Shows Back to Scores after save */}
+        <div style={{ 
           padding: '20px', 
           borderTop: '1px solid #4a5568', 
           background: 'rgba(0, 0, 0, 0.2)',
           borderRadius: '0 0 12px 12px'
         }}>
           {isEditing ? (
-            <div className="edit-actions" style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button 
-                className="action-btn primary"
                 onClick={handleSave}
                 disabled={saveStatus === 'saving'}
                 style={{
@@ -1477,9 +1482,8 @@ const ExpertAnalysisModal = ({
               </button>
             </div>
           ) : (
-            <div className="view-actions" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <button 
-                className="action-btn secondary"
                 onClick={handleClose}
                 style={{
                   background: 'rgba(255, 255, 255, 0.1)',
@@ -1495,7 +1499,6 @@ const ExpertAnalysisModal = ({
                 Back to Scores
               </button>
               <button 
-                className="action-btn primary"
                 onClick={() => {
                   alert('Report generation feature would be implemented here.');
                 }}
@@ -1518,23 +1521,6 @@ const ExpertAnalysisModal = ({
         
         {/* CSS Styles */}
         <style>{`
-          /* Key animations */
-          @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
-          }
-          
-          @keyframes scaleIn {
-            from { 
-              opacity: 0;
-              transform: scale(0.95);
-            }
-            to { 
-              opacity: 1;
-              transform: scale(1);
-            }
-          }
-          
           @keyframes spin {
             to { transform: rotate(360deg); }
           }
@@ -1548,7 +1534,6 @@ const ExpertAnalysisModal = ({
             color: #e0e0e0;
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-            animation: scaleIn 0.3s ease;
           }
           
           .modal-overlay {
@@ -1562,20 +1547,10 @@ const ExpertAnalysisModal = ({
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            animation: fadeIn 0.2s ease;
           }
           
-          /* Performance optimizations */
-          .transmission-table {
-            border-collapse: separate;
-            border-spacing: 0;
-          }
-          
-          .transmission-input {
-            transition: border-color 0.2s ease;
-          }
-          
-          .transmission-input:focus {
+          /* Input focus styles */
+          input:focus {
             outline: none;
             border-color: #63b3ed !important;
             box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.1);
@@ -1600,7 +1575,6 @@ const ExpertAnalysisModal = ({
             background: #63b3ed;
           }
           
-          /* Responsive design */
           @media (max-width: 1024px) {
             .cards-container {
               grid-template-columns: 1fr !important;
@@ -1608,11 +1582,6 @@ const ExpertAnalysisModal = ({
             
             .score-grid {
               grid-template-columns: 1fr !important;
-            }
-            
-            .expert-analysis-modal {
-              width: 98% !important;
-              max-height: 95vh !important;
             }
           }
           
@@ -1629,15 +1598,6 @@ const ExpertAnalysisModal = ({
             .header-right {
               width: 100% !important;
               justify-content: space-between !important;
-            }
-            
-            .edit-actions, .view-actions {
-              flex-direction: column !important;
-              gap: 8px !important;
-            }
-            
-            button {
-              width: 100% !important;
             }
           }
         `}</style>
