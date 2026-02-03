@@ -1,4 +1,4 @@
-const ExpertAnalysis = require('../models/ExpertAnalysis');
+const expertAnalysis = require('../models/expertAnalysis');
 
 // @desc    Get expert analysis by project ID
 // @route   GET /api/expert-analysis
