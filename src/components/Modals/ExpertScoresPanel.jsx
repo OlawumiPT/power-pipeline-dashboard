@@ -292,7 +292,7 @@ const ExpertScoresPanel = ({
                             flex: 1
                           }}>
                             {analysis.projectName}
-                          </h4
+                          </h4>
                           
                           <span 
                             className="rating-badge dark-rating-badge"
