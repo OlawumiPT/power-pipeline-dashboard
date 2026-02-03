@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import './Dashboard.css';
 import Header from './components/Header';
 import KPISection from './components/Sections/KPISection';
@@ -337,21 +337,17 @@ function DashboardContent() {
   // END OF NEW API CALL FUNCTIONS
   // ============================================================================
 
-  // NEW: Function to refresh expert data
-  const refreshExpertData = useCallback(async () => {
+  // NEW: Function to refresh expert data - FIXED VERSION
+  const refreshExpertData = async () => {
     console.log('🔄 DashboardContent: Refreshing expert data...');
     try {
-      // Re-fetch all data
-      await fetchData();
-      
-      // Force re-render of expert scores
+      // Only dispatch event, don't call fetchData()
       window.dispatchEvent(new Event('expertAnalysisUpdated'));
-      
-      console.log('✅ DashboardContent: Expert data refreshed');
+      console.log('✅ DashboardContent: Expert refresh event dispatched');
     } catch (error) {
       console.error('❌ DashboardContent: Error refreshing expert data:', error);
     }
-  }, []);
+  };
 
   // Extract dropdown options for use in components
   const {
@@ -838,15 +834,15 @@ function DashboardContent() {
         right: 20px;
         background: ${type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'};
         color: white;
-        padding: '12px 20px';
-        border-radius: '6px';
-        box-shadow: '0 4px 12px rgba(0,0,0,0.15)';
+        padding: 12px 20px;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         z-index: 9999;
-        font-size: '14px';
-        animation: 'slideIn 0.3s ease-out';
-        display: 'flex';
-        align-items: 'center';
-        gap: '8px';
+        font-size: 14px;
+        animation: slideIn 0.3s ease-out;
+        display: flex;
+        align-items: center;
+        gap: 8px;
       ">
         ${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'} ${message}
       </div>
@@ -1894,23 +1890,29 @@ const handleUpdateProject = async (updatedData) => {
     return filtered;
   };
 
-  // UPDATED useEffect to include all chart-based filters
+  // FIXED: Use useMemo to prevent unnecessary re-renders - THIS IS THE KEY FIX
+  const filteredData = useMemo(() => {
+    if (allData.length === 0) return [];
+    
+    return filterDataWithTransmission(
+      allData, selectedIso, selectedProcess, selectedOwner,
+      selectedTransmissionVoltage, selectedHasExcessCapacity, 
+      selectedProjectType, activeTechFilter, activeIsoFilter, activeRedevFilter, activeCounterpartyFilter, findColumnName
+    );
+  }, [allData, selectedIso, selectedProcess, selectedOwner, selectedTransmissionVoltage, 
+      selectedHasExcessCapacity, selectedProjectType, activeTechFilter, 
+      activeIsoFilter, activeRedevFilter, activeCounterpartyFilter, projectTransmissionData]);
+
+  // FIXED: Calculate data only when filteredData changes
   useEffect(() => {
-    if (allData.length > 0) {
-      const filteredData = filterDataWithTransmission(
-        allData, selectedIso, selectedProcess, selectedOwner,
-        selectedTransmissionVoltage, selectedHasExcessCapacity, 
-        selectedProjectType, activeTechFilter, activeIsoFilter, activeRedevFilter, activeCounterpartyFilter, findColumnName
-      );
+    if (filteredData.length > 0) {
       const headers = Object.keys(allData[0] || {});
       calculateAllData(filteredData, headers, {
         setKpiRow1, setKpiRow2, setIsoData, setTechData, 
         setRedevelopmentTypes, setCounterparties, setPipelineRows
       });
     }
-  }, [selectedIso, selectedProcess, selectedOwner, selectedTransmissionVoltage, 
-      selectedHasExcessCapacity, selectedProjectType, activeTechFilter, 
-      activeIsoFilter, activeRedevFilter, activeCounterpartyFilter, allData, projectTransmissionData]);
+  }, [filteredData]);
 
   useEffect(() => {
     if (allData.length > 0) {
@@ -2293,7 +2295,7 @@ const handleUpdateProject = async (updatedData) => {
             setExpertAnalysisFilter={setExpertAnalysisFilter}
             setSelectedExpertProject={setSelectedExpertProject}
             setShowScoringModal={setShowScoringModal}
-            refreshExpertData={refreshExpertData} // ADD THIS LINE
+            refreshExpertData={refreshExpertData}
           />
         )}
         
