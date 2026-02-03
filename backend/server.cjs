@@ -283,6 +283,7 @@ if (DEBUG_MODE) {
 app.use(helmet());
 
 const allowedOrigins = [
+  'https://platform.power-transitions.com',
   'https://pt-power-pipeline-dashboard.azurestaticapps.net',
   'https://lively-water-022a59110.6.azurestaticapps.net',
   'http://localhost:5173',
@@ -318,6 +319,8 @@ const limiter = rateLimit({
     error: 'Too many requests from this IP, please try again later.'
   }
 });
+app.set('trust proxy', 1);
+
 app.use('/api/', limiter);
 
 app.use(express.json({ limit: '10mb' }));
