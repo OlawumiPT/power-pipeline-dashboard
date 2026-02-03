@@ -383,10 +383,7 @@ const ExpertAnalysisModal = ({
     return result;
   }, []);
 
-  // Handle save - FIXED: Update parent component and persist state
-  // In ExpertAnalysisModal.jsx, update the handleSave function (around line 150):
-
-const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async () => {
   console.log('💾 Save button clicked');
   
   // Check if there are changes
