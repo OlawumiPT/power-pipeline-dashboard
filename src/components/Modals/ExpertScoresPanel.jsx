@@ -58,7 +58,9 @@ const ExpertScoresPanel = ({
   expertAnalysisFilter,
   setExpertAnalysisFilter,
   setSelectedExpertProject,
-  refreshExpertData = null
+  refreshExpertData = null,
+  expertProjects, // NEW: Receive expert projects from parent
+  setExpertProjects // NEW: Update function from parent
 }) => {
   
   if (!showExpertScores) return null;
@@ -68,7 +70,7 @@ const ExpertScoresPanel = ({
   const lastRefreshTime = useRef(0);
   const lastClickTime = useRef(0);
 
-  // Load data when panel opens
+  // Load data when panel opens - FIXED: Use parent data if available
   useEffect(() => {
     if (showExpertScores) {
       console.log('🔄 ExpertScoresPanel: Loading data...');
@@ -76,8 +78,15 @@ const ExpertScoresPanel = ({
       
       const loadData = () => {
         try {
-          const projects = getAnalyses();
-          console.log('📊 ExpertScoresPanel: Loaded', projects.length, 'projects');
+          // Use parent data if provided, otherwise fetch
+          let projects;
+          if (expertProjects && expertProjects.length > 0) {
+            projects = expertProjects;
+            console.log('📊 ExpertScoresPanel: Using parent data', projects.length, 'projects');
+          } else {
+            projects = getAnalyses();
+            console.log('📊 ExpertScoresPanel: Fetched data', projects.length, 'projects');
+          }
           setLocalExpertProjects(projects);
         } catch (error) {
           console.error('❌ ExpertScoresPanel: Error loading projects:', error);
@@ -88,9 +97,9 @@ const ExpertScoresPanel = ({
       
       loadData();
     }
-  }, [showExpertScores, getAnalyses]);
+  }, [showExpertScores, getAnalyses, expertProjects]);
 
-  // Listen for refresh events
+  // Listen for refresh events - FIXED: Also update parent if provided
   useEffect(() => {
     const handleRefresh = () => {
       console.log('🔄 ExpertScoresPanel: Received refresh event');
@@ -99,6 +108,10 @@ const ExpertScoresPanel = ({
         setTimeout(() => {
           const projects = getAnalyses();
           setLocalExpertProjects(projects);
+          // Update parent state if callback provided
+          if (setExpertProjects) {
+            setExpertProjects(projects);
+          }
           setIsLoading(false);
         }, 100);
       }
@@ -109,7 +122,43 @@ const ExpertScoresPanel = ({
     return () => {
       window.removeEventListener('expertAnalysisUpdated', handleRefresh);
     };
-  }, [showExpertScores, getAnalyses]);
+  }, [showExpertScores, getAnalyses, setExpertProjects]);
+
+  // Handle update from parent when modal saves
+  const handleUpdateProject = useRef((updatedData) => {
+    console.log('🔄 ExpertScoresPanel: Updating project with saved data:', updatedData.projectId);
+    
+    setLocalExpertProjects(prev => prev.map(project => {
+      if (project.id === updatedData.projectId) {
+        return {
+          ...project,
+          expertAnalysis: {
+            ...project.expertAnalysis,
+            ...updatedData,
+            ratingClass: updatedData.overallRating?.toLowerCase()
+          }
+        };
+      }
+      return project;
+    }));
+    
+    // Also update parent if callback provided
+    if (setExpertProjects) {
+      setExpertProjects(prev => prev.map(project => {
+        if (project.id === updatedData.projectId) {
+          return {
+            ...project,
+            expertAnalysis: {
+              ...project.expertAnalysis,
+              ...updatedData,
+              ratingClass: updatedData.overallRating?.toLowerCase()
+            }
+          };
+        }
+        return project;
+      }));
+    }
+  }).current;
 
   const handleProjectSelect = (project) => {
     // Debounce clicks
@@ -123,7 +172,8 @@ const ExpertScoresPanel = ({
       onSaveSuccess: () => {
         console.log('✅ ExpertScoresPanel: Received save success from modal');
         window.dispatchEvent(new Event('expertAnalysisUpdated'));
-      }
+      },
+      onAnalysisUpdate: handleUpdateProject // Pass callback for updates
     };
     
     setSelectedExpertProject(enhancedProject);
