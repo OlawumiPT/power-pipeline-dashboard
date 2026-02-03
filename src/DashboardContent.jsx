@@ -2394,33 +2394,23 @@ const handleUpdateProject = async (updatedData) => {
         )}
         
         {selectedExpertProject && (
-          <ExpertAnalysisModal
-            selectedExpertProject={selectedExpertProject}
-            setSelectedExpertProject={setSelectedExpertProject}
-            setSelectedProject={setSelectedProject}
-            setShowProjectDetail={setShowProjectDetail}
-            // NEW: Pass the API functions to the modal
-            fetchExpertAnalysis={fetchExpertAnalysis}
-            saveExpertAnalysis={saveExpertAnalysis}
-            fetchTransmissionInterconnection={fetchTransmissionInterconnection}
-            saveTransmissionInterconnection={saveTransmissionInterconnection}
-           onSaveSuccess={() => {
-        console.log('✅ Expert analysis saved!');
-        
-        // Just close the modal
-        setSelectedExpertProject(null);
-        
-        // Dispatch a simple event
-        window.dispatchEvent(new Event('expertAnalysisSaved'));
-      }}
-          
-      // Also refresh dashboard data to ensure consistency
-      setTimeout(() => {
-        refreshExpertData();
-      }, 500);
+  <ExpertAnalysisModal
+    selectedExpertProject={selectedExpertProject}
+    setSelectedExpertProject={setSelectedExpertProject}
+    setSelectedProject={setSelectedProject}
+    setShowProjectDetail={setShowProjectDetail}
+    fetchExpertAnalysis={fetchExpertAnalysis}
+    saveExpertAnalysis={saveExpertAnalysis}
+    fetchTransmissionInterconnection={fetchTransmissionInterconnection}
+    saveTransmissionInterconnection={saveTransmissionInterconnection}
+    onSaveSuccess={() => {
+      console.log('✅ Expert analysis saved!');
+      setSelectedExpertProject(null);
+      window.dispatchEvent(new Event('expertAnalysisSaved'));
+      setTimeout(() => refreshExpertData(), 500);
     }}
-    />
-    )}
+  />
+)}
       </div>
     </ActivityLogProvider>
   );
