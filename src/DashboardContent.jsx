@@ -2404,20 +2404,15 @@ const handleUpdateProject = async (updatedData) => {
             saveExpertAnalysis={saveExpertAnalysis}
             fetchTransmissionInterconnection={fetchTransmissionInterconnection}
             saveTransmissionInterconnection={saveTransmissionInterconnection}
-            onSaveSuccess={(updatedProject) => {
-      console.log('✅ DashboardContent: Expert analysis saved, updating state');
-      
-      // Update the expert project with new data
-      setSelectedExpertProject(updatedProject);
-      
-      // Force refresh of expert scores panel
-      window.dispatchEvent(new CustomEvent('expertAnalysisUpdated', {
-        detail: { 
-          projectId: updatedProject.id || updatedProject.detailData?.id,
-          timestamp: Date.now(),
-          action: 'saved'
-        }
-      }));
+           onSaveSuccess={() => {
+        console.log('✅ Expert analysis saved!');
+        
+        // Just close the modal
+        setSelectedExpertProject(null);
+        
+        // Dispatch a simple event
+        window.dispatchEvent(new Event('expertAnalysisSaved'));
+      }}
           
       // Also refresh dashboard data to ensure consistency
       setTimeout(() => {
