@@ -249,9 +249,7 @@ class EmailService {
   }
 }
 
-// ============================================
-// IMPORT OFFICE 365 EMAIL SERVICE
-// ============================================
+
 //const EmailService = require('./emailService-office365.js');
 const emailService = new EmailService();
 let emailServiceReady = false;
@@ -281,6 +279,7 @@ if (DEBUG_MODE) {
   });
 }
 app.use(helmet());
+app.set('trust proxy', 1); 
 
 const allowedOrigins = [
   'https://platform.power-transitions.com',
@@ -319,8 +318,6 @@ const limiter = rateLimit({
     error: 'Too many requests from this IP, please try again later.'
   }
 });
-app.set('trust proxy', 1);
-
 app.use('/api/', limiter);
 
 app.use(express.json({ limit: '10mb' }));

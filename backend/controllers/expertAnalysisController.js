@@ -16,9 +16,10 @@ const getExpertAnalysis = async (req, res) => {
       });
     }
     
-    const expertAnalysis = await ExpertAnalysis.getExpertAnalysisByProjectId(projectId);
+    // FIXED: Changed ExpertAnalysis to expertAnalysis
+    const analysisData = await expertAnalysis.getExpertAnalysisByProjectId(projectId);
     
-    if (!expertAnalysis) {
+    if (!analysisData) {
       return res.status(200).json({
         success: true,
         message: 'No expert analysis found for this project',
@@ -28,41 +29,41 @@ const getExpertAnalysis = async (req, res) => {
     
     // Format the response to match frontend expectations
     const formattedResponse = {
-      id: expertAnalysis.id,
-      projectId: expertAnalysis.project_id,
-      projectName: expertAnalysis.project_name,
-      overallScore: parseFloat(expertAnalysis.overall_score) || 0,
-      overallRating: expertAnalysis.overall_rating || 'N/A',
-      confidence: expertAnalysis.confidence || 0,
-      thermalScore: parseFloat(expertAnalysis.thermal_score) || 0,
-      thermalBreakdown: expertAnalysis.thermal_breakdown || {
+      id: analysisData.id,
+      projectId: analysisData.project_id,
+      projectName: analysisData.project_name,
+      overallScore: parseFloat(analysisData.overall_score) || 0,
+      overallRating: analysisData.overall_rating || 'N/A',
+      confidence: analysisData.confidence || 0,
+      thermalScore: parseFloat(analysisData.thermal_score) || 0,
+      thermalBreakdown: analysisData.thermal_breakdown || {
         thermal_optimization: { score: 1 },
         environmental: { score: 2 }
       },
-      redevelopmentScore: parseFloat(expertAnalysis.redevelopment_score) || 0,
-      redevelopmentBreakdown: expertAnalysis.redevelopment_breakdown || {
+      redevelopmentScore: parseFloat(analysisData.redevelopment_score) || 0,
+      redevelopmentBreakdown: analysisData.redevelopment_breakdown || {
         redev_market: { score: 2 },
         land_availability: { score: 2 },
         utilities: { score: 2 },
         interconnection: { score: 2 }
       },
-      infrastructureScore: parseFloat(expertAnalysis.infrastructure_score) || 0,
-      editedBy: expertAnalysis.edited_by || 'PowerTrans Team',
-      editedAt: expertAnalysis.edited_at,
-      createdAt: expertAnalysis.created_at,
-      updatedAt: expertAnalysis.updated_at,
+      infrastructureScore: parseFloat(analysisData.infrastructure_score) || 0,
+      editedBy: analysisData.edited_by || 'PowerTrans Team',
+      editedAt: analysisData.edited_at,
+      createdAt: analysisData.created_at,
+      updatedAt: analysisData.updated_at,
       // Include project details for reference
       projectDetails: {
-        actualProjectName: expertAnalysis.actual_project_name,
-        projectCodename: expertAnalysis.project_codename,
-        projectOverallScore: expertAnalysis.project_overall_score,
-        projectThermalScore: expertAnalysis.project_thermal_score,
-        projectRedevScore: expertAnalysis.project_redev_score,
-        iso: expertAnalysis.iso,
-        plantOwner: expertAnalysis.plant_owner,
-        location: expertAnalysis.location,
-        legacyNameplateCapacityMW: expertAnalysis.legacy_nameplate_capacity_mw,
-        tech: expertAnalysis.tech
+        actualProjectName: analysisData.actual_project_name,
+        projectCodename: analysisData.project_codename,
+        projectOverallScore: analysisData.project_overall_score,
+        projectThermalScore: analysisData.project_thermal_score,
+        projectRedevScore: analysisData.project_redev_score,
+        iso: analysisData.iso,
+        plantOwner: analysisData.plant_owner,
+        location: analysisData.location,
+        legacyNameplateCapacityMW: analysisData.legacy_nameplate_capacity_mw,
+        tech: analysisData.tech
       }
     };
     
@@ -127,7 +128,8 @@ const saveExpertAnalysis = async (req, res) => {
       editedBy: editedBy || 'PowerTrans Team'
     };
     
-    const savedAnalysis = await ExpertAnalysis.saveExpertAnalysis(analysisData);
+    // FIXED: Changed ExpertAnalysis to expertAnalysis
+    const savedAnalysis = await expertAnalysis.saveExpertAnalysis(analysisData);
     
     // Format response
     const formattedResponse = {
@@ -183,7 +185,8 @@ const getTransmissionInterconnection = async (req, res) => {
       });
     }
     
-    const transmissionData = await ExpertAnalysis.getTransmissionInterconnectionByProject(project);
+    // FIXED: Changed ExpertAnalysis to expertAnalysis
+    const transmissionData = await expertAnalysis.getTransmissionInterconnectionByProject(project);
     
     // Format response
     const formattedData = transmissionData.map(item => ({
@@ -246,7 +249,8 @@ const saveTransmissionInterconnection = async (req, res) => {
       });
     }
     
-    const savedData = await ExpertAnalysis.saveTransmissionInterconnection(
+    // FIXED: Changed ExpertAnalysis to expertAnalysis
+    const savedData = await expertAnalysis.saveTransmissionInterconnection(
       projectId, 
       transmissionData
     );
