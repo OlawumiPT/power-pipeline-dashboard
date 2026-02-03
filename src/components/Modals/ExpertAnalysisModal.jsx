@@ -460,31 +460,15 @@ const handleSave = useCallback(async () => {
       
       setIsEditing(false);
       setSaveStatus('success');
-
-      // CRITICAL: Create the updated project object
-      const updatedProject = {
-        ...selectedExpertProject,
-        expertAnalysis: updatedAnalysis,
-        lastUpdated: new Date().toISOString()
-      };
-
-      // Call parent callback if provided (THIS IS KEY!)
+      
+      // CRITICAL: Call the callback
       if (onSaveSuccess) {
-        console.log('📢 Notifying parent of save success');
-        onSaveSuccess(updatedProject);
+        onSaveSuccess(); // Just call it without arguments
       }
-
-      // Dispatch event for other components
-      window.dispatchEvent(new CustomEvent('expertAnalysisUpdated', { 
-        detail: { 
-          projectId: projectId,
-          updatedAnalysis: updatedAnalysis,
-          action: 'saved',
-          timestamp: Date.now()
-        } 
-      }));
-
-      // Also dispatch a force refresh event
+      
+      // Also dispatch the event for good measure
+      window.dispatchEvent(new Event('expertAnalysisSaved'));
+            // Also dispatch a force refresh event
       window.dispatchEvent(new Event('forceRefreshExpertScores'));
 
       // Save transmission data
