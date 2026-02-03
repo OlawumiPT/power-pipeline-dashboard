@@ -216,30 +216,78 @@ function DashboardContent() {
   };
 
   // Fetch transmission interconnection data
-  const fetchTransmissionInterconnection = async (projectName) => {
-    try {
-      console.log(`[Frontend] Fetching transmission data for project: ${projectName}`);
-      
-      const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        console.log(`[Frontend] Transmission data not found for ${projectName}, status: ${response.status}`);
-        return [];
+ // Find this function in your DashboardContent.jsx and replace it:
+
+// Fetch transmission interconnection data - FIXED VERSION
+const fetchTransmissionInterconnection = async (projectName) => {
+  try {
+    console.log(`[Frontend] Fetching transmission data for project: ${projectName}`);
+    
+    const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/json'
       }
-      
-      const data = await response.json();
-      console.log('[Frontend] Transmission data received:', data);
-      return data;
-    } catch (error) {
-      console.error('[Frontend] Error fetching transmission data:', error);
+    });
+    
+    if (!response.ok) {
+      console.log(`[Frontend] Transmission data not found for ${projectName}, status: ${response.status}`);
       return [];
     }
-  };
+    
+    const data = await response.json();
+    console.log('[Frontend] Transmission data received (RAW):', data);
+    console.log('[Frontend] Transmission data type:', typeof data);
+    console.log('[Frontend] Is array?:', Array.isArray(data));
+    
+    // Handle both array and object responses
+    let transmissionArray = [];
+    
+    if (Array.isArray(data)) {
+      transmissionArray = data;
+    } else if (data && typeof data === 'object') {
+      // If it's an object, check for common properties that might contain the array
+      if (data.data && Array.isArray(data.data)) {
+        transmissionArray = data.data;
+      } else if (data.transmissionData && Array.isArray(data.transmissionData)) {
+        transmissionArray = data.transmissionData;
+      } else if (data.records && Array.isArray(data.records)) {
+        transmissionArray = data.records;
+      } else if (data.results && Array.isArray(data.results)) {
+        transmissionArray = data.results;
+      } else {
+        // Try to extract array from object values
+        const values = Object.values(data);
+        transmissionArray = values.filter(item => Array.isArray(item)).flat();
+        
+        // If still no array, try to see if the object itself is a transmission record
+        if (transmissionArray.length === 0 && data.site) {
+          // This might be a single record object, wrap it in an array
+          transmissionArray = [data];
+        }
+      }
+    }
+    
+    console.log('[Frontend] Processed transmission array:', transmissionArray);
+    
+    // Transform database format to frontend format
+    const transformedData = transmissionArray.map(item => ({
+      site: item.site || '',
+      poiVoltage: item.poi_voltage || item.poiVoltage || '',
+      excessInjectionCapacity: item.excess_injection_capacity || item.excessInjectionCapacity || 0,
+      excessWithdrawalCapacity: item.excess_withdrawal_capacity || item.excessWithdrawalCapacity || 0,
+      constraints: item.constraints || '-',
+      excessIXCapacity: item.excess_ix_capacity || item.excessIXCapacity || true,
+      project_id: item.project_id || null
+    }));
+    
+    console.log('[Frontend] Transformed transmission data:', transformedData);
+    return transformedData;
+  } catch (error) {
+    console.error('[Frontend] Error fetching transmission data:', error);
+    return [];
+  }
+};
 
   // Save transmission interconnection data
   const saveTransmissionInterconnection = async (projectId, transmissionData) => {
