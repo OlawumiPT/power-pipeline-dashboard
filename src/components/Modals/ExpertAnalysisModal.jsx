@@ -459,12 +459,15 @@ const ExpertAnalysisModal = ({
       setSaveStatus('success');
       
       // CRITICAL: Call the callback
-      if (onSaveSuccess) {
-        onSaveSuccess(); // Just call it without arguments
-      }
+            setSaveStatus('success');
       
-      // Also dispatch the event for good measure
-      window.dispatchEvent(new Event('expertAnalysisSaved'));
+      // CRITICAL: Call the callback
+      if (onSaveSuccess) {
+        console.log('📢 Calling onSaveSuccess callback');
+        onSaveSuccess();
+      }
+// Also dispatch the event
+window.dispatchEvent(new Event('expertAnalysisSaved'));
             // Also dispatch a force refresh event
       window.dispatchEvent(new Event('forceRefreshExpertScores'));
 
