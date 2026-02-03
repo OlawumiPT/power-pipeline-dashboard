@@ -547,23 +547,39 @@ const ExpertAnalysisModal = ({
     });
   }, [editedAnalysis, analysisData, recalculateScores]);
 
-  // NEW: Handle local transmission data changes - COMPLETELY ISOLATED
-  const handleLocalTransmissionChange = useCallback((index, field, value) => {
-    if (!isEditing) return;
-    
-    requestAnimationFrame(() => {
-      setLocalTransmissionData(prev => {
-        const newData = [...prev];
-        newData[index] = {
-          ...newData[index],
-          [field]: field === 'excessInjectionCapacity' || field === 'excessWithdrawalCapacity' 
-            ? parseFloat(value) || 0 
-            : value
-        };
-        return newData;
-      });
+  // handleLocalTransmissionChange 
+
+const handleLocalTransmissionChange = useCallback((index, field, value, event) => {
+  if (!isEditing) return;
+  
+  // Store the focused element before update
+  const focusedElement = document.activeElement;
+  const selectionStart = focusedElement.selectionStart;
+  const selectionEnd = focusedElement.selectionEnd;
+  
+  requestAnimationFrame(() => {
+    setLocalTransmissionData(prev => {
+      const newData = [...prev];
+      newData[index] = {
+        ...newData[index],
+        [field]: field === 'excessInjectionCapacity' || field === 'excessWithdrawalCapacity' 
+          ? parseFloat(value) || 0 
+          : value
+      };
+      return newData;
     });
-  }, [isEditing]);
+    
+    // Restore focus and cursor position AFTER state update
+    setTimeout(() => {
+      if (focusedElement && focusedElement.tagName === 'INPUT') {
+        focusedElement.focus();
+        if (focusedElement.setSelectionRange) {
+          focusedElement.setSelectionRange(selectionStart, selectionEnd);
+        }
+      }
+    }, 0);
+  });
+}, [isEditing]);
 
   // Add new POI voltage entry
   const addNewTransmissionEntry = useCallback((e) => {
