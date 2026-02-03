@@ -13,15 +13,16 @@ const ExpertAnalysisModal = ({
   // Remove the strict early return - only return null if no project at all
   if (!selectedExpertProject) return null;
   
-  // Create a stable reference to the selected project
+  // Create stable references
   const projectRef = useRef(selectedExpertProject);
   const isInitialLoad = useRef(true);
+  const originalAnalysisRef = useRef(null);
+  const originalTransmissionRef = useRef([]);
   
   // Generate default analysis if none exists
   const generateDefaultAnalysis = useCallback((project) => {
     console.log('Generating default analysis for project:', project);
     
-    // Try to get scores from multiple possible sources
     const getNumericValue = (value, defaultValue = 0) => {
       if (value === undefined || value === null) return defaultValue;
       const num = parseFloat(value);
@@ -88,7 +89,7 @@ const ExpertAnalysisModal = ({
     return defaultAnalysis;
   }, []);
 
-  // Use token from props or try to get from localStorage as fallback
+  // State
   const [token] = useState(authToken || localStorage.getItem('token') || '');
   const [isEditing, setIsEditing] = useState(false);
   const [editedAnalysis, setEditedAnalysis] = useState(null);
@@ -101,19 +102,34 @@ const ExpertAnalysisModal = ({
     return initialAnalysis;
   });
   
-  // NEW: Track data version to force refreshes
-  const [dataVersion, setDataVersion] = useState(0);
-  const modalContentRef = useRef(null);
-  
   // API Base URL
   const API_BASE_URL = 'https://pt-power-pipeline-api.azurewebsites.net';
   
-  // Function to get token from various sources
+  // Get token
   const getAuthToken = useCallback(() => {
     return authToken || localStorage.getItem('token') || '';
   }, [authToken]);
 
-  // NEW: Optimized function to refresh ALL data
+  // Check if there are changes
+  const hasChanges = useCallback(() => {
+    if (!isEditing) return false;
+    
+    // Check analysis changes
+    if (originalAnalysisRef.current && editedAnalysis) {
+      const analysisChanged = JSON.stringify(originalAnalysisRef.current) !== JSON.stringify(editedAnalysis);
+      if (analysisChanged) return true;
+    }
+    
+    // Check transmission changes
+    if (originalTransmissionRef.current && editedTransmissionData) {
+      const transmissionChanged = JSON.stringify(originalTransmissionRef.current) !== JSON.stringify(editedTransmissionData);
+      if (transmissionChanged) return true;
+    }
+    
+    return false;
+  }, [isEditing, editedAnalysis, editedTransmissionData]);
+
+  // Refresh data
   const refreshAllData = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -132,7 +148,6 @@ const ExpertAnalysisModal = ({
         console.log('Fresh analysis data:', freshAnalysis);
         
         if (freshAnalysis) {
-          // Batch state updates
           requestAnimationFrame(() => {
             setAnalysisData(prev => ({
               ...prev,
@@ -171,11 +186,6 @@ const ExpertAnalysisModal = ({
         }
       }
       
-      // Increment data version to force UI updates
-      requestAnimationFrame(() => {
-        setDataVersion(prev => prev + 1);
-      });
-      
     } catch (error) {
       console.error('Error refreshing data:', error);
     } finally {
@@ -185,7 +195,7 @@ const ExpertAnalysisModal = ({
     }
   }, [selectedExpertProject, fetchExpertAnalysis, fetchTransmissionInterconnection, isEditing]);
 
-  // Fetch expert analysis from API - memoized
+  // Fetch expert analysis
   const fetchExpertAnalysisData = useCallback(async () => {
     try {
       setIsLoading(true);
@@ -196,7 +206,6 @@ const ExpertAnalysisModal = ({
         return null;
       }
       
-      // Use provided function
       if (fetchExpertAnalysis && typeof fetchExpertAnalysis === 'function') {
         try {
           const data = await fetchExpertAnalysis(projectId);
@@ -221,7 +230,7 @@ const ExpertAnalysisModal = ({
     }
   }, [selectedExpertProject, fetchExpertAnalysis]);
   
-  // Fetch transmission data from API - memoized
+  // Fetch transmission data
   const fetchTransmissionData = useCallback(async () => {
     try {
       const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
@@ -235,7 +244,6 @@ const ExpertAnalysisModal = ({
         return [];
       }
       
-      // Use provided function
       if (fetchTransmissionInterconnection && typeof fetchTransmissionInterconnection === 'function') {
         try {
           const data = await fetchTransmissionInterconnection(projectName);
@@ -257,19 +265,15 @@ const ExpertAnalysisModal = ({
     }
   }, [selectedExpertProject, fetchTransmissionInterconnection]);
   
-  // Initialize all data - optimized to prevent flickering
+  // Initialize all data
   useEffect(() => {
     const initializeData = async () => {
       if (!selectedExpertProject) return;
       
       console.log('Initializing expert analysis modal data...');
       
-      // Try to get data by project name first
       let dbAnalysis = await fetchExpertAnalysisData();
       let dbTransmission = await fetchTransmissionData();
-      
-      console.log('Database analysis:', dbAnalysis);
-      console.log('Database transmission:', dbTransmission);
       
       let initialAnalysis = analysisData;
       
@@ -282,7 +286,10 @@ const ExpertAnalysisModal = ({
         };
       }
       
-      // Batch state updates in requestAnimationFrame
+      // Store original data for change detection
+      originalAnalysisRef.current = JSON.parse(JSON.stringify(initialAnalysis));
+      originalTransmissionRef.current = JSON.parse(JSON.stringify(dbTransmission || []));
+      
       requestAnimationFrame(() => {
         setEditedAnalysis(initialAnalysis);
         setAnalysisData(initialAnalysis);
@@ -297,14 +304,11 @@ const ExpertAnalysisModal = ({
     }
   }, [selectedExpertProject]);
 
-  // Recalculate scores function - memoized
+  // Recalculate scores
   const recalculateScores = useCallback((analysisData) => {
-    console.log('Recalculating scores for:', analysisData);
-    
     const thermalBreakdown = analysisData.thermalBreakdown || {};
     const redevBreakdown = analysisData.redevelopmentBreakdown || {};
     
-    // Helper function to safely get numeric scores
     const getSafeScore = (breakdown, key, defaultValue = 0) => {
       const value = breakdown[key]?.score;
       if (value === undefined || value === null) return defaultValue;
@@ -312,22 +316,18 @@ const ExpertAnalysisModal = ({
       return isNaN(num) ? defaultValue : num;
     };
     
-    // Calculate thermal score (5% + 15% = 20%)
     let thermalScore = 0;
     thermalScore += getSafeScore(thermalBreakdown, 'thermal_optimization', 1) * 0.05;
     thermalScore += getSafeScore(thermalBreakdown, 'environmental', 2) * 0.15;
     
-    // Calculate redevelopment score (40% + 30% + 30% = 100%)
     let redevelopmentScore = 0;
     redevelopmentScore += getSafeScore(redevBreakdown, 'redev_market', 2) * 0.40;
     
-    // Infrastructure score (average of land and utilities) - part of the 30%
     const landScore = getSafeScore(redevBreakdown, 'land_availability', 2);
     const utilitiesScore = getSafeScore(redevBreakdown, 'utilities', 2);
     const infrastructureScore = (landScore + utilitiesScore) / 2;
     redevelopmentScore += infrastructureScore * 0.30;
     
-    // Interconnection - 30%
     redevelopmentScore += getSafeScore(redevBreakdown, 'interconnection', 2) * 0.30;
     
     const overallScore = (thermalScore + redevelopmentScore) * 2;
@@ -342,35 +342,38 @@ const ExpertAnalysisModal = ({
       confidence: overallScore >= 4.5 ? 85 : overallScore >= 3.0 ? 75 : 60
     };
     
-    console.log('Recalculated scores:', result);
     return result;
   }, []);
 
-  // ENHANCED: Handle save with NO flickering
+  // Handle save with change detection
   const handleSave = useCallback(async () => {
     console.log('💾 Save button clicked');
+    
+    // Check if there are changes
+    if (!hasChanges()) {
+      setSaveStatus('no-changes');
+      setTimeout(() => {
+        setSaveStatus(null);
+      }, 2000);
+      return;
+    }
     
     // Prevent double saves
     if (saveStatus === 'saving') return;
     
-    // Use requestAnimationFrame for smooth UI updates
     requestAnimationFrame(() => {
       setSaveStatus('saving');
     });
     
     try {
-      // Use editedAnalysis if available, otherwise use analysisData
       const currentAnalysisToSave = editedAnalysis || analysisData;
       
       if (!currentAnalysisToSave) {
         throw new Error('No analysis data to save');
       }
       
-      // Recalculate scores before saving
       const updatedAnalysis = recalculateScores(currentAnalysisToSave);
-      console.log('Updated analysis to save:', updatedAnalysis);
       
-      // Get project ID - try multiple sources
       const projectId = selectedExpertProject.id || 
                        selectedExpertProject.detailData?.id || 
                        selectedExpertProject.expertAnalysis?.projectId;
@@ -379,7 +382,6 @@ const ExpertAnalysisModal = ({
         throw new Error('Project ID not found');
       }
       
-      // Prepare data for saving
       const saveData = {
         projectId: projectId,
         projectName: updatedAnalysis.projectName,
@@ -403,20 +405,17 @@ const ExpertAnalysisModal = ({
         lastUpdated: new Date().toISOString()
       };
       
-      console.log('Saving data:', saveData);
-      
-      // Save to database using provided function
-      let saveSuccessful = false;
-      
       if (saveExpertAnalysis && typeof saveExpertAnalysis === 'function') {
         console.log('📤 Calling saveExpertAnalysis function...');
         const savedResult = await saveExpertAnalysis(saveData);
-        saveSuccessful = true;
         console.log('✅ Save successful:', savedResult);
         
-        // Batch all state updates together to prevent flickering
+        // Update original references
+        originalAnalysisRef.current = JSON.parse(JSON.stringify(updatedAnalysis));
+        originalTransmissionRef.current = JSON.parse(JSON.stringify(editedTransmissionData));
+        
+        // Batch state updates
         requestAnimationFrame(() => {
-          // Update analysis data
           setAnalysisData(prev => ({
             ...prev,
             ...updatedAnalysis,
@@ -424,7 +423,6 @@ const ExpertAnalysisModal = ({
             redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || prev.redevelopmentBreakdown
           }));
           
-          // Update editedAnalysis
           setEditedAnalysis(prev => ({
             ...prev,
             ...updatedAnalysis,
@@ -432,11 +430,10 @@ const ExpertAnalysisModal = ({
             redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || prev?.redevelopmentBreakdown
           }));
           
-          // Show success status
           setSaveStatus('success');
         });
         
-        // Save transmission data if needed (non-blocking, don't wait for it)
+        // Save transmission data
         if (editedTransmissionData.length > 0) {
           if (saveTransmissionInterconnection && typeof saveTransmissionInterconnection === 'function') {
             saveTransmissionInterconnection(projectId, editedTransmissionData)
@@ -445,7 +442,7 @@ const ExpertAnalysisModal = ({
           }
         }
         
-        // Clear success message after 2 seconds
+        // Clear success message
         setTimeout(() => {
           requestAnimationFrame(() => {
             setSaveStatus(null);
@@ -463,43 +460,40 @@ const ExpertAnalysisModal = ({
         setSaveStatus('error');
       });
       
-      // Show error message after a short delay
       setTimeout(() => {
         const errorMessage = error.message.includes('404') 
-          ? 'Save failed: API endpoint not found. Please check backend deployment.'
+          ? 'Save failed: API endpoint not found.'
           : error.message.includes('401') || error.message.includes('403')
-          ? 'Save failed: Authentication error. Please login again.'
+          ? 'Save failed: Authentication error.'
           : `Save failed: ${error.message}`;
         
         alert(`❌ ${errorMessage}`);
       }, 100);
     }
-  }, [selectedExpertProject, editedAnalysis, analysisData, saveStatus, recalculateScores, saveExpertAnalysis, saveTransmissionInterconnection, editedTransmissionData, currentUser]);
+  }, [selectedExpertProject, editedAnalysis, analysisData, saveStatus, recalculateScores, saveExpertAnalysis, saveTransmissionInterconnection, editedTransmissionData, currentUser, hasChanges]);
 
   // Handle modal close
   const handleClose = useCallback(() => {
     console.log('🔒 Closing modal');
     
-    // Force parent to refresh data if we were editing
     if (isEditing && window.refreshDashboardData) {
       window.refreshDashboardData();
     }
     
-    // Close modal
     setSelectedExpertProject(null);
   }, [isEditing, setSelectedExpertProject]);
 
-  // Manual refresh button
+  // Manual refresh
   const handleManualRefresh = useCallback(async () => {
-    if (isEditing) {
-      if (!window.confirm('Refreshing will discard unsaved changes. Continue?')) {
+    if (isEditing && hasChanges()) {
+      if (!window.confirm('You have unsaved changes. Refreshing will discard them. Continue?')) {
         return;
       }
       setIsEditing(false);
     }
     
     await refreshAllData();
-  }, [isEditing, refreshAllData]);
+  }, [isEditing, hasChanges, refreshAllData]);
 
   // Get score color class
   const getScoreColorClass = useCallback((score) => {
@@ -529,10 +523,8 @@ const ExpertAnalysisModal = ({
     }
   }, []);
 
-  // Handle score change - optimized
+  // Handle score change with debouncing
   const handleScoreChange = useCallback((category, component, value) => {
-    console.log('Score changed:', { category, component, value });
-    
     const currentAnalysis = editedAnalysis || analysisData;
     
     const updated = { ...currentAnalysis };
@@ -555,18 +547,20 @@ const ExpertAnalysisModal = ({
       };
     }
     
-    // Recalculate scores
     const recalculated = recalculateScores(updated);
     
-    // Batch update in requestAnimationFrame
     requestAnimationFrame(() => {
       setEditedAnalysis(recalculated);
     });
   }, [editedAnalysis, analysisData, recalculateScores]);
 
-  // Handle transmission data field change
-  const handleTransmissionFieldChange = useCallback((index, field, value) => {
+  // Handle transmission data field change with stable focus
+  const handleTransmissionFieldChange = useCallback((index, field, value, event) => {
     if (!isEditing) return;
+    
+    if (event) {
+      event.persist?.();
+    }
     
     requestAnimationFrame(() => {
       setEditedTransmissionData(prev => {
@@ -597,6 +591,7 @@ const ExpertAnalysisModal = ({
       setEditedTransmissionData(prev => [
         ...prev,
         {
+          id: Date.now(),
           site: projectName,
           excessIXCapacity: true,
           constraints: "-",
@@ -621,359 +616,37 @@ const ExpertAnalysisModal = ({
     });
   }, [isEditing]);
 
-  // Use editedAnalysis if available, otherwise use analysisData
-  const currentAnalysis = editedAnalysis || analysisData;
-  
-  // Memoized sub-components to prevent re-renders
-  const ThermalOperatingCard = React.memo(({ analysis, isEditing, onScoreChange }) => (
-    <div className="analysis-card">
-      <div className="card-header">
-        <h4>Thermal Operating Assessment</h4>
-        <p className="card-subtitle">Evaluation of existing plant operations and market position</p>
-        <span className="card-weight">Weight: 50%</span>
-      </div>
-      
-      <div className="card-body">
-        {/* M&A Thermal Optimization */}
-        <div className="score-field-group">
-          <div className="field-header">
-            <span className="field-icon">M&A</span>
-            <h5>Thermal Optimization Potential</h5>
-          </div>
-          <div className="field-controls">
-            {isEditing ? (
-              <select 
-                className="score-select"
-                value={analysis?.thermalBreakdown?.thermal_optimization?.score || 1}
-                onChange={(e) => onScoreChange('thermal', 'thermal_optimization', e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  fontSize: '14px',
-                  backgroundColor: '#2d3748',
-                  color: 'white',
-                  border: '1px solid #4a5568',
-                  borderRadius: '6px',
-                  transition: 'border-color 0.2s ease'
-                }}
-              >
-                <option value="1">1 - No identifiable value add</option>
-                <option value="2">2 - Readily apparent value add</option>
-              </select>
-            ) : (
-              <div className="score-display" style={{
-                padding: '12px',
-                backgroundColor: '#2d3748',
-                borderRadius: '6px',
-                border: '1px solid #4a5568',
-                transition: 'border-color 0.2s ease'
-              }}>
-                Score: {analysis?.thermalBreakdown?.thermal_optimization?.score || 1}
-              </div>
-            )}
-            <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
-              <span className="weight" style={{ color: '#a0aec0' }}>Weight: 5%</span>
-              <span className="contribution" style={{ color: '#a0aec0' }}>
-                Contribution: {(((analysis?.thermalBreakdown?.thermal_optimization?.score || 1) * 0.05).toFixed(2))}
-              </span>
-            </div>
-          </div>
-        </div>
-        
-        {/* Environmental Considerations */}
-        <div className="score-field-group">
-          <div className="field-header">
-            <span className="field-icon">Env</span>
-            <h5>Environmental Considerations</h5>
-          </div>
-          <div className="field-controls">
-            {isEditing ? (
-              <select 
-                className="score-select"
-                value={analysis?.thermalBreakdown?.environmental?.score || 2}
-                onChange={(e) => onScoreChange('thermal', 'environmental', e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  fontSize: '14px',
-                  backgroundColor: '#2d3748',
-                  color: 'white',
-                  border: '1px solid #4a5568',
-                  borderRadius: '6px',
-                  transition: 'border-color 0.2s ease'
-                }}
-              >
-                <option value="0">0 - Known and not mitigable</option>
-                <option value="1">1 - Not known</option>
-                <option value="2">2 - Known, mitigable, no cost advantage</option>
-                <option value="3">3 - Known, mitigable, PT has cost advantage</option>
-              </select>
-            ) : (
-              <div className="score-display" style={{
-                padding: '12px',
-                backgroundColor: '#2d3748',
-                borderRadius: '6px',
-                border: '1px solid #4a5568',
-                transition: 'border-color 0.2s ease'
-              }}>
-                Score: {analysis?.thermalBreakdown?.environmental?.score || 2}
-              </div>
-            )}
-            <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
-              <span className="weight" style={{ color: '#a0aec0' }}>Weight: 15%</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  ));
-
-  const RedevelopmentCard = React.memo(({ analysis, isEditing, onScoreChange, transmissionData, onTransmissionFieldChange, onAddTransmission, onRemoveTransmission, getScoreColorClass }) => (
-    <div className="analysis-card">
-      <div className="card-header">
-        <h4>Redevelopment Assessment</h4>
-        <p className="card-subtitle">Evaluation of future development potential and infrastructure</p>
-        <span className="card-weight">Weight: 50%</span>
-      </div>
-      
-      <div className="card-body">
-        {/* Market Position */}
-        <div className="score-field-group">
-          <div className="field-header">
-            <span className="field-icon">Mkt</span>
-            <h5>Market Position</h5>
-          </div>
-          <div className="field-controls">
-            {isEditing ? (
-              <select 
-                className="score-select"
-                value={analysis?.redevelopmentBreakdown?.redev_market?.score || 2}
-                onChange={(e) => onScoreChange('redevelopment', 'redev_market', e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  fontSize: '14px',
-                  backgroundColor: '#2d3748',
-                  color: 'white',
-                  border: '1px solid #4a5568',
-                  borderRadius: '6px',
-                  transition: 'border-color 0.2s ease'
-                }}
-              >
-                <option value="0">0 - Challenging</option>
-                <option value="1">1 - Uncertain</option>
-                <option value="2">2 - Secondary</option>
-                <option value="3">3 - Primary</option>
-              </select>
-            ) : (
-              <div className="score-display" style={{
-                padding: '12px',
-                backgroundColor: '#2d3748',
-                borderRadius: '6px',
-                border: '1px solid #4a5568',
-                transition: 'border-color 0.2s ease'
-              }}>
-                Score: {analysis?.redevelopmentBreakdown?.redev_market?.score || 2}
-              </div>
-            )}
-            <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
-              <span className="weight" style={{ color: '#a0aec0' }}>Weight: 40%</span>
-              <span className="contribution" style={{ color: '#a0aec0' }}>
-                Contribution: {(((analysis?.redevelopmentBreakdown?.redev_market?.score || 2) * 0.40).toFixed(2))}
-              </span>
-            </div>
-          </div>
-        </div>
-        
-        {/* Infrastructure */}
-        <div className="infrastructure-section">
-          <h5>Infrastructure</h5>
-          <div className="infra-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '12px 0' }}>
-            <div className="infra-field">
-              <label style={{ display: 'block', marginBottom: '8px', color: '#a0aec0' }}>Land Availability</label>
-              {isEditing ? (
-                <select 
-                  className="score-select"
-                  value={analysis?.redevelopmentBreakdown?.land_availability?.score || 2}
-                  onChange={(e) => onScoreChange('redevelopment', 'land_availability', e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    fontSize: '14px',
-                    backgroundColor: '#2d3748',
-                    color: 'white',
-                    border: '1px solid #4a5568',
-                    borderRadius: '6px',
-                    transition: 'border-color 0.2s ease'
-                  }}
-                >
-                  <option value="0">0 - No land available</option>
-                  <option value="1">1 - No onsite, available nearby</option>
-                  <option value="2">2 - Some onsite + nearby parcel</option>
-                  <option value="3">3 - Sufficient land onsite</option>
-                </select>
-              ) : (
-                <div className="score-display" style={{
-                  padding: '12px',
-                  backgroundColor: '#2d3748',
-                  borderRadius: '6px',
-                  border: '1px solid #4a5568',
-                  transition: 'border-color 0.2s ease'
-                }}>
-                  Score: {analysis?.redevelopmentBreakdown?.land_availability?.score || 2}
-                </div>
-              )}
-            </div>
-            <div className="infra-field">
-              <label style={{ display: 'block', marginBottom: '8px', color: '#a0aec0' }}>Utilities</label>
-              {isEditing ? (
-                <select 
-                  className="score-select"
-                  value={analysis?.redevelopmentBreakdown?.utilities?.score || 2}
-                  onChange={(e) => onScoreChange('redevelopment', 'utilities', e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    fontSize: '14px',
-                    backgroundColor: '#2d3748',
-                    color: 'white',
-                    border: '1px solid #4a5568',
-                    borderRadius: '6px',
-                    transition: 'border-color 0.2s ease'
-                  }}
-                >
-                  <option value="-1">-1 - N/A - BESS and Solar</option>
-                  <option value="0">0 - No clear path</option>
-                  <option value="1">1 - Utilities available but expensive</option>
-                  <option value="2">2 - Utilities nearby, low cost</option>
-                  <option value="3">3 - Sufficient utilities onsite</option>
-                </select>
-              ) : (
-                <div className="score-display" style={{
-                  padding: '12px',
-                  backgroundColor: '#2d3748',
-                  borderRadius: '6px',
-                  border: '1px solid #4a5568',
-                  transition: 'border-color 0.2s ease'
-                }}>
-                  Score: {analysis?.redevelopmentBreakdown?.utilities?.score || 2}
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="infra-total" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid #4a5568' }}>
-            <span style={{ fontWeight: '500' }}>Infrastructure Score:</span>
-            <span className={`infra-value ${getScoreColorClass(analysis?.infrastructureScore || 0)}`} style={{ fontWeight: '600' }}>
-              {(parseFloat(analysis?.infrastructureScore) || 0).toFixed(2)}/3.0
-            </span>
-          </div>
-        </div>
-        
-        {/* Interconnection */}
-        <div className="score-field-group">
-          <div className="field-header">
-            <span className="field-icon">IX</span>
-            <h5>Interconnection (IX)</h5>
-          </div>
-          <div className="field-controls">
-            {isEditing ? (
-              <select 
-                className="score-select"
-                value={analysis?.redevelopmentBreakdown?.interconnection?.score || 2}
-                onChange={(e) => onScoreChange('redevelopment', 'interconnection', e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  fontSize: '14px',
-                  backgroundColor: '#2d3748',
-                  color: 'white',
-                  border: '1px solid #4a5568',
-                  borderRadius: '6px',
-                  transition: 'border-color 0.2s ease'
-                }}
-              >
-                <option value="0">0 - Major upgrades needed</option>
-                <option value="1">1 - Minimal upgrades needed</option>
-                <option value="2">2 - No upgrades needed (Unsecured)</option>
-                <option value="3">3 - Secured IX Rights</option>
-              </select>
-            ) : (
-              <div className="score-display" style={{
-                padding: '12px',
-                backgroundColor: '#2d3748',
-                borderRadius: '6px',
-                border: '1px solid #4a5568',
-                transition: 'border-color 0.2s ease'
-              }}>
-                Score: {analysis?.redevelopmentBreakdown?.interconnection?.score || 2}
-              </div>
-            )}
-            <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px' }}>
-              <span className="weight" style={{ color: '#a0aec0' }}>Weight: 30%</span>
-            </div>
-          </div>
-        </div>
-        
-        {/* Transmission Data Section */}
-        <div className="transmission-section">
-          <div className="transmission-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h5>Transmission Interconnection Details</h5>
-            {transmissionData.length > 0 && (
-              <span className="capacity-badge" style={{
-                background: 'rgba(34, 197, 94, 0.1)',
-                border: '1px solid rgba(34, 197, 94, 0.3)',
-                color: '#86efac',
-                padding: '6px 12px',
-                borderRadius: '20px',
-                fontSize: '12px',
-                fontWeight: '500',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px'
-              }}>
-                <span className="badge-dot" style={{ color: '#22c55e', fontSize: '16px' }}>●</span> Excess IX Capacity Available
-              </span>
-            )}
-          </div>
-          
-          {isEditing ? (
-            <TransmissionEditTable 
-              data={transmissionData}
-              onFieldChange={onTransmissionFieldChange}
-              onAdd={onAddTransmission}
-              onRemove={onRemoveTransmission}
-            />
-          ) : (
-            <TransmissionViewTable data={transmissionData} />
-          )}
-        </div>
-      </div>
-    </div>
-  ));
-
-  const TransmissionEditTable = React.memo(({ data, onFieldChange, onAdd, onRemove }) => (
-    <div className="transmission-edit">
-      <div className="transmission-table-container" style={{ overflowX: 'auto', marginBottom: '16px' }}>
-        <table className="transmission-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
-          <thead>
-            <tr>
-              <th style={{ width: '25%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>POI Voltage</th>
-              <th style={{ width: '25%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Excess Injection Capacity (MW)</th>
-              <th style={{ width: '25%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Excess Withdrawal Capacity (MW)</th>
-              <th style={{ width: '15%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Constraints</th>
-              <th style={{ width: '10%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.length > 0 ? (
-              data.map((item, index) => (
-                <tr key={index} style={{ borderBottom: '1px solid #4a5568' }}>
+  // Memoized Transmission Edit Table with stable focus
+  const TransmissionEditTable = React.memo(({ data, onFieldChange, onAdd, onRemove }) => {
+    const inputRefs = useRef([]);
+    
+    const handleChange = useCallback((index, field, value, event) => {
+      onFieldChange(index, field, value, event);
+    }, [onFieldChange]);
+    
+    return (
+      <div className="transmission-edit">
+        <div className="transmission-table-container" style={{ overflowX: 'auto', marginBottom: '16px' }}>
+          <table className="transmission-table" style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0', fontSize: '14px' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '25%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>POI Voltage</th>
+                <th style={{ width: '25%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Excess Injection Capacity (MW)</th>
+                <th style={{ width: '25%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Excess Withdrawal Capacity (MW)</th>
+                <th style={{ width: '15%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Constraints</th>
+                <th style={{ width: '10%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((item, index) => (
+                <tr key={`transmission-${item.id || index}`} style={{ borderBottom: '1px solid #4a5568' }}>
                   <td style={{ padding: '12px' }}>
                     <input
+                      ref={el => inputRefs.current[index] = el}
                       type="text"
                       className="transmission-input"
                       value={item.poiVoltage || ''}
-                      onChange={(e) => onFieldChange(index, 'poiVoltage', e.target.value)}
+                      onChange={(e) => handleChange(index, 'poiVoltage', e.target.value, e)}
                       placeholder="e.g., 69 kV"
                       style={{ 
                         width: '100%', 
@@ -982,8 +655,7 @@ const ExpertAnalysisModal = ({
                         backgroundColor: '#2d3748',
                         color: 'white',
                         border: '1px solid #4a5568',
-                        borderRadius: '6px',
-                        transition: 'border-color 0.2s ease'
+                        borderRadius: '6px'
                       }}
                     />
                   </td>
@@ -992,7 +664,7 @@ const ExpertAnalysisModal = ({
                       type="number"
                       className="transmission-input"
                       value={item.excessInjectionCapacity || 0}
-                      onChange={(e) => onFieldChange(index, 'excessInjectionCapacity', e.target.value)}
+                      onChange={(e) => handleChange(index, 'excessInjectionCapacity', e.target.value, e)}
                       placeholder="0.0"
                       step="0.1"
                       min="0"
@@ -1003,8 +675,7 @@ const ExpertAnalysisModal = ({
                         backgroundColor: '#2d3748',
                         color: 'white',
                         border: '1px solid #4a5568',
-                        borderRadius: '6px',
-                        transition: 'border-color 0.2s ease'
+                        borderRadius: '6px'
                       }}
                     />
                   </td>
@@ -1013,7 +684,7 @@ const ExpertAnalysisModal = ({
                       type="number"
                       className="transmission-input"
                       value={item.excessWithdrawalCapacity || 0}
-                      onChange={(e) => onFieldChange(index, 'excessWithdrawalCapacity', e.target.value)}
+                      onChange={(e) => handleChange(index, 'excessWithdrawalCapacity', e.target.value, e)}
                       placeholder="0.0"
                       step="0.1"
                       min="0"
@@ -1024,8 +695,7 @@ const ExpertAnalysisModal = ({
                         backgroundColor: '#2d3748',
                         color: 'white',
                         border: '1px solid #4a5568',
-                        borderRadius: '6px',
-                        transition: 'border-color 0.2s ease'
+                        borderRadius: '6px'
                       }}
                     />
                   </td>
@@ -1034,7 +704,7 @@ const ExpertAnalysisModal = ({
                       type="text"
                       className="transmission-input"
                       value={item.constraints || '-'}
-                      onChange={(e) => onFieldChange(index, 'constraints', e.target.value)}
+                      onChange={(e) => handleChange(index, 'constraints', e.target.value, e)}
                       placeholder="e.g., None, 1, 2"
                       style={{ 
                         width: '100%', 
@@ -1043,8 +713,7 @@ const ExpertAnalysisModal = ({
                         backgroundColor: '#2d3748',
                         color: 'white',
                         border: '1px solid #4a5568',
-                        borderRadius: '6px',
-                        transition: 'border-color 0.2s ease'
+                        borderRadius: '6px'
                       }}
                     />
                   </td>
@@ -1060,47 +729,46 @@ const ExpertAnalysisModal = ({
                         padding: '8px 12px',
                         borderRadius: '4px',
                         cursor: 'pointer',
-                        fontSize: '12px',
-                        transition: 'all 0.2s ease'
+                        fontSize: '12px'
                       }}
                     >
                       🗑️ Remove
                     </button>
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan="5" style={{ textAlign: 'center', color: '#a0aec0', fontStyle: 'italic', padding: '20px' }}>
-                  No transmission data available. Click "Add POI Voltage" to add new entries.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              ))}
+              {data.length === 0 && (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: 'center', color: '#a0aec0', fontStyle: 'italic', padding: '20px' }}>
+                    No transmission data available. Click "Add POI Voltage" to add new entries.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        
+        <div className="transmission-actions" style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+          <button 
+            className="add-btn"
+            onClick={onAdd}
+            style={{
+              background: 'rgba(34, 197, 94, 0.1)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              color: '#86efac',
+              padding: '10px 20px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: '500',
+              fontSize: '14px'
+            }}
+          >
+            + Add POI Voltage
+          </button>
+        </div>
       </div>
-      
-      <div className="transmission-actions" style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
-        <button 
-          className="add-btn"
-          onClick={onAdd}
-          style={{
-            background: 'rgba(34, 197, 94, 0.1)',
-            border: '1px solid rgba(34, 197, 94, 0.3)',
-            color: '#86efac',
-            padding: '10px 20px',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '500',
-            fontSize: '14px',
-            transition: 'all 0.2s ease'
-          }}
-        >
-          + Add POI Voltage
-        </button>
-      </div>
-    </div>
-  ));
+    );
+  });
 
   const TransmissionViewTable = React.memo(({ data }) => (
     <div className="transmission-view">
@@ -1136,7 +804,10 @@ const ExpertAnalysisModal = ({
     </div>
   ));
 
-  // Loading overlay - doesn't replace entire modal
+  // Current analysis data
+  const currentAnalysis = editedAnalysis || analysisData;
+  
+  // Loading overlay
   if (isLoading && isInitialLoad.current) {
     return (
       <div className="modal-overlay" onClick={() => !isEditing && handleClose()}>
@@ -1164,8 +835,8 @@ const ExpertAnalysisModal = ({
 
   return (
     <div className="modal-overlay" onClick={() => !isEditing && handleClose()}>
-      <div className="modal-content expert-analysis-modal" onClick={(e) => e.stopPropagation()} ref={modalContentRef}>
-        {/* Save Status Overlay - Fixed position to prevent layout shift */}
+      <div className="modal-content expert-analysis-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Save Status Overlay */}
         {saveStatus && (
           <div className="save-status-overlay" style={{
             position: 'fixed',
@@ -1215,6 +886,17 @@ const ExpertAnalysisModal = ({
                   <p style={{ color: '#a0aec0' }}>Your changes have been saved successfully.</p>
                 </>
               )}
+              {saveStatus === 'no-changes' && (
+                <>
+                  <div style={{
+                    fontSize: '48px',
+                    marginBottom: '16px',
+                    color: '#f59e0b'
+                  }}>ℹ️</div>
+                  <h3 style={{ color: 'white', margin: '0 0 8px' }}>No Changes Made</h3>
+                  <p style={{ color: '#a0aec0' }}>You haven't made any changes to save.</p>
+                </>
+              )}
               {saveStatus === 'error' && (
                 <>
                   <div style={{
@@ -1235,8 +917,7 @@ const ExpertAnalysisModal = ({
           padding: '20px',
           background: 'linear-gradient(135deg, #2d3748 0%, #1a202c 100%)',
           borderBottom: '1px solid #4a5568',
-          borderRadius: '12px 12px 0 0',
-          transition: 'all 0.2s ease'
+          borderRadius: '12px 12px 0 0'
         }}>
           <div className="header-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
             <div className="header-left">
@@ -1259,8 +940,7 @@ const ExpertAnalysisModal = ({
                   padding: '6px 12px',
                   borderRadius: '4px',
                   cursor: 'pointer',
-                  fontSize: '12px',
-                  transition: 'all 0.2s ease'
+                  fontSize: '12px'
                 }}
               >
                 🔄 Refresh
@@ -1276,23 +956,26 @@ const ExpertAnalysisModal = ({
                 height: '32px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.2s ease'
+                justifyContent: 'center'
               }}>×</button>
             </div>
           </div>
           
           <div className="edit-toggle" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             {!isEditing ? (
-              <button className="edit-btn" onClick={() => setIsEditing(true)} style={{
+              <button className="edit-btn" onClick={() => {
+                // Store current state as original when entering edit mode
+                originalAnalysisRef.current = JSON.parse(JSON.stringify(currentAnalysis));
+                originalTransmissionRef.current = JSON.parse(JSON.stringify(editedTransmissionData));
+                setIsEditing(true);
+              }} style={{
                 background: 'rgba(59, 130, 246, 0.1)',
                 border: '1px solid rgba(59, 130, 246, 0.3)',
                 color: '#93c5fd',
                 padding: '8px 16px',
                 borderRadius: '6px',
                 fontWeight: '500',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
+                cursor: 'pointer'
               }}>
                 <span className="edit-icon">✏️</span> Enable Editing
               </button>
@@ -1309,33 +992,21 @@ const ExpertAnalysisModal = ({
                 }}>EDIT MODE</span>
                 <button className="cancel-btn" onClick={() => {
                   setIsEditing(false);
-                  setEditedAnalysis(null);
+                  setEditedAnalysis(JSON.parse(JSON.stringify(originalAnalysisRef.current)));
+                  setEditedTransmissionData(JSON.parse(JSON.stringify(originalTransmissionRef.current)));
                 }} style={{
                   background: 'rgba(239, 68, 68, 0.1)',
                   border: '1px solid rgba(239, 68, 68, 0.3)',
                   color: '#fca5a5',
                   padding: '8px 16px',
                   borderRadius: '6px',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  cursor: 'pointer'
                 }}>
                   Cancel Edit
                 </button>
               </div>
             )}
           </div>
-        </div>
-        
-        {/* Data Version Indicator (for debugging) */}
-        <div style={{ 
-          textAlign: 'center', 
-          fontSize: '10px', 
-          color: '#718096',
-          padding: '4px',
-          borderBottom: '1px solid #4a5568',
-          background: 'rgba(0,0,0,0.1)'
-        }}>
-          Data Version: {dataVersion} | Last Updated: {currentAnalysis?.lastUpdated ? new Date(currentAnalysis.lastUpdated).toLocaleTimeString() : 'Never'}
         </div>
         
         {/* Overall Score Summary */}
@@ -1347,13 +1018,12 @@ const ExpertAnalysisModal = ({
               padding: '20px', 
               borderRadius: '8px', 
               border: '1px solid #4a5568',
-              textAlign: 'center',
-              transition: 'all 0.3s ease'
+              textAlign: 'center'
             }}>
               <div className="score-label" style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 OVERALL SCORE
               </div>
-              <div className={`score-value ${getScoreColorClass((currentAnalysis?.overallScore || 0) / 2)}`} style={{ 
+              <div className="score-value" style={{ 
                 fontSize: '28px', 
                 fontWeight: '700', 
                 marginBottom: '4px',
@@ -1380,13 +1050,12 @@ const ExpertAnalysisModal = ({
               padding: '20px', 
               borderRadius: '8px', 
               border: '1px solid #4a5568',
-              textAlign: 'center',
-              transition: 'all 0.3s ease'
+              textAlign: 'center'
             }}>
               <div className="score-label" style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 THERMAL OPERATING SCORE
               </div>
-              <div className={`score-value ${getScoreColorClass(currentAnalysis?.thermalScore || 0)}`} style={{ 
+              <div className="score-value" style={{ 
                 fontSize: '28px', 
                 fontWeight: '700', 
                 marginBottom: '4px',
@@ -1409,13 +1078,12 @@ const ExpertAnalysisModal = ({
               padding: '20px', 
               borderRadius: '8px', 
               border: '1px solid #4a5568',
-              textAlign: 'center',
-              transition: 'all 0.3s ease'
+              textAlign: 'center'
             }}>
               <div className="score-label" style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 REDEVELOPMENT
               </div>
-              <div className={`score-value ${getScoreColorClass(currentAnalysis?.redevelopmentScore || 0)}`} style={{ 
+              <div className="score-value" style={{ 
                 fontSize: '28px', 
                 fontWeight: '700', 
                 marginBottom: '4px',
@@ -1443,26 +1111,344 @@ const ExpertAnalysisModal = ({
           </p>
           
           <div className="cards-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
-            <ThermalOperatingCard 
-              analysis={currentAnalysis}
-              isEditing={isEditing}
-              onScoreChange={handleScoreChange}
-            />
+            {/* Left Card - Thermal Operating Assessment */}
+            <div className="analysis-card" style={{ background: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px' }}>
+              <div className="card-header" style={{ padding: '16px', background: 'rgba(0, 0, 0, 0.2)', borderBottom: '1px solid #4a5568' }}>
+                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '16px' }}>Thermal Operating Assessment</h4>
+                <p className="card-subtitle" style={{ color: '#a0aec0', fontSize: '13px', margin: '0 0 8px 0' }}>
+                  Evaluation of existing plant operations and market position
+                </p>
+                <span className="card-weight" style={{ display: 'inline-block', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
+                  Weight: 50%
+                </span>
+              </div>
+              
+              <div className="card-body" style={{ padding: '16px' }}>
+                {/* M&A Thermal Optimization */}
+                <div className="score-field-group" style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
+                  <div className="field-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span className="field-icon" style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      M&A
+                    </span>
+                    <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Thermal Optimization Potential</h5>
+                  </div>
+                  <div className="field-controls">
+                    {isEditing ? (
+                      <select 
+                        value={currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
+                        onChange={(e) => handleScoreChange('thermal', 'thermal_optimization', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          fontSize: '14px',
+                          backgroundColor: '#2d3748',
+                          color: 'white',
+                          border: '1px solid #4a5568',
+                          borderRadius: '6px',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        <option value="1">1 - No identifiable value add</option>
+                        <option value="2">2 - Readily apparent value add</option>
+                      </select>
+                    ) : (
+                      <div className="score-display" style={{
+                        padding: '12px',
+                        backgroundColor: '#2d3748',
+                        borderRadius: '6px',
+                        border: '1px solid #4a5568',
+                        marginBottom: '8px'
+                      }}>
+                        Score: {currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
+                      </div>
+                    )}
+                    <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span className="weight" style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 5%</span>
+                      <span className="contribution" style={{ color: '#a0aec0', fontSize: '12px' }}>
+                        Contribution: {(((currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1) * 0.05).toFixed(2))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Environmental Considerations */}
+                <div className="score-field-group" style={{ marginBottom: '0' }}>
+                  <div className="field-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span className="field-icon" style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      Env
+                    </span>
+                    <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Environmental Considerations</h5>
+                  </div>
+                  <div className="field-controls">
+                    {isEditing ? (
+                      <select 
+                        value={currentAnalysis?.thermalBreakdown?.environmental?.score || 2}
+                        onChange={(e) => handleScoreChange('thermal', 'environmental', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          fontSize: '14px',
+                          backgroundColor: '#2d3748',
+                          color: 'white',
+                          border: '1px solid #4a5568',
+                          borderRadius: '6px',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        <option value="0">0 - Known and not mitigable</option>
+                        <option value="1">1 - Not known</option>
+                        <option value="2">2 - Known, mitigable, no cost advantage</option>
+                        <option value="3">3 - Known, mitigable, PT has cost advantage</option>
+                      </select>
+                    ) : (
+                      <div className="score-display" style={{
+                        padding: '12px',
+                        backgroundColor: '#2d3748',
+                        borderRadius: '6px',
+                        border: '1px solid #4a5568',
+                        marginBottom: '8px'
+                      }}>
+                        Score: {currentAnalysis?.thermalBreakdown?.environmental?.score || 2}
+                      </div>
+                    )}
+                    <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span className="weight" style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 15%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
             
-            <RedevelopmentCard 
-              analysis={currentAnalysis}
-              isEditing={isEditing}
-              onScoreChange={handleScoreChange}
-              transmissionData={editedTransmissionData}
-              onTransmissionFieldChange={handleTransmissionFieldChange}
-              onAddTransmission={addNewTransmissionEntry}
-              onRemoveTransmission={removeTransmissionEntry}
-              getScoreColorClass={getScoreColorClass}
-            />
+            {/* Right Card - Redevelopment Assessment */}
+            <div className="analysis-card" style={{ background: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px' }}>
+              <div className="card-header" style={{ padding: '16px', background: 'rgba(0, 0, 0, 0.2)', borderBottom: '1px solid #4a5568' }}>
+                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '16px' }}>Redevelopment Assessment</h4>
+                <p className="card-subtitle" style={{ color: '#a0aec0', fontSize: '13px', margin: '0 0 8px 0' }}>
+                  Evaluation of future development potential and infrastructure
+                </p>
+                <span className="card-weight" style={{ display: 'inline-block', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
+                  Weight: 50%
+                </span>
+              </div>
+              
+              <div className="card-body" style={{ padding: '16px' }}>
+                {/* Market Position */}
+                <div className="score-field-group" style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
+                  <div className="field-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span className="field-icon" style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      Mkt
+                    </span>
+                    <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Market Position</h5>
+                  </div>
+                  <div className="field-controls">
+                    {isEditing ? (
+                      <select 
+                        value={currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
+                        onChange={(e) => handleScoreChange('redevelopment', 'redev_market', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          fontSize: '14px',
+                          backgroundColor: '#2d3748',
+                          color: 'white',
+                          border: '1px solid #4a5568',
+                          borderRadius: '6px',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        <option value="0">0 - Challenging</option>
+                        <option value="1">1 - Uncertain</option>
+                        <option value="2">2 - Secondary</option>
+                        <option value="3">3 - Primary</option>
+                      </select>
+                    ) : (
+                      <div className="score-display" style={{
+                        padding: '12px',
+                        backgroundColor: '#2d3748',
+                        borderRadius: '6px',
+                        border: '1px solid #4a5568',
+                        marginBottom: '8px'
+                      }}>
+                        Score: {currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
+                      </div>
+                    )}
+                    <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span className="weight" style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 40%</span>
+                      <span className="contribution" style={{ color: '#a0aec0', fontSize: '12px' }}>
+                        Contribution: {(((currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2) * 0.40).toFixed(2))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Infrastructure */}
+                <div className="infrastructure-section" style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
+                  <h5 style={{ margin: '0 0 12px 0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Infrastructure</h5>
+                  <div className="infra-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '12px 0' }}>
+                    <div className="infra-field">
+                      <label style={{ display: 'block', marginBottom: '8px', color: '#a0aec0', fontSize: '12px', fontWeight: '500' }}>Land Availability</label>
+                      {isEditing ? (
+                        <select 
+                          value={currentAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
+                          onChange={(e) => handleScoreChange('redevelopment', 'land_availability', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            fontSize: '14px',
+                            backgroundColor: '#2d3748',
+                            color: 'white',
+                            border: '1px solid #4a5568',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          <option value="0">0 - No land available</option>
+                          <option value="1">1 - No onsite, available nearby</option>
+                          <option value="2">2 - Some onsite + nearby parcel</option>
+                          <option value="3">3 - Sufficient land onsite</option>
+                        </select>
+                      ) : (
+                        <div className="score-display" style={{
+                          padding: '12px',
+                          backgroundColor: '#2d3748',
+                          borderRadius: '6px',
+                          border: '1px solid #4a5568'
+                        }}>
+                          Score: {currentAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
+                        </div>
+                      )}
+                    </div>
+                    <div className="infra-field">
+                      <label style={{ display: 'block', marginBottom: '8px', color: '#a0aec0', fontSize: '12px', fontWeight: '500' }}>Utilities</label>
+                      {isEditing ? (
+                        <select 
+                          value={currentAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
+                          onChange={(e) => handleScoreChange('redevelopment', 'utilities', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            fontSize: '14px',
+                            backgroundColor: '#2d3748',
+                            color: 'white',
+                            border: '1px solid #4a5568',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          <option value="-1">-1 - N/A - BESS and Solar</option>
+                          <option value="0">0 - No clear path</option>
+                          <option value="1">1 - Utilities available but expensive</option>
+                          <option value="2">2 - Utilities nearby, low cost</option>
+                          <option value="3">3 - Sufficient utilities onsite</option>
+                        </select>
+                      ) : (
+                        <div className="score-display" style={{
+                          padding: '12px',
+                          backgroundColor: '#2d3748',
+                          borderRadius: '6px',
+                          border: '1px solid #4a5568'
+                        }}>
+                          Score: {currentAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="infra-total" style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid #4a5568' }}>
+                    <span style={{ fontWeight: '500', color: '#e2e8f0' }}>Infrastructure Score:</span>
+                    <span style={{ 
+                      fontWeight: '600',
+                      color: getScoreColorClass(currentAnalysis?.infrastructureScore || 0) === 'score-excellent' ? '#10b981' :
+                             getScoreColorClass(currentAnalysis?.infrastructureScore || 0) === 'score-good' ? '#f59e0b' :
+                             getScoreColorClass(currentAnalysis?.infrastructureScore || 0) === 'score-fair' ? '#fbbf24' : '#ef4444'
+                    }}>
+                      {(parseFloat(currentAnalysis?.infrastructureScore) || 0).toFixed(2)}/3.0
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Interconnection */}
+                <div className="score-field-group" style={{ marginBottom: '20px' }}>
+                  <div className="field-header" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span className="field-icon" style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      IX
+                    </span>
+                    <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Interconnection (IX)</h5>
+                  </div>
+                  <div className="field-controls">
+                    {isEditing ? (
+                      <select 
+                        value={currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                        onChange={(e) => handleScoreChange('redevelopment', 'interconnection', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          fontSize: '14px',
+                          backgroundColor: '#2d3748',
+                          color: 'white',
+                          border: '1px solid #4a5568',
+                          borderRadius: '6px',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        <option value="0">0 - Major upgrades needed</option>
+                        <option value="1">1 - Minimal upgrades needed</option>
+                        <option value="2">2 - No upgrades needed (Unsecured)</option>
+                        <option value="3">3 - Secured IX Rights</option>
+                      </select>
+                    ) : (
+                      <div className="score-display" style={{
+                        padding: '12px',
+                        backgroundColor: '#2d3748',
+                        borderRadius: '6px',
+                        border: '1px solid #4a5568',
+                        marginBottom: '8px'
+                      }}>
+                        Score: {currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                      </div>
+                    )}
+                    <div className="field-details" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span className="weight" style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 30%</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Transmission Data Section */}
+                <div className="transmission-section" style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #4a5568' }}>
+                  <div className="transmission-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Transmission Interconnection Details</h5>
+                    {editedTransmissionData.length > 0 && (
+                      <span className="capacity-badge" style={{
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        border: '1px solid rgba(34, 197, 94, 0.3)',
+                        color: '#86efac',
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        <span className="badge-dot" style={{ color: '#22c55e', fontSize: '16px' }}>●</span> Excess IX Capacity Available
+                      </span>
+                    )}
+                  </div>
+                  
+                  {isEditing ? (
+                    <TransmissionEditTable 
+                      data={editedTransmissionData}
+                      onFieldChange={handleTransmissionFieldChange}
+                      onAdd={addNewTransmissionEntry}
+                      onRemove={removeTransmissionEntry}
+                    />
+                  ) : (
+                    <TransmissionViewTable data={editedTransmissionData} />
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         
-        {/* Action Buttons */}
+        {/* Action Buttons - REMOVED CANCEL BUTTON */}
         <div className="action-buttons" style={{ 
           padding: '20px', 
           borderTop: '1px solid #4a5568', 
@@ -1470,27 +1456,7 @@ const ExpertAnalysisModal = ({
           borderRadius: '0 0 12px 12px'
         }}>
           {isEditing ? (
-            <div className="edit-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-              <button 
-                className="action-btn secondary"
-                onClick={() => {
-                  setIsEditing(false);
-                  setEditedAnalysis(null);
-                }}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.1)',
-                  border: '1px solid rgba(255, 255, 255, 0.2)',
-                  color: '#e2e8f0',
-                  padding: '12px 24px',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontWeight: '500',
-                  fontSize: '14px',
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                Cancel
-              </button>
+            <div className="edit-actions" style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <button 
                 className="action-btn primary"
                 onClick={handleSave}
@@ -1504,8 +1470,7 @@ const ExpertAnalysisModal = ({
                   cursor: saveStatus === 'saving' ? 'not-allowed' : 'pointer',
                   fontWeight: '500',
                   fontSize: '14px',
-                  minWidth: '120px',
-                  transition: 'all 0.2s ease'
+                  minWidth: '120px'
                 }}
               >
                 {saveStatus === 'saving' ? '💾 Saving...' : '💾 Save Changes'}
@@ -1524,8 +1489,7 @@ const ExpertAnalysisModal = ({
                   borderRadius: '8px',
                   cursor: 'pointer',
                   fontWeight: '500',
-                  fontSize: '14px',
-                  transition: 'all 0.2s ease'
+                  fontSize: '14px'
                 }}
               >
                 Back to Scores
@@ -1543,8 +1507,7 @@ const ExpertAnalysisModal = ({
                   borderRadius: '8px',
                   cursor: 'pointer',
                   fontWeight: '500',
-                  fontSize: '14px',
-                  transition: 'all 0.2s ease'
+                  fontSize: '14px'
                 }}
               >
                 📄 Generate Report
@@ -1553,7 +1516,7 @@ const ExpertAnalysisModal = ({
           )}
         </div>
         
-        {/* CSS Styles with flicker prevention */}
+        {/* CSS Styles */}
         <style>{`
           /* Key animations */
           @keyframes fadeIn {
@@ -1586,8 +1549,6 @@ const ExpertAnalysisModal = ({
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
             animation: scaleIn 0.3s ease;
-            transform: translateZ(0);
-            will-change: transform, opacity;
           }
           
           .modal-overlay {
@@ -1604,47 +1565,20 @@ const ExpertAnalysisModal = ({
             animation: fadeIn 0.2s ease;
           }
           
-          .modal-content {
-            transform: translateZ(0);
-            backface-visibility: hidden;
-            perspective: 1000px;
+          /* Performance optimizations */
+          .transmission-table {
+            border-collapse: separate;
+            border-spacing: 0;
           }
           
-          /* Prevent layout shifts */
-          .analysis-card {
-            transform: translateZ(0);
-            will-change: transform;
-            contain: layout style;
+          .transmission-input {
+            transition: border-color 0.2s ease;
           }
           
-          .score-card {
-            transform: translateZ(0);
-            will-change: transform;
-          }
-          
-          /* Smooth transitions */
-          .score-select, .transmission-input, .score-display {
-            transition: border-color 0.2s ease, background-color 0.2s ease;
-            transform: translateZ(0);
-          }
-          
-          .score-select:focus, .transmission-input:focus {
+          .transmission-input:focus {
             outline: none;
             border-color: #63b3ed !important;
             box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.1);
-          }
-          
-          button {
-            transition: all 0.2s ease !important;
-            transform: translateZ(0);
-          }
-          
-          button:hover:not(:disabled) {
-            transform: translateY(-1px);
-          }
-          
-          button:active:not(:disabled) {
-            transform: translateY(0);
           }
           
           /* Scrollbar styling */
@@ -1705,21 +1639,6 @@ const ExpertAnalysisModal = ({
             button {
               width: 100% !important;
             }
-          }
-          
-          /* Performance optimizations */
-          * {
-            box-sizing: border-box;
-          }
-          
-          .transmission-table {
-            border-collapse: separate;
-            border-spacing: 0;
-          }
-          
-          /* Prevent text selection during animations */
-          .save-status-overlay * {
-            user-select: none;
           }
         `}</style>
       </div>
