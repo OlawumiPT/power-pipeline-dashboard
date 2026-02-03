@@ -101,15 +101,24 @@ const ExpertAnalysisModal = ({
     return initialAnalysis;
   });
   
+<<<<<<< HEAD
   // API Base URL
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
+=======
+  // API Base URL - Fixed to match your backend
+  const API_BASE_URL = 'https://pt-power-pipeline-api.azurewebsites.net';
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
   
   // Function to get token from various sources
   const getAuthToken = () => {
     return authToken || localStorage.getItem('token') || '';
   };
 
+<<<<<<< HEAD
   // Fetch expert analysis from API
+=======
+  // Fetch expert analysis from API - USING THE PROVIDED FUNCTION
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
   const fetchExpertAnalysisData = async () => {
     try {
       setIsLoading(true);
@@ -137,7 +146,37 @@ const ExpertAnalysisModal = ({
         }
       }
       
+<<<<<<< HEAD
       console.log('No fetch function provided, skipping API call');
+=======
+      console.log('No fetch function provided, trying direct fetch...');
+      
+      // Direct fetch as fallback
+      const token = getAuthToken();
+      if (token) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/expert-analysis?projectId=${projectId}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Direct fetch expert analysis:', data);
+            return data;
+          } else {
+            console.log('Direct fetch failed:', response.status);
+            return null;
+          }
+        } catch (error) {
+          console.error('Direct fetch error:', error);
+          return null;
+        }
+      }
+      
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
       return null;
       
     } catch (error) {
@@ -148,7 +187,11 @@ const ExpertAnalysisModal = ({
     }
   };
   
+<<<<<<< HEAD
   // Fetch transmission data from API
+=======
+  // Fetch transmission data from API - USING THE PROVIDED FUNCTION
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
   const fetchTransmissionData = async () => {
     try {
       const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
@@ -166,9 +209,30 @@ const ExpertAnalysisModal = ({
       if (fetchTransmissionInterconnection && typeof fetchTransmissionInterconnection === 'function') {
         try {
           const data = await fetchTransmissionInterconnection(projectName);
+<<<<<<< HEAD
           if (data && Array.isArray(data)) {
             console.log('Transmission data fetched via provided function:', data);
             return data;
+=======
+          
+          // Debug: Log the raw data
+          console.log('Raw transmission data from API:', data);
+          
+          if (data && Array.isArray(data)) {
+            // Transform data from database format to frontend format
+            const transformedData = data.map(item => ({
+              site: item.site || '',
+              poiVoltage: item.poi_voltage || item.poiVoltage || '',
+              excessInjectionCapacity: item.excess_injection_capacity || item.excessInjectionCapacity || 0,
+              excessWithdrawalCapacity: item.excess_withdrawal_capacity || item.excessWithdrawalCapacity || 0,
+              constraints: item.constraints || '-',
+              excessIXCapacity: item.excess_ix_capacity || true,
+              project_id: item.project_id || null
+            }));
+            
+            console.log('Transformed transmission data:', transformedData);
+            return transformedData;
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
           } else {
             console.log('No transmission data returned from provided function');
             return [];
@@ -179,7 +243,48 @@ const ExpertAnalysisModal = ({
         }
       }
       
+<<<<<<< HEAD
       console.log('No transmission fetch function provided, returning empty array');
+=======
+      console.log('No transmission fetch function provided, trying direct fetch...');
+      
+      // Try direct fetch as fallback
+      const token = getAuthToken();
+      if (token) {
+        try {
+          const response = await fetch(`${API_BASE_URL}/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Accept': 'application/json'
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Direct fetch transmission data:', data);
+            
+            // Transform database format to frontend format
+            const transformedData = data.map(item => ({
+              site: item.site || '',
+              poiVoltage: item.poi_voltage || '',
+              excessInjectionCapacity: item.excess_injection_capacity || 0,
+              excessWithdrawalCapacity: item.excess_withdrawal_capacity || 0,
+              constraints: item.constraints || '-',
+              excessIXCapacity: item.excess_ix_capacity || true
+            }));
+            
+            return transformedData;
+          } else {
+            console.log('Direct fetch failed with status:', response.status);
+            return [];
+          }
+        } catch (error) {
+          console.error('Direct fetch error:', error);
+          return [];
+        }
+      }
+      
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
       return [];
       
     } catch (error) {
@@ -187,14 +292,23 @@ const ExpertAnalysisModal = ({
       return [];
     }
   };
+<<<<<<< HEAD
 
+=======
+  
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
   // Initialize all data
   useEffect(() => {
     const initializeData = async () => {
       console.log('Initializing expert analysis modal data...');
+<<<<<<< HEAD
+=======
+      console.log('Selected project:', selectedExpertProject);
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
       
-      const dbAnalysis = await fetchExpertAnalysisData();
-      const dbTransmission = await fetchTransmissionData();
+      // Try to get data by project name first
+      let dbAnalysis = await fetchExpertAnalysisData();
+      let dbTransmission = await fetchTransmissionData();
       
       console.log('Database analysis:', dbAnalysis);
       console.log('Database transmission:', dbTransmission);
@@ -222,6 +336,10 @@ const ExpertAnalysisModal = ({
       setAnalysisData(initialAnalysis);
       setEditedTransmissionData(dbTransmission || []);
       console.log('Initial analysis set:', initialAnalysis);
+<<<<<<< HEAD
+=======
+      console.log('Transmission data set:', dbTransmission);
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
     };
     
     if (selectedExpertProject) {
@@ -348,7 +466,22 @@ const ExpertAnalysisModal = ({
       if (editedTransmissionData.length > 0) {
         if (saveTransmissionInterconnection && typeof saveTransmissionInterconnection === 'function') {
           try {
+<<<<<<< HEAD
             await saveTransmissionInterconnection(selectedExpertProject.id, editedTransmissionData);
+=======
+            // Transform data back to database format for saving
+            const transmissionDataToSave = editedTransmissionData.map(item => ({
+              site: item.site,
+              poi_voltage: item.poiVoltage,
+              excess_injection_capacity: item.excessInjectionCapacity,
+              excess_withdrawal_capacity: item.excessWithdrawalCapacity,
+              constraints: item.constraints,
+              excess_ix_capacity: item.excessIXCapacity,
+              project_id: selectedExpertProject.id
+            }));
+            
+            await saveTransmissionInterconnection(selectedExpertProject.id, transmissionDataToSave);
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
             console.log('Transmission data saved via provided function');
           } catch (error) {
             console.error('Failed to save transmission data:', error);
@@ -492,10 +625,74 @@ const ExpertAnalysisModal = ({
     });
   };
 
+<<<<<<< HEAD
+=======
+  // Debug function to force data reload
+  const debugForceReloadData = async () => {
+    console.log('=== DEBUG: Forcing data reload ===');
+    console.log('Current project:', selectedExpertProject);
+    console.log('Project ID:', selectedExpertProject.id);
+    console.log('Project asset:', selectedExpertProject.asset);
+    console.log('Project expert analysis name:', selectedExpertProject.expertAnalysis?.projectName);
+    
+    // Try to fetch transmission data directly
+    const projectName = selectedExpertProject.asset || selectedExpertProject.expertAnalysis?.projectName;
+    console.log('Querying for project name:', projectName);
+    
+    const token = getAuthToken();
+    if (token) {
+      try {
+        console.log('Trying direct API call...');
+        const response = await fetch(`${API_BASE_URL}/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json'
+          }
+        });
+        
+        console.log('Response status:', response.status);
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Direct API response data:', data);
+          
+          if (data && data.length > 0) {
+            const transformedData = data.map(item => ({
+              site: item.site || '',
+              poiVoltage: item.poi_voltage || '',
+              excessInjectionCapacity: item.excess_injection_capacity || 0,
+              excessWithdrawalCapacity: item.excess_withdrawal_capacity || 0,
+              constraints: item.constraints || '-',
+              excessIXCapacity: item.excess_ix_capacity || true
+            }));
+            
+            console.log('Transformed data:', transformedData);
+            setEditedTransmissionData(transformedData);
+            alert(`Found ${transformedData.length} transmission records for ${projectName}`);
+          } else {
+            console.log('No data returned from API');
+            alert(`No transmission data found for ${projectName} in the database`);
+          }
+        } else {
+          console.log('API call failed');
+          alert('API call failed. Check console for details.');
+        }
+      } catch (error) {
+        console.error('Debug fetch error:', error);
+        alert('Debug fetch failed. Check console for error.');
+      }
+    } else {
+      console.log('No auth token available');
+      alert('No authentication token found. Please login again.');
+    }
+  };
+
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
   // Use editedAnalysis if available, otherwise use analysisData
   const currentAnalysis = editedAnalysis || analysisData;
   
   console.log('Current analysis data for rendering:', currentAnalysis);
+  console.log('Current transmission data:', editedTransmissionData);
   
   // Safely calculate scores for display
   const thermalScore = parseFloat(currentAnalysis?.thermalScore) || 0;
@@ -551,6 +748,33 @@ const ExpertAnalysisModal = ({
           </div>
         )}
         
+<<<<<<< HEAD
+=======
+        {/* Debug Button - Only show in development */}
+        {import.meta.env.DEV && (
+          <div style={{ padding: '10px 20px', borderBottom: '1px solid #4a5568' }}>
+            <button 
+              onClick={debugForceReloadData}
+              style={{
+                background: 'rgba(147, 51, 234, 0.1)',
+                border: '1px solid rgba(147, 51, 234, 0.3)',
+                color: '#d8b4fe',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                marginRight: '10px'
+              }}
+            >
+              🔍 Debug: Reload Transmission Data
+            </button>
+            <span style={{ fontSize: '12px', color: '#a0aec0' }}>
+              Project: {currentAnalysis?.projectName} | Transmission Records: {editedTransmissionData.length}
+            </span>
+          </div>
+        )}
+        
+>>>>>>> 8bc0013 (Update ExpertAnalysisModal with transmission data fixes)
         {/* Overall Score Summary */}
         <div className="overall-score-section">
           <h3>Overall Score Summary</h3>
@@ -935,6 +1159,13 @@ const ExpertAnalysisModal = ({
                         <div style={{ textAlign: 'center', padding: '30px 20px', color: '#a0aec0' }}>
                           <div style={{ fontSize: '32px', marginBottom: '8px', opacity: '0.5' }}>📊</div>
                           <div>No transmission interconnection data available.</div>
+                          <div style={{ fontSize: '12px', marginTop: '8px', color: '#718096' }}>
+                            {import.meta.env.DEV && (
+                              <>
+                                Check console for debugging info or click the debug button above.
+                              </>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
