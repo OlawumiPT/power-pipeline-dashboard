@@ -641,103 +641,101 @@ const handleLocalTransmissionChange = useCallback((index, field, value, event) =
               </tr>
             </thead>
             <tbody>
-              {data.map((item, index) => (
-                <tr key={`transmission-${item.id || index}`} style={{ borderBottom: '1px solid #4a5568' }}>
-                  <td style={{ padding: '12px' }}>
-                    <input
-                      ref={el => transmissionInputRefs.current[`${index}-poiVoltage`] = el}
-                      type="text"
-                      value={item.poiVoltage || ''}
-                      onChange={(e) => handleChange(index, 'poiVoltage', e.target.value, e)}
-                      placeholder="e.g., 69 kV"
-                      style={{ 
-                        width: '100%', 
-                        padding: '10px 12px', 
-                        fontSize: '14px',
-                        backgroundColor: '#2d3748',
-                        color: 'white',
-                        border: '1px solid #4a5568',
-                        borderRadius: '6px'
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <input
-                      ref={el => transmissionInputRefs.current[`${index}-injection`] = el}
-                      type="number"
-                      value={item.excessInjectionCapacity || 0}
-                      onChange={(e) => handleChange(index, 'excessInjectionCapacity', e.target.value, e)}
-                      placeholder="0.0"
-                      step="0.1"
-                      min="0"
-                      style={{ 
-                        width: '100%', 
-                        padding: '10px 12px', 
-                        fontSize: '14px',
-                        backgroundColor: '#2d3748',
-                        color: 'white',
-                        border: '1px solid #4a5568',
-                        borderRadius: '6px'
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <input
-                      ref={el => transmissionInputRefs.current[`${index}-withdrawal`] = el}
-                      type="number"
-                      value={item.excessWithdrawalCapacity || 0}
-                      onChange={(e) => handleChange(index, 'excessWithdrawalCapacity', e.target.value, e)}
-                      placeholder="0.0"
-                      step="0.1"
-                      min="0"
-                      style={{ 
-                        width: '100%', 
-                        padding: '10px 12px', 
-                        fontSize: '14px',
-                        backgroundColor: '#2d3748',
-                        color: 'white',
-                        border: '1px solid #4a5568',
-                        borderRadius: '6px'
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <input
-                      ref={el => transmissionInputRefs.current[`${index}-constraints`] = el}
-                      type="text"
-                      value={item.constraints || '-'}
-                      onChange={(e) => handleChange(index, 'constraints', e.target.value, e)}
-                      placeholder="e.g., None, 1, 2"
-                      style={{ 
-                        width: '100%', 
-                        padding: '10px 12px', 
-                        fontSize: '14px',
-                        backgroundColor: '#2d3748',
-                        color: 'white',
-                        border: '1px solid #4a5568',
-                        borderRadius: '6px'
-                      }}
-                    />
-                  </td>
-                  <td style={{ padding: '12px' }}>
-                    <button 
-                      onClick={() => onRemove(index)}
-                      title="Remove this entry"
-                      style={{ 
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        color: '#fca5a5',
-                        padding: '8px 12px',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '12px'
-                      }}
-                    >
-                      🗑️ Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
+             // In TransmissionEditTable component, replace the input rows with:
+{data.map((item, index) => (
+  <tr key={`transmission-${item.id || index}`} style={{ borderBottom: '1px solid #4a5568' }}>
+    <td style={{ padding: '12px' }}>
+      <input
+        type="text"
+        defaultValue={item.poiVoltage || ''}
+        onBlur={(e) => handleChange(index, 'poiVoltage', e.target.value)}
+        placeholder="e.g., 69 kV"
+        style={{ 
+          width: '100%', 
+          padding: '10px 12px', 
+          fontSize: '14px',
+          backgroundColor: '#2d3748',
+          color: 'white',
+          border: '1px solid #4a5568',
+          borderRadius: '6px'
+        }}
+      />
+    </td>
+    <td style={{ padding: '12px' }}>
+      <input
+        type="number"
+        defaultValue={item.excessInjectionCapacity || 0}
+        onBlur={(e) => handleChange(index, 'excessInjectionCapacity', e.target.value)}
+        placeholder="0.0"
+        step="0.1"
+        min="0"
+        style={{ 
+          width: '100%', 
+          padding: '10px 12px', 
+          fontSize: '14px',
+          backgroundColor: '#2d3748',
+          color: 'white',
+          border: '1px solid #4a5568',
+          borderRadius: '6px'
+        }}
+      />
+    </td>
+    <td style={{ padding: '12px' }}>
+      <input
+        type="number"
+        defaultValue={item.excessWithdrawalCapacity || 0}
+        onBlur={(e) => handleChange(index, 'excessWithdrawalCapacity', e.target.value)}
+        placeholder="0.0"
+        step="0.1"
+        min="0"
+        style={{ 
+          width: '100%', 
+          padding: '10px 12px', 
+          fontSize: '14px',
+          backgroundColor: '#2d3748',
+          color: 'white',
+          border: '1px solid #4a5568',
+          borderRadius: '6px'
+        }}
+      />
+    </td>
+    <td style={{ padding: '12px' }}>
+      <input
+        type="text"
+        defaultValue={item.constraints || '-'}
+        onBlur={(e) => handleChange(index, 'constraints', e.target.value)}
+        placeholder="e.g., None, 1, 2"
+        style={{ 
+          width: '100%', 
+          padding: '10px 12px', 
+          fontSize: '14px',
+          backgroundColor: '#2d3748',
+          color: 'white',
+          border: '1px solid #4a5568',
+          borderRadius: '6px'
+        }}
+      />
+    </td>
+    <td style={{ padding: '12px' }}>
+      <button 
+        onClick={() => onRemove(index)}
+        title="Remove this entry"
+        style={{ 
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          color: '#fca5a5',
+          padding: '8px 12px',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontSize: '12px'
+        }}
+      >
+        🗑️ Remove
+      </button>
+    </td>
+  </tr>
+))}
+              
               {data.length === 0 && (
                 <tr>
                   <td colSpan="5" style={{ textAlign: 'center', color: '#a0aec0', fontStyle: 'italic', padding: '20px' }}>
