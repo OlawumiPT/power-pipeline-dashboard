@@ -283,6 +283,7 @@ if (DEBUG_MODE) {
 app.use(helmet());
 
 const allowedOrigins = [
+  'https://platform.power-transitions.com',
   'https://pt-power-pipeline-dashboard.azurestaticapps.net',
   'https://lively-water-022a59110.6.azurestaticapps.net',
   'http://localhost:5173',
