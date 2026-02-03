@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import './Dashboard.css';
 import Header from './components/Header';
 import KPISection from './components/Sections/KPISection';
@@ -348,6 +348,71 @@ function DashboardContent() {
       console.error('❌ DashboardContent: Error refreshing expert data:', error);
     }
   };
+
+  // NEW: Function to handle expert analysis save success
+  const handleExpertSaveSuccess = useCallback((updatedProject) => {
+    console.log('✅ Dashboard: Expert analysis saved successfully:', updatedProject);
+    
+    if (!updatedProject || !updatedProject.id) {
+      console.error('❌ No project ID in updated project:', updatedProject);
+      return;
+    }
+    
+    // Update the allData state with the saved expert analysis
+    setAllData(prevData => {
+      const updatedAllData = prevData.map(project => {
+        if (project.id === updatedProject.id) {
+          // Merge the updated expert analysis with existing project data
+          const updatedProj = {
+            ...project,
+            expertAnalysis: updatedProject.expertAnalysis,
+            // Also update the scores in the main data
+            "Overall Project Score": updatedProject.expertAnalysis?.overallScore || project["Overall Project Score"],
+            "Thermal Operating Score": updatedProject.expertAnalysis?.thermalScore || project["Thermal Operating Score"],
+            "Redevelopment Score": updatedProject.expertAnalysis?.redevelopmentScore || project["Redevelopment Score"],
+            // Update other fields that might have changed
+            "Thermal Optimization": updatedProject.expertAnalysis?.thermalBreakdown?.thermal_optimization?.score || project["Thermal Optimization"],
+            "Environmental Score": updatedProject.expertAnalysis?.thermalBreakdown?.environmental?.score || project["Environmental Score"],
+            "Market Score": updatedProject.expertAnalysis?.redevelopmentBreakdown?.redev_market?.score || project["Market Score"],
+            "I&C Score": updatedProject.expertAnalysis?.redevelopmentBreakdown?.interconnection?.score || project["I&C Score"]
+          };
+          
+          console.log('🔄 Updated project in allData:', updatedProj.id, updatedProj.expertAnalysis);
+          return updatedProj;
+        }
+        return project;
+      });
+      
+      console.log('🔄 Updated allData with expert analysis changes');
+      return updatedAllData;
+    });
+    
+    // Also update the selectedExpertProject state so it has the latest data
+    setSelectedExpertProject(prev => {
+      if (prev && prev.id === updatedProject.id) {
+        const updated = {
+          ...prev,
+          expertAnalysis: updatedProject.expertAnalysis
+        };
+        console.log('🔄 Updated selectedExpertProject with new analysis');
+        return updated;
+      }
+      return prev;
+    });
+    
+    // Show success notification
+    setNotification({
+      show: true,
+      message: 'Expert analysis saved successfully!',
+      type: 'success'
+    });
+    
+    // Trigger a refresh of the expert scores panel
+    window.dispatchEvent(new CustomEvent('expertAnalysisUpdated', {
+      detail: { projectId: updatedProject.id }
+    }));
+    
+  }, []);
 
   // Extract dropdown options for use in components
   const {
@@ -2339,6 +2404,8 @@ const handleUpdateProject = async (updatedData) => {
             saveExpertAnalysis={saveExpertAnalysis}
             fetchTransmissionInterconnection={fetchTransmissionInterconnection}
             saveTransmissionInterconnection={saveTransmissionInterconnection}
+            // ADD THIS CRITICAL CALLBACK:
+            onSaveSuccess={handleExpertSaveSuccess}
           />
         )}
       </div>
