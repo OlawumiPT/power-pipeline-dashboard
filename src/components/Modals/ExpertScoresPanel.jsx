@@ -65,16 +65,17 @@ const ExpertScoresPanel = ({
 
   const [localExpertProjects, setLocalExpertProjects] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState(null);
   const lastRefreshTime = useRef(0);
   const lastClickTime = useRef(0);
-  const hasReceivedUpdate = useRef(false); // Track if we received an update
+  const recentlyUpdatedProjects = useRef(new Set());
 
   // Load data when panel opens
   useEffect(() => {
     if (showExpertScores) {
       console.log('🔄 ExpertScoresPanel: Loading data...');
       setIsLoading(true);
-      hasReceivedUpdate.current = false; // Reset update flag
+      recentlyUpdatedProjects.current.clear();
       
       const loadData = () => {
         try {
@@ -92,63 +93,33 @@ const ExpertScoresPanel = ({
     }
   }, [showExpertScores, getAnalyses]);
 
-  // Listen for refresh events - FIXED: Handle updates properly
+  // Listen for refresh events
   useEffect(() => {
     const handleRefresh = (event) => {
       console.log('🔄 ExpertScoresPanel: Received refresh event', event.detail);
       if (showExpertScores) {
         setIsLoading(true);
         
-        // If we have specific project data in the event, update just that project
-        if (event.detail && event.detail.projectId) {
-          console.log('📝 ExpertScoresPanel: Updating specific project:', event.detail.projectId);
+        const projectId = event.detail?.projectId;
+        
+        if (projectId) {
+          console.log('📝 ExpertScoresPanel: Updating specific project:', projectId);
+          recentlyUpdatedProjects.current.add(projectId);
           
-          // Get fresh data
-          const freshProjects = getAnalyses();
-          
-          // Find the updated project
-          const updatedProject = freshProjects.find(p => p.id === event.detail.projectId);
-          
-          if (updatedProject) {
-            console.log('✅ Found updated project in fresh data');
-            // Update the local state with the updated project
-            setLocalExpertProjects(prev => {
-              const newProjects = prev.map(project => {
-                if (project.id === event.detail.projectId) {
-                  console.log('🔄 Updating project in local state:', project.id);
-                  return {
-                    ...project,
-                    expertAnalysis: updatedProject.expertAnalysis,
-                    // Update other fields that might have changed
-                    overall: updatedProject.overall,
-                    thermal: updatedProject.thermal,
-                    redev: updatedProject.redev
-                  };
-                }
-                return project;
-              });
-              
-              // If project wasn't in the list (filtered out), add it
-              if (!prev.some(p => p.id === event.detail.projectId)) {
-                console.log('➕ Adding updated project to list (was filtered out)');
-                return [...newProjects, updatedProject];
-              }
-              
-              return newProjects;
-            });
-          } else {
-            console.log('⚠️ Updated project not found in fresh data, using all fresh data');
-            setLocalExpertProjects(freshProjects);
-          }
-        } else {
-          // No specific project, refresh all data
-          console.log('🔄 Refreshing all expert data');
-          const projects = getAnalyses();
-          setLocalExpertProjects(projects);
+          // Clear the "recently updated" status after 5 seconds
+          setTimeout(() => {
+            recentlyUpdatedProjects.current.delete(projectId);
+          }, 5000);
         }
         
-        setIsLoading(false);
-        hasReceivedUpdate.current = true;
+        // Always refresh all data when we get an update
+        setTimeout(() => {
+          const freshProjects = getAnalyses();
+          console.log('🔄 ExpertScoresPanel: Refreshed with', freshProjects.length, 'projects');
+          setLocalExpertProjects(freshProjects);
+          setLastUpdateTime(new Date());
+          setIsLoading(false);
+        }, 300);
       }
     };
     
@@ -159,29 +130,60 @@ const ExpertScoresPanel = ({
     };
   }, [showExpertScores, getAnalyses]);
 
+  // Also listen for direct refresh requests
+  useEffect(() => {
+    const handleForceRefresh = () => {
+      if (showExpertScores) {
+        console.log('🔄 ExpertScoresPanel: Force refresh requested');
+        setIsLoading(true);
+        setTimeout(() => {
+          const projects = getAnalyses();
+          setLocalExpertProjects(projects);
+          setLastUpdateTime(new Date());
+          setIsLoading(false);
+        }, 300);
+      }
+    };
+    
+    window.addEventListener('forceRefreshExpertScores', handleForceRefresh);
+    
+    return () => {
+      window.removeEventListener('forceRefreshExpertScores', handleForceRefresh);
+    };
+  }, [showExpertScores, getAnalyses]);
+
   const handleProjectSelect = (project) => {
     // Debounce clicks
     if (Date.now() - lastClickTime.current < 300) return;
     lastClickTime.current = Date.now();
     
-    console.log('👉 ExpertScoresPanel: Project selected:', project.id, project.expertAnalysis);
+    console.log('👉 ExpertScoresPanel: Project selected:', project.id);
     
-    // Ensure the project has all necessary data
+    // Enhance the project with callback for when it saves
     const enhancedProject = {
       ...project,
       onSaveSuccess: () => {
         console.log('✅ ExpertScoresPanel: Received save success from modal');
-        // Dispatch event with project ID for targeted update
+        // Mark this project as recently updated
+        recentlyUpdatedProjects.current.add(project.id);
+        
+        // Dispatch update event
         window.dispatchEvent(new CustomEvent('expertAnalysisUpdated', {
-          detail: { projectId: project.id }
+          detail: { 
+            projectId: project.id,
+            action: 'saved'
+          }
         }));
+        
+        // Also dispatch a force refresh event
+        window.dispatchEvent(new Event('forceRefreshExpertScores'));
       }
     };
     
     setSelectedExpertProject(enhancedProject);
   };
 
-  // Filter projects based on rating - FIXED: Handle null/undefined ratings
+  // Filter projects based on rating
   const filteredProjects = localExpertProjects.filter(project => {
     const analysis = project.expertAnalysis;
     if (!analysis) return false;
@@ -198,16 +200,31 @@ const ExpertScoresPanel = ({
     return true;
   });
   
-  // Sort projects - FIXED: Handle null scores
+  // Sort projects
   const sortedProjects = [...filteredProjects].sort((a, b) => {
     const scoreA = parseFloat(a.expertAnalysis?.overallScore) || 0;
     const scoreB = parseFloat(b.expertAnalysis?.overallScore) || 0;
     return scoreB - scoreA;
   });
 
-  console.log('📊 ExpertScoresPanel: Showing', sortedProjects.length, 'filtered projects out of', localExpertProjects.length, 'total');
-  console.log('📊 Filter:', expertAnalysisFilter);
-  console.log('📊 First project analysis:', sortedProjects[0]?.expertAnalysis);
+  // Manual refresh function
+  const handleManualRefresh = () => {
+    if (Date.now() - lastRefreshTime.current < 1000) return;
+    lastRefreshTime.current = Date.now();
+    
+    console.log('🔄 ExpertScoresPanel: Manual refresh triggered');
+    setIsLoading(true);
+    
+    // Dispatch event to trigger refresh
+    window.dispatchEvent(new CustomEvent('expertAnalysisUpdated', {
+      detail: { action: 'manual_refresh' }
+    }));
+    
+    // Also call parent refresh if available
+    if (refreshExpertData) {
+      refreshExpertData();
+    }
+  };
 
   return (
     <div className="modal-overlay dark-overlay" onClick={() => setShowExpertScores(false)}>
@@ -219,29 +236,50 @@ const ExpertScoresPanel = ({
             <p className="expert-scores-subtitle dark-subtitle">
               AI-powered assessment of all pipeline projects
             </p>
+            {lastUpdateTime && (
+              <p className="last-updated dark-subtitle" style={{ 
+                fontSize: '11px', 
+                color: '#a0aec0',
+                marginTop: '4px'
+              }}>
+                Last updated: {lastUpdateTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+              </p>
+            )}
           </div>
           <div className="header-right">
             <button 
-              onClick={() => {
-                if (Date.now() - lastRefreshTime.current < 1000) return;
-                lastRefreshTime.current = Date.now();
-                console.log('🔄 Manual refresh triggered');
-                window.dispatchEvent(new Event('expertAnalysisUpdated'));
-                if (refreshExpertData) refreshExpertData();
-              }}
+              onClick={handleManualRefresh}
+              disabled={isLoading}
               title="Refresh data"
               style={{
-                background: 'rgba(59, 130, 246, 0.1)',
-                border: '1px solid rgba(59, 130, 246, 0.3)',
-                color: '#93c5fd',
+                background: isLoading ? 'rgba(107, 114, 128, 0.2)' : 'rgba(59, 130, 246, 0.1)',
+                border: isLoading ? '1px solid rgba(107, 114, 128, 0.3)' : '1px solid rgba(59, 130, 246, 0.3)',
+                color: isLoading ? '#9ca3af' : '#93c5fd',
                 padding: '6px 12px',
                 borderRadius: '4px',
-                cursor: 'pointer',
+                cursor: isLoading ? 'not-allowed' : 'pointer',
                 fontSize: '12px',
-                marginRight: '10px'
+                marginRight: '10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
               }}
             >
-              🔄 Refresh
+              {isLoading ? (
+                <>
+                  <div style={{
+                    width: '12px',
+                    height: '12px',
+                    border: '2px solid rgba(255,255,255,0.2)',
+                    borderTopColor: '#93c5fd',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                  Refreshing...
+                </>
+              ) : (
+                '🔄 Refresh'
+              )}
             </button>
             <button className="modal-close dark-close" onClick={() => setShowExpertScores(false)}>×</button>
           </div>
@@ -255,9 +293,14 @@ const ExpertScoresPanel = ({
               <h3 className="expert-scores-title dark-section-title">Project Assessments</h3>
               <p className="expert-scores-subtitle dark-count">
                 {sortedProjects.length} of {localExpertProjects.length} projects
-                {hasReceivedUpdate.current && (
-                  <span style={{ color: '#10b981', marginLeft: '8px', fontSize: '12px' }}>
-                    ✓ Updated
+                {recentlyUpdatedProjects.current.size > 0 && (
+                  <span style={{ 
+                    color: '#10b981', 
+                    marginLeft: '8px', 
+                    fontSize: '12px',
+                    fontWeight: '500'
+                  }}>
+                    ✓ {recentlyUpdatedProjects.current.size} updated
                   </span>
                 )}
               </p>
@@ -344,6 +387,7 @@ const ExpertScoresPanel = ({
                 const owner = project["Plant Owner"] || "";
                 const ratingText = getRatingText(analysis.ratingClass);
                 const ratingColor = getRatingColor(analysis.ratingClass);
+                const isRecentlyUpdated = recentlyUpdatedProjects.current.has(project.id);
                 
                 return (
                   <div 
@@ -352,11 +396,12 @@ const ExpertScoresPanel = ({
                     onClick={() => handleProjectSelect(project)}
                     style={{
                       background: '#2d3748',
-                      border: '1px solid #4a5568',
+                      border: isRecentlyUpdated ? '2px solid #10b981' : '1px solid #4a5568',
                       borderRadius: '8px',
                       padding: '20px',
                       cursor: 'pointer',
-                      transition: 'all 0.2s ease'
+                      transition: 'all 0.2s ease',
+                      position: 'relative'
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.transform = 'translateY(-2px)';
@@ -367,6 +412,28 @@ const ExpertScoresPanel = ({
                       e.currentTarget.style.boxShadow = 'none';
                     }}
                   >
+                    {/* Recently updated indicator */}
+                    {isRecentlyUpdated && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '-8px',
+                        right: '-8px',
+                        background: '#10b981',
+                        color: 'white',
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        fontWeight: 'bold',
+                        zIndex: 1
+                      }}>
+                        ✓
+                      </div>
+                    )}
+                    
                     {/* Card Header */}
                     <div className="project-card-header dark-card-header" style={{ marginBottom: '16px' }}>
                       <div className="project-title-section">
@@ -565,8 +632,8 @@ const ExpertScoresPanel = ({
                         }}
                         style={{
                           width: '100%',
-                          background: 'rgba(59, 130, 246, 0.9)',
-                          border: '1px solid rgba(59, 130, 246, 0.9)',
+                          background: isRecentlyUpdated ? 'rgba(34, 197, 94, 0.9)' : 'rgba(59, 130, 246, 0.9)',
+                          border: isRecentlyUpdated ? '1px solid rgba(34, 197, 94, 0.9)' : '1px solid rgba(59, 130, 246, 0.9)',
                           color: 'white',
                           padding: '12px',
                           borderRadius: '6px',
@@ -576,13 +643,17 @@ const ExpertScoresPanel = ({
                           transition: 'all 0.2s ease'
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'rgba(59, 130, 246, 1)';
+                          e.currentTarget.style.background = isRecentlyUpdated 
+                            ? 'rgba(34, 197, 94, 1)' 
+                            : 'rgba(59, 130, 246, 1)';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'rgba(59, 130, 246, 0.9)';
+                          e.currentTarget.style.background = isRecentlyUpdated 
+                            ? 'rgba(34, 197, 94, 0.9)' 
+                            : 'rgba(59, 130, 246, 0.9)';
                         }}
                       >
-                        View Scores & Analysis
+                        {isRecentlyUpdated ? '✓ View Updated Analysis' : 'View Scores & Analysis'}
                       </button>
                     </div>
                   </div>
@@ -615,6 +686,13 @@ const ExpertScoresPanel = ({
             Back to Dashboard
           </button>
         </div>
+        
+        {/* Add CSS for spinner animation */}
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     </div>
   );
