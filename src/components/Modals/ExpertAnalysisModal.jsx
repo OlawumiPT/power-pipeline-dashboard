@@ -641,7 +641,7 @@ const handleLocalTransmissionChange = useCallback((index, field, value, event) =
               </tr>
             </thead>
             <tbody>
-             // In TransmissionEditTable component, replace the input rows with:
+            
 {data.map((item, index) => (
   <tr key={`transmission-${item.id || index}`} style={{ borderBottom: '1px solid #4a5568' }}>
     <td style={{ padding: '12px' }}>
