@@ -334,10 +334,77 @@ const saveTransmissionInterconnection = async (req, res) => {
   }
 };
 
+// @desc    Delete transmission interconnection record
+// @route   DELETE /api/transmission-interconnection/:id
+// @access  Private
+const deleteTransmissionInterconnection = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
+    const pool = require('../utils/db').getPool();
+    
+    console.log(`🗑️ Deleting transmission interconnection record ID: ${id}`);
+    
+    // Check if record exists
+    const checkQuery = `
+      SELECT id, project_id, poi_voltage 
+      FROM ${schema}.transmission_interconnection 
+      WHERE id = $1
+    `;
+    const checkResult = await pool.query(checkQuery, [id]);
+    
+    if (checkResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `Transmission interconnection record with ID ${id} not found`
+      });
+    }
+    
+    const record = checkResult.rows[0];
+    
+    // Delete the record
+    const deleteQuery = `
+      DELETE FROM ${schema}.transmission_interconnection 
+      WHERE id = $1 
+      RETURNING id, project_id, poi_voltage
+    `;
+    const deleteResult = await pool.query(deleteQuery, [id]);
+    
+    const deletedRecord = deleteResult.rows[0];
+    
+    console.log(`✅ Successfully deleted transmission record:`, {
+      id: deletedRecord.id,
+      projectId: deletedRecord.project_id,
+      poiVoltage: deletedRecord.poi_voltage
+    });
+    
+    res.status(200).json({
+      success: true,
+      message: 'Transmission interconnection record deleted successfully',
+      data: {
+        deletedId: deletedRecord.id,
+        projectId: deletedRecord.project_id,
+        poiVoltage: deletedRecord.poi_voltage,
+        deletedAt: new Date().toISOString()
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting transmission interconnection:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to delete transmission interconnection record',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+};
+
 module.exports = {
   getExpertAnalysis,
   saveExpertAnalysis,
   getTransmissionInterconnection,
   saveTransmissionInterconnection,
-  getAllExpertAnalyses
+  getAllExpertAnalyses,
+  deleteTransmissionInterconnection
 };
