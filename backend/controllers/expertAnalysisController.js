@@ -1,8 +1,5 @@
 const expertAnalysis = require('../models/expertAnalysis');
 
-// @desc    Get expert analysis by project ID
-// @route   GET /api/expert-analysis
-// @access  Private
 const getExpertAnalysis = async (req, res) => {
   try {
     const { projectId } = req.query;
@@ -36,33 +33,25 @@ const getExpertAnalysis = async (req, res) => {
       redevelopmentScore: analysisData.redevelopment_score
     });
     
-    // Format response - ONLY use values from database
+    // Format response with DEFAULT values if null
     const formattedResponse = {
       id: analysisData.id,
       projectId: analysisData.project_codename,
       projectName: analysisData.project_name,
-      overallScore: analysisData.overall_project_score !== null ? parseFloat(analysisData.overall_project_score) : 0,
+      overallScore: parseFloat(analysisData.overall_project_score) || 0,
       overallRating: expertAnalysis.calculateRating(analysisData.overall_project_score) || 'N/A',
       ratingClass: expertAnalysis.calculateRating(analysisData.overall_project_score)?.toLowerCase() || 'N/A',
-      thermalScore: analysisData.thermal_operating_score !== null ? parseFloat(analysisData.thermal_operating_score) : 0,
-      redevelopmentScore: analysisData.redevelopment_score !== null ? parseFloat(analysisData.redevelopment_score) : 0,
-      infrastructureScore: analysisData.infra !== null ? parseFloat(analysisData.infra) : 0,
-      // CRITICAL: Include breakdown data
+      thermalScore: parseFloat(analysisData.thermal_operating_score) || 0,
+      redevelopmentScore: parseFloat(analysisData.redevelopment_score) || 0,
+      infrastructureScore: parseFloat(analysisData.infra) || 0,
+      // CRITICAL: Use breakdown data from model
       thermalBreakdown: analysisData.thermal_breakdown || {
-        thermal_optimization: { 
-          score: analysisData.thermal_optimization !== null ? parseFloat(analysisData.thermal_optimization) : 0 
-        },
-        environmental: { 
-          score: analysisData.environmental_score !== null ? parseFloat(analysisData.environmental_score) : 0 
-        }
+        thermal_optimization: { score: 0 },
+        environmental: { score: 0 }
       },
       redevelopmentBreakdown: analysisData.redevelopment_breakdown || {
-        redev_market: { 
-          score: analysisData.markets_score !== null ? parseFloat(analysisData.markets_score) : 0 
-        },
-        interconnection: { 
-          score: analysisData.ix !== null ? parseFloat(analysisData.ix) : 0 
-        },
+        redev_market: { score: 0 },
+        interconnection: { score: 0 },
         land_availability: { score: 0 },
         utilities: { score: 0 }
       },
@@ -120,51 +109,39 @@ const saveExpertAnalysis = async (req, res) => {
     const analysisData = {
       projectId: projectId,
       projectName: projectName || null,
-      overallScore: overallScore !== undefined ? parseFloat(overallScore) : null,
-      thermalScore: thermalScore !== undefined ? parseFloat(thermalScore) : null,
+      overallScore: overallScore !== undefined ? parseFloat(overallScore) : 0,
+      thermalScore: thermalScore !== undefined ? parseFloat(thermalScore) : 0,
       thermalBreakdown: thermalBreakdown || null,
-      redevelopmentScore: redevelopmentScore !== undefined ? parseFloat(redevelopmentScore) : null,
+      redevelopmentScore: redevelopmentScore !== undefined ? parseFloat(redevelopmentScore) : 0,
       redevelopmentBreakdown: redevelopmentBreakdown || null,
-      infrastructureScore: infrastructureScore !== undefined ? parseFloat(infrastructureScore) : null
+      infrastructureScore: infrastructureScore !== undefined ? parseFloat(infrastructureScore) : 0
     };
     
     console.log('📤 Saving analysis data:', analysisData);
     
     const savedAnalysis = await expertAnalysis.saveExpertAnalysis(analysisData);
     
-    // CRITICAL FIX: Format response with COMPLETE breakdown data
+    // Format response with COMPLETE breakdown data
     const formattedResponse = {
       id: savedAnalysis.id,
       projectId: savedAnalysis.project_codename,
       projectName: savedAnalysis.project_name,
-      overallScore: savedAnalysis.overall_project_score !== null ? parseFloat(savedAnalysis.overall_project_score) : 0,
+      overallScore: parseFloat(savedAnalysis.overall_project_score) || 0,
       overallRating: expertAnalysis.calculateRating(savedAnalysis.overall_project_score) || 'N/A',
       ratingClass: expertAnalysis.calculateRating(savedAnalysis.overall_project_score)?.toLowerCase() || 'N/A',
-      thermalScore: savedAnalysis.thermal_operating_score !== null ? parseFloat(savedAnalysis.thermal_operating_score) : 0,
-      redevelopmentScore: savedAnalysis.redevelopment_score !== null ? parseFloat(savedAnalysis.redevelopment_score) : 0,
-      infrastructureScore: savedAnalysis.infra !== null ? parseFloat(savedAnalysis.infra) : 0,
+      thermalScore: parseFloat(savedAnalysis.thermal_operating_score) || 0,
+      redevelopmentScore: parseFloat(savedAnalysis.redevelopment_score) || 0,
+      infrastructureScore: parseFloat(savedAnalysis.infra) || 0,
       // CRITICAL: Include breakdown data from the saved analysis
       thermalBreakdown: savedAnalysis.thermal_breakdown || {
-        thermal_optimization: { 
-          score: savedAnalysis.thermal_optimization !== null ? parseFloat(savedAnalysis.thermal_optimization) : 0 
-        },
-        environmental: { 
-          score: savedAnalysis.environmental_score !== null ? parseFloat(savedAnalysis.environmental_score) : 0 
-        }
+        thermal_optimization: { score: 0 },
+        environmental: { score: 0 }
       },
       redevelopmentBreakdown: savedAnalysis.redevelopment_breakdown || {
-        redev_market: { 
-          score: savedAnalysis.markets_score !== null ? parseFloat(savedAnalysis.markets_score) : 0 
-        },
-        interconnection: { 
-          score: savedAnalysis.ix !== null ? parseFloat(savedAnalysis.ix) : 0 
-        },
-        land_availability: { 
-          score: redevelopmentBreakdown?.land_availability?.score || 0 
-        },
-        utilities: { 
-          score: redevelopmentBreakdown?.utilities?.score || 0 
-        }
+        redev_market: { score: 0 },
+        interconnection: { score: 0 },
+        land_availability: { score: 0 },
+        utilities: { score: 0 }
       },
       createdAt: savedAnalysis.created_at,
       updatedAt: savedAnalysis.updated_at
@@ -211,7 +188,7 @@ const getAllExpertAnalyses = async (req, res) => {
     
     // Format response
     const formattedData = allAnalyses.map(row => {
-      const overallScore = row.overall_project_score !== null ? parseFloat(row.overall_project_score) : 0;
+      const overallScore = parseFloat(row.overall_project_score) || 0;
       
       return {
         id: row.id,
@@ -224,25 +201,17 @@ const getAllExpertAnalyses = async (req, res) => {
           overallScore: overallScore,
           overallRating: expertAnalysis.calculateRating(overallScore) || 'N/A',
           ratingClass: expertAnalysis.calculateRating(overallScore)?.toLowerCase() || 'N/A',
-          thermalScore: row.thermal_operating_score !== null ? parseFloat(row.thermal_operating_score) : 0,
-          redevelopmentScore: row.redevelopment_score !== null ? parseFloat(row.redevelopment_score) : 0,
-          infrastructureScore: row.infra !== null ? parseFloat(row.infra) : 0,
+          thermalScore: parseFloat(row.thermal_operating_score) || 0,
+          redevelopmentScore: parseFloat(row.redevelopment_score) || 0,
+          infrastructureScore: parseFloat(row.infra) || 0,
           // CRITICAL: Include breakdown data
           thermalBreakdown: row.thermal_breakdown || {
-            thermal_optimization: { 
-              score: row.thermal_optimization !== null ? parseFloat(row.thermal_optimization) : 0 
-            },
-            environmental: { 
-              score: row.environmental_score !== null ? parseFloat(row.environmental_score) : 0 
-            }
+            thermal_optimization: { score: 0 },
+            environmental: { score: 0 }
           },
           redevelopmentBreakdown: row.redevelopment_breakdown || {
-            redev_market: { 
-              score: row.markets_score !== null ? parseFloat(row.markets_score) : 0 
-            },
-            interconnection: { 
-              score: row.ix !== null ? parseFloat(row.ix) : 0 
-            },
+            redev_market: { score: 0 },
+            interconnection: { score: 0 },
             land_availability: { score: 0 },
             utilities: { score: 0 }
           },
