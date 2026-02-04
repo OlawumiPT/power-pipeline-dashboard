@@ -27,4 +27,6 @@ router.post('/expert-analysis', protect, saveExpertAnalysis);
 router.get('/transmission-interconnection', protect, getTransmissionInterconnection);
 router.post('/transmission-interconnection', protect, saveTransmissionInterconnection);
 
+router.get('/api/expert-analyses', expertAnalysisController.getAllExpertAnalyses);
+
 module.exports = router;
