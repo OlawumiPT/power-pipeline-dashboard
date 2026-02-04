@@ -29,32 +29,31 @@ const getExpertAnalysis = async (req, res) => {
     // Format the response to match frontend expectations
     const formattedResponse = {
       id: analysisData.id,
-      projectId: analysisData.project_codename, // Changed from project_id
+      projectId: analysisData.project_codename,
       projectName: analysisData.project_name,
-      overallScore: parseFloat(analysisData.overall_project_score) || 0, // Changed from overall_score
-      overallRating: expertAnalysis.calculateRating(analysisData.overall_project_score) || 'N/A', // Calculate dynamically
-      thermalScore: parseFloat(analysisData.thermal_operating_score) || 0, // Changed from thermal_score
-      thermalBreakdown: analysisData.thermal_breakdown || {
+      overallScore: parseFloat(analysisData.overall_project_score) || 0,
+      overallRating: expertAnalysis.calculateRating(analysisData.overall_project_score) || 'N/A',
+      thermalScore: parseFloat(analysisData.thermal_operating_score) || 0,
+      thermalBreakdown: {
         thermal_optimization: { 
-          score: parseFloat(analysisData.thermal_optimization) || 1 
+          score: parseFloat(analysisData.thermal_optimization) || 0 
         },
         environmental: { 
-          score: parseFloat(analysisData.environmental_score) || 2 
+          score: parseFloat(analysisData.environmental_score) || 0 
         }
       },
       redevelopmentScore: parseFloat(analysisData.redevelopment_score) || 0,
-      redevelopmentBreakdown: analysisData.redevelopment_breakdown || {
+      redevelopmentBreakdown: {
         redev_market: { 
-          score: parseFloat(analysisData.markets_score) || 2 
+          score: parseFloat(analysisData.markets_score) || 0 
         },
-        land_availability: { score: 0 }, // Not in your table
-        utilities: { score: 0 }, // Not in your table
+        land_availability: { score: 0 },
+        utilities: { score: 0 },
         interconnection: { 
-          score: parseFloat(analysisData.ix) || 2 
+          score: parseFloat(analysisData.ix) || 0 
         }
       },
-      infrastructureScore: parseFloat(analysisData.infra) || 0, // Changed from infrastructure_score
-      editedAt: analysisData.edited_at,
+      infrastructureScore: parseFloat(analysisData.infra) || 0,
       createdAt: analysisData.created_at,
       updatedAt: analysisData.updated_at,
       // Include project details for reference
@@ -122,9 +121,17 @@ const saveExpertAnalysis = async (req, res) => {
       projectName,
       overallScore: parseFloat(overallScore) || 0,
       thermalScore: parseFloat(thermalScore) || 0,
-      thermalBreakdown,
+      thermalBreakdown: thermalBreakdown || {
+        thermal_optimization: { score: 0 },
+        environmental: { score: 0 }
+      },
       redevelopmentScore: parseFloat(redevelopmentScore) || 0,
-      redevelopmentBreakdown,
+      redevelopmentBreakdown: redevelopmentBreakdown || {
+        redev_market: { score: 0 },
+        land_availability: { score: 0 },
+        utilities: { score: 0 },
+        interconnection: { score: 0 }
+      },
       infrastructureScore: parseFloat(infrastructureScore) || 0
     };
     
@@ -150,7 +157,6 @@ const saveExpertAnalysis = async (req, res) => {
         interconnection: { score: parseFloat(savedAnalysis.ix) || 0 }
       },
       infrastructureScore: parseFloat(savedAnalysis.infra) || 0,
-      editedAt: savedAnalysis.edited_at,
       createdAt: savedAnalysis.created_at,
       updatedAt: savedAnalysis.updated_at
     };
