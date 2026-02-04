@@ -8,7 +8,6 @@ const {
   getAllExpertAnalyses 
 } = require('../controllers/expertAnalysisController');
 
-
 // Check if auth middleware exists
 let protect;
 try {
@@ -22,6 +21,7 @@ try {
   };
 }
 
+// Expert Analysis Routes
 router.get('/expert-analysis', protect, getExpertAnalysis);
 router.post('/expert-analysis', protect, saveExpertAnalysis);
 
@@ -29,6 +29,8 @@ router.post('/expert-analysis', protect, saveExpertAnalysis);
 router.get('/transmission-interconnection', protect, getTransmissionInterconnection);
 router.post('/transmission-interconnection', protect, saveTransmissionInterconnection);
 
-router.get('/api/expert-analyses', getAllExpertAnalyses);
+// Route to get ALL expert analyses
+// Note: This becomes /api/expert-analyses (not /api/api/expert-analyses)
+router.get('/expert-analyses', protect, getAllExpertAnalyses);
 
 module.exports = router;
