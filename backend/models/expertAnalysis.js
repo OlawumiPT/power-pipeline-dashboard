@@ -43,27 +43,20 @@ class ExpertAnalysis {
       expertAnalysis.overall_project_score = parseFloat(expertAnalysis.overall_project_score) || 0;
       expertAnalysis.thermal_operating_score = parseFloat(expertAnalysis.thermal_operating_score) || 0;
       expertAnalysis.redevelopment_score = parseFloat(expertAnalysis.redevelopment_score) || 0;
-      expertAnalysis.infrastructure_score = parseFloat(expertAnalysis.infrastructure_score) || 0;
+      expertAnalysis.infrastructure_score = expertAnalysis.infra || 0; // infra column in your table
       
-      // Calculate rating based on score
-      expertAnalysis.overall_rating = this.calculateRating(expertAnalysis.overall_project_score);
+      // Parse breakdowns from individual columns
+      expertAnalysis.thermal_breakdown = {
+        thermal_optimization: { score: expertAnalysis.thermal_optimization || 0 },
+        environmental: { score: expertAnalysis.environmental_score || 0 }
+      };
       
-      // Parse JSONB fields if needed
-      if (expertAnalysis.thermal_breakdown && typeof expertAnalysis.thermal_breakdown === 'string') {
-        try {
-          expertAnalysis.thermal_breakdown = JSON.parse(expertAnalysis.thermal_breakdown);
-        } catch (error) {
-          console.warn('Failed to parse thermal_breakdown JSON:', error);
-        }
-      }
-      
-      if (expertAnalysis.redevelopment_breakdown && typeof expertAnalysis.redevelopment_breakdown === 'string') {
-        try {
-          expertAnalysis.redevelopment_breakdown = JSON.parse(expertAnalysis.redevelopment_breakdown);
-        } catch (error) {
-          console.warn('Failed to parse redevelopment_breakdown JSON:', error);
-        }
-      }
+      expertAnalysis.redevelopment_breakdown = {
+        redev_market: { score: expertAnalysis.markets_score || 0 },
+        land_availability: { score: 0 }, // Not in your table
+        utilities: { score: 0 }, // Not in your table
+        interconnection: { score: expertAnalysis.ix || 0 }
+      };
       
       console.log(`✅ Found expert analysis for project codename ${projectId}`);
       return expertAnalysis;
@@ -83,15 +76,14 @@ class ExpertAnalysis {
         projectId: analysisData.projectId,
         projectName: analysisData.projectName?.substring(0, 50) + '...',
         overallScore: analysisData.overallScore,
-        confidence: analysisData.confidence
+        thermalScore: analysisData.thermalScore,
+        redevelopmentScore: analysisData.redevelopmentScore
       });
       
       const {
         projectId,
         projectName,
         overallScore,
-        overallRating,
-        confidence,
         thermalScore,
         thermalBreakdown,
         redevelopmentScore,
@@ -115,22 +107,28 @@ class ExpertAnalysis {
       
       const checkResult = await client.query(checkQuery, [projectId]);
       
+      // Extract breakdown scores
+      const thermalOptimizationScore = thermalBreakdown?.thermal_optimization?.score || 0;
+      const environmentalScore = thermalBreakdown?.environmental?.score || 0;
+      const marketScore = redevelopmentBreakdown?.redev_market?.score || 0;
+      const interconnectionScore = redevelopmentBreakdown?.interconnection?.score || 0;
+      
       let result;
       
       if (checkResult.rows.length > 0) {
-        // Update existing - REMOVED overall_rating field
+        // Update existing - MATCHING YOUR TABLE COLUMNS
         const updateQuery = `
           UPDATE ${schema}.expert_analysis
           SET 
             project_name = $2,
             overall_project_score = $3,
-            confidence = $4,
-            thermal_operating_score = $5,
-            thermal_breakdown = $6,
-            redevelopment_score = $7,
-            redevelopment_breakdown = $8,
-            infrastructure_score = $9,
-            edited_by = $10,
+            thermal_operating_score = $4,
+            redevelopment_score = $5,
+            infra = $6,
+            thermal_optimization = $7,
+            environmental_score = $8,
+            markets_score = $9,
+            ix = $10,
             edited_at = NOW(),
             updated_at = NOW()
           WHERE project_codename = $1
@@ -141,32 +139,32 @@ class ExpertAnalysis {
           projectId,
           projectName || `Project ${projectId}`,
           parseFloat(overallScore) || 0,
-          parseInt(confidence) || 0,
           parseFloat(thermalScore) || 0,
-          thermalBreakdown ? JSON.stringify(thermalBreakdown) : '{}',
           parseFloat(redevelopmentScore) || 0,
-          redevelopmentBreakdown ? JSON.stringify(redevelopmentBreakdown) : '{}',
           parseFloat(infrastructureScore) || 0,
-          editedBy
+          parseFloat(thermalOptimizationScore) || 0,
+          parseFloat(environmentalScore) || 0,
+          parseFloat(marketScore) || 0,
+          parseFloat(interconnectionScore) || 0
         ];
         
         console.log('🔄 Updating expert analysis with values:', values);
         result = await client.query(updateQuery, values);
         console.log(`🔄 Updated expert analysis for project codename ${projectId}`);
       } else {
-        // Create new - REMOVED overall_rating field
+        // Create new - MATCHING YOUR TABLE COLUMNS
         const insertQuery = `
           INSERT INTO ${schema}.expert_analysis (
             project_codename,
             project_name,
             overall_project_score,
-            confidence,
             thermal_operating_score,
-            thermal_breakdown,
             redevelopment_score,
-            redevelopment_breakdown,
-            infrastructure_score,
-            edited_by,
+            infra,
+            thermal_optimization,
+            environmental_score,
+            markets_score,
+            ix,
             created_at,
             updated_at
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
@@ -177,13 +175,13 @@ class ExpertAnalysis {
           projectId,
           projectName || `Project ${projectId}`,
           parseFloat(overallScore) || 0,
-          parseInt(confidence) || 0,
           parseFloat(thermalScore) || 0,
-          thermalBreakdown ? JSON.stringify(thermalBreakdown) : '{}',
           parseFloat(redevelopmentScore) || 0,
-          redevelopmentBreakdown ? JSON.stringify(redevelopmentBreakdown) : '{}',
           parseFloat(infrastructureScore) || 0,
-          editedBy
+          parseFloat(thermalOptimizationScore) || 0,
+          parseFloat(environmentalScore) || 0,
+          parseFloat(marketScore) || 0,
+          parseFloat(interconnectionScore) || 0
         ];
         
         console.log('✅ Creating new expert analysis with values:', values);
@@ -195,22 +193,18 @@ class ExpertAnalysis {
       
       const savedAnalysis = result.rows[0];
       
-      // Parse JSONB fields for response
-      if (savedAnalysis.thermal_breakdown && typeof savedAnalysis.thermal_breakdown === 'string') {
-        try {
-          savedAnalysis.thermal_breakdown = JSON.parse(savedAnalysis.thermal_breakdown);
-        } catch (error) {
-          console.warn('Failed to parse thermal_breakdown JSON in response:', error);
-        }
-      }
+      // Create breakdown objects for response
+      savedAnalysis.thermal_breakdown = {
+        thermal_optimization: { score: savedAnalysis.thermal_optimization || 0 },
+        environmental: { score: savedAnalysis.environmental_score || 0 }
+      };
       
-      if (savedAnalysis.redevelopment_breakdown && typeof savedAnalysis.redevelopment_breakdown === 'string') {
-        try {
-          savedAnalysis.redevelopment_breakdown = JSON.parse(savedAnalysis.redevelopment_breakdown);
-        } catch (error) {
-          console.warn('Failed to parse redevelopment_breakdown JSON in response:', error);
-        }
-      }
+      savedAnalysis.redevelopment_breakdown = {
+        redev_market: { score: savedAnalysis.markets_score || 0 },
+        land_availability: { score: 0 },
+        utilities: { score: 0 },
+        interconnection: { score: savedAnalysis.ix || 0 }
+      };
       
       return savedAnalysis;
     } catch (error) {
