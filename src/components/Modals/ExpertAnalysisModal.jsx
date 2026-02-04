@@ -73,17 +73,9 @@ const ExpertAnalysisModal = ({
       redevelopmentScore: redevelopmentScore,
       projectName: projectName,
       projectId: projectId,
-      thermalBreakdown: project.expertAnalysis?.thermalBreakdown || {
-        thermal_optimization: { score: 1 },
-        environmental: { score: 2 }
-      },
-      redevelopmentBreakdown: project.expertAnalysis?.redevelopmentBreakdown || {
-        redev_market: { score: 2 },
-        land_availability: { score: 2 },
-        utilities: { score: 2 },
-        interconnection: { score: 2 }
-      },
-      infrastructureScore: getNumericValue(project.expertAnalysis?.infrastructureScore, 2.0).toFixed(2)
+      thermalBreakdown: project.expertAnalysis?.thermalBreakdown || null,
+      redevelopmentBreakdown: project.expertAnalysis?.redevelopmentBreakdown || null,
+      infrastructureScore: getNumericValue(project.expertAnalysis?.infrastructureScore, 0).toFixed(2)
     };
     
     return defaultAnalysis;
@@ -145,6 +137,8 @@ const ExpertAnalysisModal = ({
         const freshAnalysis = await fetchExpertAnalysis(projectId);
         
         if (freshAnalysis) {
+          console.log('✅ Refreshed analysis data:', freshAnalysis);
+          
           // Update analysis data
           setAnalysisData(prev => ({
             ...prev,
@@ -182,6 +176,7 @@ const ExpertAnalysisModal = ({
         const freshTransmission = await fetchTransmissionInterconnection(projectName);
         
         if (freshTransmission && Array.isArray(freshTransmission)) {
+          console.log('✅ Refreshed transmission data:', freshTransmission.length, 'records');
           setEditedTransmissionData(freshTransmission);
           setLocalTransmissionData(freshTransmission);
           
@@ -190,8 +185,11 @@ const ExpertAnalysisModal = ({
         }
       }
       
+      // Dispatch event that data was refreshed
+      window.dispatchEvent(new Event('analysisDataRefreshed'));
+      
     } catch (error) {
-      console.error('Error refreshing data:', error);
+      console.error('❌ Error refreshing data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -333,16 +331,16 @@ const ExpertAnalysisModal = ({
     });
     
     // Get raw scores from dropdowns
-    const thermalOptimization = getSafeScore(thermalBreakdown, 'thermal_optimization', 1);
-    const environmental = getSafeScore(thermalBreakdown, 'environmental', 2);
-    const market = getSafeScore(redevBreakdown, 'redev_market', 2);
-    const land = getSafeScore(redevBreakdown, 'land_availability', 2);
-    const utilities = getSafeScore(redevBreakdown, 'utilities', 2);
-    const interconnection = getSafeScore(redevBreakdown, 'interconnection', 2);
+    const thermalOptimization = getSafeScore(thermalBreakdown, 'thermal_optimization', 0);
+    const environmental = getSafeScore(thermalBreakdown, 'environmental', 0);
+    const market = getSafeScore(redevBreakdown, 'redev_market', 0);
+    const land = getSafeScore(redevBreakdown, 'land_availability', 0);
+    const utilities = getSafeScore(redevBreakdown, 'utilities', 0);
+    const interconnection = getSafeScore(redevBreakdown, 'interconnection', 0);
     
     // Simple formula that should produce reasonable scores
-    const thermalScore = thermalOptimization * 0.8 + environmental * 0.8; // Gives 2.40 for (1, 2)
-    const redevelopmentScore = (market + land + utilities + interconnection) * 0.3375; // Gives 2.70 for (2, 2, 2, 2)
+    const thermalScore = thermalOptimization * 0.8 + environmental * 0.8;
+    const redevelopmentScore = (market + land + utilities + interconnection) * 0.3375;
     const overallScore = thermalScore + redevelopmentScore;
     const infrastructureScore = (land + utilities) / 2;
     
@@ -359,7 +357,8 @@ const ExpertAnalysisModal = ({
       redevelopmentScore: Math.min(redevelopmentScore, 3.0).toFixed(2),
       overallScore: Math.min(overallScore, 6.0).toFixed(2),
       infrastructureScore: infrastructureScore.toFixed(2),
-      overallRating: overallScore >= 4.5 ? 'Strong' : overallScore >= 3.0 ? 'Moderate' : 'Weak'
+      overallRating: overallScore >= 4.5 ? 'Strong' : overallScore >= 3.0 ? 'Moderate' : 'Weak',
+      ratingClass: (overallScore >= 4.5 ? 'strong' : overallScore >= 3.0 ? 'moderate' : 'weak')
     };
     
     console.log('📊 RecalculateScores - Final:', {
@@ -384,10 +383,6 @@ const ExpertAnalysisModal = ({
       thermal: selectedExpertProject.thermal,
       redev: selectedExpertProject.redev
     });
-    if (window.updateExpertScoresPanel) {
-  window.updateExpertScoresPanel();
-}
-
     
     console.log('2. Edited Analysis Data:', editedAnalysis);
     console.log('3. Current Analysis Data:', analysisData);
@@ -439,7 +434,7 @@ const ExpertAnalysisModal = ({
                        selectedExpertProject.detailData?.id || 
                        selectedExpertProject.expertAnalysis?.projectId ||
                        selectedExpertProject.project_codename ||
-                       "Cloud"; // Fallback to "Cloud" for testing
+                       "Cloud";
       
       console.log('🔍 Derived projectId:', projectId);
       
@@ -456,17 +451,9 @@ const ExpertAnalysisModal = ({
         projectName: updatedAnalysis.projectName,
         overallScore: parseFloat(updatedAnalysis.overallScore) || 0,
         thermalScore: parseFloat(updatedAnalysis.thermalScore) || 0,
-        thermalBreakdown: updatedAnalysis.thermalBreakdown || {
-          thermal_optimization: { score: 1 },
-          environmental: { score: 2 }
-        },
+        thermalBreakdown: updatedAnalysis.thermalBreakdown || null,
         redevelopmentScore: parseFloat(updatedAnalysis.redevelopmentScore) || 0,
-        redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || {
-          redev_market: { score: 2 },
-          land_availability: { score: 2 },
-          utilities: { score: 2 },
-          interconnection: { score: 2 }
-        },
+        redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || null,
         infrastructureScore: parseFloat(updatedAnalysis.infrastructureScore) || 0
       };
       
@@ -515,14 +502,33 @@ const ExpertAnalysisModal = ({
         
         setSaveStatus('success');
         
+        // CRITICAL: Save to localStorage
+        localStorage.setItem(`expert_analysis_${projectId}`, JSON.stringify(savedResult.data));
+        localStorage.setItem('expert_analysis_last_updated', new Date().toISOString());
+        
         // CRITICAL: Trigger refresh of parent component data
         if (onSaveSuccess) {
           onSaveSuccess(savedResult.data);
         }
         
-        // Dispatch multiple events to ensure refresh
+        // CRITICAL: Dispatch multiple events to ensure ALL components refresh
+        window.dispatchEvent(new CustomEvent('expertAnalysisSaved', {
+          detail: {
+            projectId: projectId,
+            projectName: savedResult.data.projectName,
+            savedData: savedResult.data,
+            timestamp: new Date().toISOString()
+          }
+        }));
+        
         window.dispatchEvent(new Event('expertAnalysisUpdated'));
-        window.dispatchEvent(new CustomEvent('forceRefreshDashboard'));
+        window.dispatchEvent(new Event('forceRefreshDashboard'));
+        window.dispatchEvent(new Event('forceRefreshExpertScores'));
+        
+        // CRITICAL: Also update the selected project reference
+        if (selectedExpertProject.onSaveSuccess) {
+          selectedExpertProject.onSaveSuccess();
+        }
         
         // Save transmission data
         if (localTransmissionData.length > 0 && saveTransmissionInterconnection) {
@@ -549,7 +555,7 @@ const ExpertAnalysisModal = ({
         setTimeout(async () => {
           console.log('🔄 Forcing refresh after save');
           await refreshAllData();
-        }, 500);
+        }, 1000);
         
         // Clear success message
         setTimeout(() => {
@@ -598,12 +604,17 @@ const ExpertAnalysisModal = ({
 
   // Handle modal close
   const handleClose = useCallback(() => {
+    // If we were editing and saved, dispatch event before closing
+    if (saveStatus === 'success') {
+      window.dispatchEvent(new Event('expertAnalysisUpdated'));
+    }
+    
     if (isEditing && window.refreshDashboardData) {
       window.refreshDashboardData();
     }
     
     setSelectedExpertProject(null);
-  }, [isEditing, setSelectedExpertProject]);
+  }, [isEditing, setSelectedExpertProject, saveStatus]);
 
   // Manual refresh
   const handleManualRefresh = useCallback(async () => {
@@ -657,7 +668,7 @@ const ExpertAnalysisModal = ({
       updated.thermalBreakdown = {
         ...updated.thermalBreakdown,
         [component]: {
-          ...updated.thermalBreakdown[component],
+          ...updated.thermalBreakdown?.[component],
           score: parseInt(value) || 0
         }
       };
@@ -665,7 +676,7 @@ const ExpertAnalysisModal = ({
       updated.redevelopmentBreakdown = {
         ...updated.redevelopmentBreakdown,
         [component]: {
-          ...updated.redevelopmentBreakdown[component],
+          ...updated.redevelopmentBreakdown?.[component],
           score: parseInt(value) || 0
         }
       };
@@ -906,6 +917,11 @@ const ExpertAnalysisModal = ({
           prevItem.constraints !== nextItem.constraints) {
         return false;
       }
+      
+      // Compare IDs if they exist
+      if (prevItem.id !== nextItem.id) {
+        return false;
+      }
     }
     
     return true;
@@ -1025,6 +1041,9 @@ const ExpertAnalysisModal = ({
                   }}>✓</div>
                   <h3 style={{ color: 'white', margin: '0 0 8px' }}>Changes Saved!</h3>
                   <p style={{ color: '#a0aec0' }}>Your changes have been saved successfully.</p>
+                  <p style={{ color: '#86efac', fontSize: '12px', marginTop: '8px' }}>
+                    Refreshing all views...
+                  </p>
                   <button 
                     onClick={() => setSaveStatus(null)}
                     style={{
@@ -1115,31 +1134,57 @@ const ExpertAnalysisModal = ({
               <button 
                 onClick={handleManualRefresh}
                 title="Refresh data from server"
+                disabled={isLoading}
                 style={{
-                  background: 'rgba(59, 130, 246, 0.1)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                  color: '#93c5fd',
-                  padding: '6px 12px',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '12px'
+                  background: isLoading ? 'rgba(107, 114, 128, 0.5)' : 'rgba(59, 130, 246, 0.1)',
+                  border: `1px solid ${isLoading ? 'rgba(107, 114, 128, 0.5)' : 'rgba(59, 130, 246, 0.3)'}`,
+                  color: isLoading ? '#a0aec0' : '#93c5fd',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
                 }}
               >
-                🔄 Refresh
+                {isLoading ? (
+                  <>
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid rgba(147, 197, 253, 0.3)',
+                      borderTopColor: '#93c5fd',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    Refreshing...
+                  </>
+                ) : (
+                  '🔄 Refresh'
+                )}
               </button>
               <button onClick={handleClose} style={{
                 background: 'none',
                 border: 'none',
                 color: '#a0aec0',
-                fontSize: '24px',
+                fontSize: '28px',
                 cursor: 'pointer',
                 padding: '0',
-                width: '32px',
-                height: '32px',
+                width: '36px',
+                height: '36px',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center'
-              }}>×</button>
+                justifyContent: 'center',
+                borderRadius: '6px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => e.target.style.background = 'rgba(255, 255, 255, 0.1)'}
+              onMouseLeave={(e) => e.target.style.background = 'none'}
+              >
+                ×
+              </button>
             </div>
           </div>
           
@@ -1155,12 +1200,17 @@ const ExpertAnalysisModal = ({
                 background: 'rgba(59, 130, 246, 0.1)',
                 border: '1px solid rgba(59, 130, 246, 0.3)',
                 color: '#93c5fd',
-                padding: '8px 16px',
+                padding: '10px 20px',
                 borderRadius: '6px',
-                fontWeight: '500',
-                cursor: 'pointer'
-              }}>
-                <span>✏️</span> Enable Editing
+                fontWeight: '600',
+                cursor: 'pointer',
+                fontSize: '14px',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => e.target.style.background = 'rgba(59, 130, 246, 0.2)'}
+              onMouseLeave={(e) => e.target.style.background = 'rgba(59, 130, 246, 0.1)'}
+              >
+                <span style={{ marginRight: '8px' }}>✏️</span> Enable Editing
               </button>
             ) : (
               <div className="edit-mode-indicator" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1168,11 +1218,16 @@ const ExpertAnalysisModal = ({
                   background: 'rgba(245, 158, 11, 0.15)',
                   border: '1px solid rgba(245, 158, 11, 0.3)',
                   color: '#fbbf24',
-                  padding: '4px 12px',
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  fontWeight: '600'
-                }}>EDIT MODE</span>
+                  padding: '6px 16px',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <span style={{ fontSize: '16px' }}>⚠️</span> EDIT MODE
+                </span>
                 <button onClick={() => {
                   setIsEditing(false);
                   setEditedAnalysis(JSON.parse(JSON.stringify(originalAnalysisRef.current)));
@@ -1181,10 +1236,16 @@ const ExpertAnalysisModal = ({
                   background: 'rgba(239, 68, 68, 0.1)',
                   border: '1px solid rgba(239, 68, 68, 0.3)',
                   color: '#fca5a5',
-                  padding: '8px 16px',
+                  padding: '10px 20px',
                   borderRadius: '6px',
-                  cursor: 'pointer'
-                }}>
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  fontSize: '14px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => e.target.style.background = 'rgba(239, 68, 68, 0.2)'}
+                onMouseLeave={(e) => e.target.style.background = 'rgba(239, 68, 68, 0.1)'}
+                >
                   Cancel Edit
                 </button>
               </div>
@@ -1194,7 +1255,7 @@ const ExpertAnalysisModal = ({
         
         {/* Overall Score Summary */}
         <div className="overall-score-section" style={{ padding: '20px', borderBottom: '1px solid #4a5568' }}>
-          <h3 style={{ color: '#ffffff', margin: '0 0 16px 0', fontSize: '18px' }}>Overall Score Summary</h3>
+          <h3 style={{ color: '#ffffff', margin: '0 0 16px 0', fontSize: '18px', fontWeight: '600' }}>Overall Score Summary</h3>
           <div className="score-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
             <div className="score-card" style={{ 
               background: '#2d3748', 
@@ -1288,7 +1349,7 @@ const ExpertAnalysisModal = ({
         
         {/* Expert Analysis Cards */}
         <div className="expert-cards-section" style={{ padding: '20px' }}>
-          <h3 style={{ color: '#ffffff', margin: '0 0 8px 0', fontSize: '18px' }}>Expert Analysis Cards</h3>
+          <h3 style={{ color: '#ffffff', margin: '0 0 8px 0', fontSize: '18px', fontWeight: '600' }}>Expert Analysis Cards</h3>
           <p style={{ color: '#a0aec0', margin: '0 0 20px 0', fontSize: '14px' }}>
             Click info buttons for scoring criteria details
           </p>
@@ -1297,7 +1358,7 @@ const ExpertAnalysisModal = ({
             {/* Left Card - Thermal Operating Assessment */}
             <div style={{ background: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px' }}>
               <div style={{ padding: '16px', background: 'rgba(0, 0, 0, 0.2)', borderBottom: '1px solid #4a5568' }}>
-                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '16px' }}>Thermal Operating Assessment</h4>
+                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '16px', fontWeight: '600' }}>Thermal Operating Assessment</h4>
                 <p style={{ color: '#a0aec0', fontSize: '13px', margin: '0 0 8px 0' }}>
                   Evaluation of existing plant operations and market position
                 </p>
@@ -1318,7 +1379,7 @@ const ExpertAnalysisModal = ({
                   <div>
                     {isEditing ? (
                       <select 
-                        value={currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
+                        value={currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 0}
                         onChange={(e) => handleScoreChange('thermal', 'thermal_optimization', e.target.value)}
                         style={{
                           width: '100%',
@@ -1328,11 +1389,13 @@ const ExpertAnalysisModal = ({
                           color: 'white',
                           border: '1px solid #4a5568',
                           borderRadius: '6px',
-                          marginBottom: '8px'
+                          marginBottom: '8px',
+                          cursor: 'pointer'
                         }}
                       >
-                        <option value="1">1 - No identifiable value add</option>
-                        <option value="2">2 - Readily apparent value add</option>
+                        <option value="0">0 - No identifiable value add</option>
+                        <option value="1">1 - Readily apparent value add</option>
+                        <option value="2">2 - Strong value add potential</option>
                       </select>
                     ) : (
                       <div style={{
@@ -1340,15 +1403,16 @@ const ExpertAnalysisModal = ({
                         backgroundColor: '#2d3748',
                         borderRadius: '6px',
                         border: '1px solid #4a5568',
-                        marginBottom: '8px'
+                        marginBottom: '8px',
+                        color: '#e2e8f0'
                       }}>
-                        Score: {currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
+                        Score: {currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 'N/A'}
                       </div>
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 5%</span>
                       <span style={{ color: '#a0aec0', fontSize: '12px' }}>
-                        Contribution: {(((currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1) * 0.05).toFixed(2))}
+                        Contribution: {(((currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 0) * 0.05).toFixed(2))}
                       </span>
                     </div>
                   </div>
@@ -1365,7 +1429,7 @@ const ExpertAnalysisModal = ({
                   <div>
                     {isEditing ? (
                       <select 
-                        value={currentAnalysis?.thermalBreakdown?.environmental?.score || 2}
+                        value={currentAnalysis?.thermalBreakdown?.environmental?.score || 0}
                         onChange={(e) => handleScoreChange('thermal', 'environmental', e.target.value)}
                         style={{
                           width: '100%',
@@ -1375,7 +1439,8 @@ const ExpertAnalysisModal = ({
                           color: 'white',
                           border: '1px solid #4a5568',
                           borderRadius: '6px',
-                          marginBottom: '8px'
+                          marginBottom: '8px',
+                          cursor: 'pointer'
                         }}
                       >
                         <option value="0">0 - Known and not mitigable</option>
@@ -1389,9 +1454,10 @@ const ExpertAnalysisModal = ({
                         backgroundColor: '#2d3748',
                         borderRadius: '6px',
                         border: '1px solid #4a5568',
-                        marginBottom: '8px'
+                        marginBottom: '8px',
+                        color: '#e2e8f0'
                       }}>
-                        Score: {currentAnalysis?.thermalBreakdown?.environmental?.score || 2}
+                        Score: {currentAnalysis?.thermalBreakdown?.environmental?.score || 'N/A'}
                       </div>
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1405,7 +1471,7 @@ const ExpertAnalysisModal = ({
             {/* Right Card - Redevelopment Assessment */}
             <div style={{ background: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px' }}>
               <div style={{ padding: '16px', background: 'rgba(0, 0, 0, 0.2)', borderBottom: '1px solid #4a5568' }}>
-                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '16px' }}>Redevelopment Assessment</h4>
+                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '16px', fontWeight: '600' }}>Redevelopment Assessment</h4>
                 <p style={{ color: '#a0aec0', fontSize: '13px', margin: '0 0 8px 0' }}>
                   Evaluation of future development potential and infrastructure
                 </p>
@@ -1426,7 +1492,7 @@ const ExpertAnalysisModal = ({
                   <div>
                     {isEditing ? (
                       <select 
-                        value={currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
+                        value={currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 0}
                         onChange={(e) => handleScoreChange('redevelopment', 'redev_market', e.target.value)}
                         style={{
                           width: '100%',
@@ -1436,7 +1502,8 @@ const ExpertAnalysisModal = ({
                           color: 'white',
                           border: '1px solid #4a5568',
                           borderRadius: '6px',
-                          marginBottom: '8px'
+                          marginBottom: '8px',
+                          cursor: 'pointer'
                         }}
                       >
                         <option value="0">0 - Challenging</option>
@@ -1450,15 +1517,16 @@ const ExpertAnalysisModal = ({
                         backgroundColor: '#2d3748',
                         borderRadius: '6px',
                         border: '1px solid #4a5568',
-                        marginBottom: '8px'
+                        marginBottom: '8px',
+                        color: '#e2e8f0'
                       }}>
-                        Score: {currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
+                        Score: {currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 'N/A'}
                       </div>
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 40%</span>
                       <span style={{ color: '#a0aec0', fontSize: '12px' }}>
-                        Contribution: {(((currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2) * 0.40).toFixed(2))}
+                        Contribution: {(((currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 0) * 0.40).toFixed(2))}
                       </span>
                     </div>
                   </div>
@@ -1472,7 +1540,7 @@ const ExpertAnalysisModal = ({
                       <label style={{ display: 'block', marginBottom: '8px', color: '#a0aec0', fontSize: '12px', fontWeight: '500' }}>Land Availability</label>
                       {isEditing ? (
                         <select 
-                          value={currentAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
+                          value={currentAnalysis?.redevelopmentBreakdown?.land_availability?.score || 0}
                           onChange={(e) => handleScoreChange('redevelopment', 'land_availability', e.target.value)}
                           style={{
                             width: '100%',
@@ -1481,7 +1549,8 @@ const ExpertAnalysisModal = ({
                             backgroundColor: '#2d3748',
                             color: 'white',
                             border: '1px solid #4a5568',
-                            borderRadius: '6px'
+                            borderRadius: '6px',
+                            cursor: 'pointer'
                           }}
                         >
                           <option value="0">0 - No land available</option>
@@ -1494,9 +1563,10 @@ const ExpertAnalysisModal = ({
                           padding: '12px',
                           backgroundColor: '#2d3748',
                           borderRadius: '6px',
-                          border: '1px solid #4a5568'
+                          border: '1px solid #4a5568',
+                          color: '#e2e8f0'
                         }}>
-                          Score: {currentAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
+                          Score: {currentAnalysis?.redevelopmentBreakdown?.land_availability?.score || 'N/A'}
                         </div>
                       )}
                     </div>
@@ -1504,7 +1574,7 @@ const ExpertAnalysisModal = ({
                       <label style={{ display: 'block', marginBottom: '8px', color: '#a0aec0', fontSize: '12px', fontWeight: '500' }}>Utilities</label>
                       {isEditing ? (
                         <select 
-                          value={currentAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
+                          value={currentAnalysis?.redevelopmentBreakdown?.utilities?.score || 0}
                           onChange={(e) => handleScoreChange('redevelopment', 'utilities', e.target.value)}
                           style={{
                             width: '100%',
@@ -1513,7 +1583,8 @@ const ExpertAnalysisModal = ({
                             backgroundColor: '#2d3748',
                             color: 'white',
                             border: '1px solid #4a5568',
-                            borderRadius: '6px'
+                            borderRadius: '6px',
+                            cursor: 'pointer'
                           }}
                         >
                           <option value="-1">-1 - N/A - BESS and Solar</option>
@@ -1527,9 +1598,10 @@ const ExpertAnalysisModal = ({
                           padding: '12px',
                           backgroundColor: '#2d3748',
                           borderRadius: '6px',
-                          border: '1px solid #4a5568'
+                          border: '1px solid #4a5568',
+                          color: '#e2e8f0'
                         }}>
-                          Score: {currentAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
+                          Score: {currentAnalysis?.redevelopmentBreakdown?.utilities?.score || 'N/A'}
                         </div>
                       )}
                     </div>
@@ -1558,7 +1630,7 @@ const ExpertAnalysisModal = ({
                   <div>
                     {isEditing ? (
                       <select 
-                        value={currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                        value={currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 0}
                         onChange={(e) => handleScoreChange('redevelopment', 'interconnection', e.target.value)}
                         style={{
                           width: '100%',
@@ -1568,7 +1640,8 @@ const ExpertAnalysisModal = ({
                           color: 'white',
                           border: '1px solid #4a5568',
                           borderRadius: '6px',
-                          marginBottom: '8px'
+                          marginBottom: '8px',
+                          cursor: 'pointer'
                         }}
                       >
                         <option value="0">0 - Major upgrades needed</option>
@@ -1582,9 +1655,10 @@ const ExpertAnalysisModal = ({
                         backgroundColor: '#2d3748',
                         borderRadius: '6px',
                         border: '1px solid #4a5568',
-                        marginBottom: '8px'
+                        marginBottom: '8px',
+                        color: '#e2e8f0'
                       }}>
-                        Score: {currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                        Score: {currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 'N/A'}
                       </div>
                     )}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1639,23 +1713,57 @@ const ExpertAnalysisModal = ({
           borderRadius: '0 0 12px 12px'
         }}>
           {isEditing ? (
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
               <button 
                 onClick={handleSave}
-                disabled={saveStatus === 'saving'}
+                disabled={saveStatus === 'saving' || !hasChanges()}
                 style={{
-                  background: saveStatus === 'saving' ? 'rgba(107, 114, 128, 0.5)' : 'rgba(59, 130, 246, 0.9)',
-                  border: saveStatus === 'saving' ? '1px solid rgba(107, 114, 128, 0.5)' : '1px solid rgba(59, 130, 246, 0.9)',
-                  color: 'white',
-                  padding: '12px 24px',
+                  background: saveStatus === 'saving' ? 'rgba(107, 114, 128, 0.5)' : 
+                            !hasChanges() ? 'rgba(107, 114, 128, 0.3)' : 'rgba(59, 130, 246, 0.9)',
+                  border: saveStatus === 'saving' ? '1px solid rgba(107, 114, 128, 0.5)' : 
+                         !hasChanges() ? '1px solid rgba(107, 114, 128, 0.3)' : '1px solid rgba(59, 130, 246, 0.9)',
+                  color: saveStatus === 'saving' ? '#a0aec0' : 
+                        !hasChanges() ? '#a0aec0' : 'white',
+                  padding: '12px 32px',
                   borderRadius: '8px',
-                  cursor: saveStatus === 'saving' ? 'not-allowed' : 'pointer',
-                  fontWeight: '500',
+                  cursor: saveStatus === 'saving' || !hasChanges() ? 'not-allowed' : 'pointer',
+                  fontWeight: '600',
                   fontSize: '14px',
-                  minWidth: '120px'
+                  minWidth: '140px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  if (!saveStatus && hasChanges()) {
+                    e.currentTarget.style.background = 'rgba(59, 130, 246, 1)';
+                    e.currentTarget.style.transform = 'scale(1.02)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!saveStatus && hasChanges()) {
+                    e.currentTarget.style.background = 'rgba(59, 130, 246, 0.9)';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }
                 }}
               >
-                {saveStatus === 'saving' ? '💾 Saving...' : '💾 Save Changes'}
+                {saveStatus === 'saving' ? (
+                  <>
+                    <div style={{
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid rgba(255,255,255,0.3)',
+                      borderTopColor: 'white',
+                      borderRadius: '50%',
+                      display: 'inline-block',
+                      marginRight: '8px',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    Saving...
+                  </>
+                ) : !hasChanges() ? (
+                  'No Changes'
+                ) : (
+                  '💾 Save Changes'
+                )}
               </button>
             </div>
           ) : (
@@ -1670,10 +1778,19 @@ const ExpertAnalysisModal = ({
                   borderRadius: '8px',
                   cursor: 'pointer',
                   fontWeight: '500',
-                  fontSize: '14px'
+                  fontSize: '14px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
                 }}
               >
-                Back to Scores
+                ← Back to Scores
               </button>
               <button 
                 onClick={() => {
@@ -1687,7 +1804,16 @@ const ExpertAnalysisModal = ({
                   borderRadius: '8px',
                   cursor: 'pointer',
                   fontWeight: '500',
-                  fontSize: '14px'
+                  fontSize: '14px',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'rgba(59, 130, 246, 1)';
+                  e.currentTarget.style.transform = 'scale(1.02)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'rgba(59, 130, 246, 0.9)';
+                  e.currentTarget.style.transform = 'scale(1)';
                 }}
               >
                 📄 Generate Report
@@ -1727,7 +1853,7 @@ const ExpertAnalysisModal = ({
           }
           
           /* Input focus styles */
-          input:focus {
+          input:focus, select:focus {
             outline: none;
             border-color: #63b3ed !important;
             box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.1);
@@ -1775,6 +1901,11 @@ const ExpertAnalysisModal = ({
             .header-right {
               width: 100% !important;
               justify-content: space-between !important;
+            }
+            
+            .edit-toggle {
+              flex-direction: column !important;
+              align-items: flex-start !important;
             }
           }
         `}</style>
