@@ -177,6 +177,81 @@ const saveExpertAnalysis = async (req, res) => {
   }
 };
 
+// @desc    Get ALL expert analyses
+// @route   GET /api/expert-analyses
+// @access  Private
+const getAllExpertAnalyses = async (req, res) => {
+  try {
+    console.log('🔍 GET /api/expert-analyses - Fetching ALL expert analyses');
+    
+    // Set aggressive no-cache headers
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
+    const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
+    
+    // Get all expert analyses
+    const query = `
+      SELECT * FROM ${schema}.expert_analysis 
+      ORDER BY overall_project_score DESC NULLS LAST, updated_at DESC
+    `;
+    
+    const result = await pool.query(query);
+    
+    console.log(`✅ Found ${result.rows.length} expert analysis records`);
+    
+    // Format response
+    const formattedData = result.rows.map(row => {
+      const overallScore = parseFloat(row.overall_project_score) || 0;
+      
+      return {
+        id: row.id,
+        project_codename: row.project_codename,
+        project_name: row.project_name,
+        expertAnalysis: {
+          id: row.id,
+          projectId: row.project_codename,
+          projectName: row.project_name,
+          overallScore: overallScore,
+          overallRating: calculateRating(overallScore),
+          ratingClass: calculateRating(overallScore).toLowerCase(),
+          thermalScore: parseFloat(row.thermal_operating_score) || 0,
+          redevelopmentScore: parseFloat(row.redevelopment_score) || 0,
+          infrastructureScore: parseFloat(row.infra) || 0,
+          thermalBreakdown: {
+            thermal_optimization: { score: parseFloat(row.thermal_optimization) || 1 },
+            environmental: { score: parseFloat(row.environmental_score) || 2 }
+          },
+          redevelopmentBreakdown: {
+            redev_market: { score: parseFloat(row.markets_score) || 2 },
+            interconnection: { score: parseFloat(row.ix) || 2 },
+            land_availability: { score: 2 },
+            utilities: { score: 2 }
+          },
+          createdAt: row.created_at,
+          updatedAt: row.updated_at
+        }
+      };
+    });
+    
+    res.status(200).json({
+      success: true,
+      message: 'Expert analyses retrieved successfully',
+      count: formattedData.length,
+      data: formattedData
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in getAllExpertAnalyses:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message
+    });
+  }
+};
+
 // @desc    Get transmission interconnection data
 // @route   GET /api/transmission-interconnection
 // @access  Private
