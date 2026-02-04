@@ -22,6 +22,231 @@ import { ISO_COLORS, TECH_COLORS } from './constants/colors';
 import ApprovalSuccess from './components/ApprovalSuccess';
 import { useAuth } from './contexts/AuthContext';
 
+// API URL configuration
+const API_URL = process.env.REACT_APP_API_URL || 'https://pt-power-pipeline-api.azurewebsites.net';
+
+// ============================================================================
+// API HELPER FUNCTIONS
+// ============================================================================
+
+// Fetch single expert analysis
+const fetchExpertAnalysis = async (projectId, authToken) => {
+  try {
+    console.log(`[Frontend] Fetching expert analysis for project ID: ${projectId}`);
+    
+    const response = await fetch(`${API_URL}/api/expert-analysis?projectId=${projectId}`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    console.log('[Frontend] Expert analysis API response:', {
+      status: response.status,
+      success: result.success,
+      hasData: !!result.data,
+      dataKeys: result.data ? Object.keys(result.data) : 'no data'
+    });
+    
+    if (result.success && result.data) {
+      console.log('[Frontend] Expert analysis data received:', {
+        projectName: result.data.projectName,
+        overallScore: result.data.overallScore,
+        thermalScore: result.data.thermalScore,
+        redevelopmentScore: result.data.redevelopmentScore,
+        hasThermalBreakdown: !!result.data.thermalBreakdown,
+        hasRedevelopmentBreakdown: !!result.data.redevelopmentBreakdown
+      });
+      
+      // Return the data property
+      return result.data;
+    } else {
+      console.warn('[Frontend] No expert analysis data found');
+      return null;
+    }
+    
+  } catch (error) {
+    console.error('[Frontend] Error fetching expert analysis:', error);
+    return null;
+  }
+};
+
+// Fetch ALL expert analyses
+const fetchAllExpertAnalyses = async (authToken) => {
+  try {
+    console.log('[Frontend] Fetching ALL expert analyses');
+    
+    const response = await fetch(`${API_URL}/api/expert-analyses`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    console.log('[Frontend] All expert analyses response:', {
+      success: result.success,
+      count: result.count,
+      dataLength: result.data ? result.data.length : 0
+    });
+    
+    if (result.success && result.data && Array.isArray(result.data)) {
+      console.log(`[Frontend] Loaded ${result.data.length} expert analyses`);
+      
+      // Process each item to extract expertAnalysis
+      const processedData = result.data.map(item => ({
+        ...item,
+        expertAnalysis: item.expertAnalysis || {
+          ...item,
+          projectId: item.project_codename,
+          projectName: item.project_name
+        }
+      }));
+      
+      return processedData;
+    } else {
+      console.warn('[Frontend] No expert analyses data found');
+      return [];
+    }
+    
+  } catch (error) {
+    console.error('[Frontend] Error fetching all expert analyses:', error);
+    return [];
+  }
+};
+
+// Save expert analysis
+const saveExpertAnalysis = async (analysisData, authToken) => {
+  try {
+    console.log('[Frontend] Saving expert analysis:', analysisData);
+    
+    const response = await fetch(`${API_URL}/api/expert-analysis`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(analysisData)
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    console.log('[Frontend] Save response:', {
+      success: result.success,
+      message: result.message,
+      hasData: !!result.data
+    });
+    
+    if (result.success && result.data) {
+      console.log('[Frontend] Expert analysis saved successfully');
+      return result;
+    } else {
+      throw new Error(result.message || 'Save failed');
+    }
+    
+  } catch (error) {
+    console.error('[Frontend] Error saving expert analysis:', error);
+    throw error;
+  }
+};
+
+// Fetch transmission data
+const fetchTransmissionInterconnection = async (projectName, authToken) => {
+  try {
+    console.log(`[Frontend] Fetching transmission data for project: ${projectName}`);
+    
+    const response = await fetch(`${API_URL}/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    console.log('[Frontend] Transmission API response:', {
+      success: result.success,
+      dataCount: result.data ? result.data.length : 0
+    });
+    
+    if (result.success && result.data) {
+      console.log(`[Frontend] Found ${result.data.length} transmission records for ${projectName}`);
+      return result.data;
+    } else {
+      console.warn('[Frontend] No transmission data found');
+      return [];
+    }
+    
+  } catch (error) {
+    console.error('[Frontend] Error fetching transmission data:', error);
+    return [];
+  }
+};
+
+// Save transmission data
+const saveTransmissionInterconnection = async (projectId, transmissionData, authToken) => {
+  try {
+    console.log(`[Frontend] Saving transmission data for project ${projectId}:`, transmissionData);
+    
+    const response = await fetch(`${API_URL}/api/transmission-interconnection`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        projectId,
+        transmissionData
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    
+    console.log('[Frontend] Transmission save response:', {
+      success: result.success,
+      message: result.message
+    });
+    
+    if (result.success) {
+      console.log('[Frontend] Transmission data saved successfully');
+      return result;
+    } else {
+      throw new Error(result.message || 'Transmission save failed');
+    }
+    
+  } catch (error) {
+    console.error('[Frontend] Error saving transmission data:', error);
+    throw error;
+  }
+};
+
+// ============================================================================
+// DASHBOARD CONTENT COMPONENT
+// ============================================================================
+
 function DashboardContent() {
   // Data states
   const [kpiRow1, setKpiRow1] = useState([]);
@@ -157,99 +382,26 @@ function DashboardContent() {
   const { token } = useAuth();
 
   // ============================================================================
-  // NEW: ADDED MISSING API CALL FUNCTIONS
+  // UPDATED: EXPERT ANALYSIS API FUNCTIONS
   // ============================================================================
 
-  // Fetch expert analysis for a project
-  const fetchExpertAnalysis = async (projectId) => {
-    try {
-      console.log(`[Frontend] Fetching expert analysis for project ID: ${projectId}`);
-      
-      const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/expert-analysis?projectId=${projectId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch expert analysis: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      console.log('[Frontend] Expert analysis data received:', data);
-      return data;
-    } catch (error) {
-      console.error('[Frontend] Error fetching expert analysis:', error);
-      return null;
-    }
+  // Updated fetch expert analysis function using the integrated helper
+  const fetchExpertAnalysisForProject = async (projectId) => {
+    return await fetchExpertAnalysis(projectId, token);
   };
 
-  // Save expert analysis
-  const saveExpertAnalysis = async (analysisData) => {
-    try {
-      console.log('[Frontend] Saving expert analysis:', analysisData);
-      
-      const response = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/expert-analysis', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify(analysisData)
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[Frontend] Save failed:', errorText);
-        throw new Error(`Failed to save expert analysis: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('[Frontend] Expert analysis saved successfully:', data);
-      return data;
-    } catch (error) {
-      console.error('[Frontend] Error saving expert analysis:', error);
-      throw error;
-    }
+  // Updated save expert analysis function using the integrated helper
+  const saveExpertAnalysisForProject = async (analysisData) => {
+    return await saveExpertAnalysis(analysisData, token);
   };
 
-  // Fetch transmission interconnection data
-  const fetchTransmissionInterconnection = async (projectName) => {
-    try {
-      console.log(`[Frontend] Fetching transmission data for project: ${projectName}`);
-      
-      const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/transmission-interconnection?project=${encodeURIComponent(projectName)}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
-      
-      if (!response.ok) {
-        console.log(`[Frontend] Transmission data not found for ${projectName}, status: ${response.status}`);
-        return [];
-      }
-      
-      const result = await response.json();
-      console.log('[Frontend] Transmission API response:', result);
-      
-      // Extract data from the response structure
-      let transmissionArray = [];
-      
-      if (result.success && Array.isArray(result.data)) {
-        transmissionArray = result.data;
-      } else if (Array.isArray(result)) {
-        transmissionArray = result;
-      } else if (result.data && Array.isArray(result.data)) {
-        transmissionArray = result.data;
-      }
-      
-      console.log(`[Frontend] Found ${transmissionArray.length} transmission records for ${projectName}`);
-      
-      // Transform data to frontend format
-      const transformedData = transmissionArray.map(item => ({
+  // Updated fetch transmission data function using the integrated helper
+  const fetchTransmissionData = async (projectName) => {
+    const data = await fetchTransmissionInterconnection(projectName, token);
+    
+    // Transform data to frontend format if needed
+    if (data && data.length > 0) {
+      return data.map(item => ({
         site: item.site || '',
         poiVoltage: item.poiVoltage || item.poi_voltage || '',
         excessInjectionCapacity: item.excessInjectionCapacity || item.excess_injection_capacity || 0,
@@ -258,46 +410,19 @@ function DashboardContent() {
         excessIXCapacity: item.excessIXCapacity || item.excess_ix_capacity || true,
         project_id: item.projectId || item.project_id || null
       }));
-      
-      console.log('[Frontend] Transformed transmission data:', transformedData);
-      return transformedData;
-    } catch (error) {
-      console.error('[Frontend] Error fetching transmission data:', error);
-      return [];
     }
+    
+    return [];
   };
 
-  // Save transmission interconnection data
-  const saveTransmissionInterconnection = async (projectId, transmissionData) => {
-    try {
-      console.log(`[Frontend] Saving transmission data for project ${projectId}:`, transmissionData);
-      
-      const response = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/transmission-interconnection', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          projectId,
-          transmissionData
-        })
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[Frontend] Save transmission failed:', errorText);
-        throw new Error(`Failed to save transmission data: ${response.status} - ${errorText}`);
-      }
-      
-      const data = await response.json();
-      console.log('[Frontend] Transmission data saved successfully:', data);
-      return data;
-    } catch (error) {
-      console.error('[Frontend] Error saving transmission data:', error);
-      throw error;
-    }
+  // Updated save transmission data function using the integrated helper
+  const saveTransmissionData = async (projectId, transmissionData) => {
+    return await saveTransmissionInterconnection(projectId, transmissionData, token);
+  };
+
+  // Fetch all expert analyses for the panel
+  const fetchAllExpertAnalysesData = async () => {
+    return await fetchAllExpertAnalyses(token);
   };
 
   // Test API endpoints
@@ -307,7 +432,7 @@ function DashboardContent() {
     try {
       // Test expert analysis GET
       console.log('[Frontend] Testing GET /api/expert-analysis?projectId=33');
-      const expertResponse = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/expert-analysis?projectId=33', {
+      const expertResponse = await fetch(`${API_URL}/api/expert-analysis?projectId=33`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       console.log('[Frontend] Expert analysis GET status:', expertResponse.status);
@@ -318,7 +443,7 @@ function DashboardContent() {
       
       // Test transmission GET
       console.log('[Frontend] Testing GET /api/transmission-interconnection?project=Dartmouth');
-      const transmissionResponse = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/transmission-interconnection?project=Dartmouth', {
+      const transmissionResponse = await fetch(`${API_URL}/api/transmission-interconnection?project=Dartmouth`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       console.log('[Frontend] Transmission GET status:', transmissionResponse.status);
@@ -334,10 +459,10 @@ function DashboardContent() {
   };
 
   // ============================================================================
-  // END OF NEW API CALL FUNCTIONS
+  // COMPONENT FUNCTIONS
   // ============================================================================
 
-  // NEW: Function to refresh expert data - FIXED VERSION
+  // NEW: Function to refresh expert data
   const refreshExpertData = async () => {
     console.log('🔄 DashboardContent: Refreshing expert data...');
     try {
@@ -461,7 +586,7 @@ function DashboardContent() {
       console.log('🔍 Checking if lead exists:', leadName);
       
       // Check if lead exists
-      const checkResponse = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/redev-leads/check?name=${encodeURIComponent(leadName)}`, {
+      const checkResponse = await fetch(`${API_URL}/api/redev-leads/check?name=${encodeURIComponent(leadName)}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         }
@@ -474,7 +599,7 @@ function DashboardContent() {
         if (!exists) {
           // Add new lead to lookup table
           console.log('➕ Adding new lead to lookup table:', leadName);
-          const addResponse = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/redev-leads', {
+          const addResponse = await fetch(`${API_URL}/api/redev-leads`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -511,7 +636,7 @@ function DashboardContent() {
       
       for (const name of supportNames) {
         // Check if support exists
-        const checkResponse = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/redev-supports/check?name=${encodeURIComponent(name)}`, {
+        const checkResponse = await fetch(`${API_URL}/api/redev-supports/check?name=${encodeURIComponent(name)}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           }
@@ -524,7 +649,7 @@ function DashboardContent() {
           if (!exists) {
             // Add new support to lookup table
             console.log('➕ Adding new support to lookup table:', name);
-            const addResponse = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/redev-supports', {
+            const addResponse = await fetch(`${API_URL}/api/redev-supports`, {
               method: 'POST',
               headers: {
                 'Authorization': `Bearer ${token}`,
@@ -853,7 +978,7 @@ function DashboardContent() {
     
     if (window.confirm(`Are you sure you want to delete "${projectName}"? This action cannot be undone.`)) {
       try {
-        const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/projects/${projectId}`, {
+        const response = await fetch(`${API_URL}/api/projects/${projectId}`, {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -1060,9 +1185,9 @@ const handleUpdateProject = async (updatedData) => {
     
     console.log('🔄 Sending to backend:', cleanData);
     console.log('📊 Field count:', Object.keys(cleanData).length);
-    console.log('🚀 PUT request to:', `https://pt-power-pipeline-api.azurewebsites.net/api/projects/${projectId}`);
+    console.log('🚀 PUT request to:', `${API_URL}/api/projects/${projectId}`);
     
-    const response = await fetch(`https://pt-power-pipeline-api.azurewebsites.net/api/projects/${projectId}`, {
+    const response = await fetch(`${API_URL}/api/projects/${projectId}`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -1432,7 +1557,7 @@ const handleUpdateProject = async (updatedData) => {
       
       console.log("📤 Cleaned data being sent to API:", cleanSiteData);
       
-      const response = await fetch('https://pt-power-pipeline-api.azurewebsites.net/api/projects', {
+      const response = await fetch(`${API_URL}/api/projects`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -1478,10 +1603,9 @@ const handleUpdateProject = async (updatedData) => {
   // Fetch dropdown options from database
   const fetchDropdownOptions = async () => {
     try {
-      const API_BASE_URL = "https://pt-power-pipeline-api.azurewebsites.net";
-      console.log('🔧 [DEBUG] Fetching dropdown options from:', `${API_BASE_URL}/api/dropdown-options`);
+      console.log('🔧 [DEBUG] Fetching dropdown options from:', `${API_URL}/api/dropdown-options`);
       
-      const response = await fetch(`${API_BASE_URL}/api/dropdown-options`, {
+      const response = await fetch(`${API_URL}/api/dropdown-options`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Accept': 'application/json'
@@ -1589,8 +1713,7 @@ const handleUpdateProject = async (updatedData) => {
     setError(null);
     
     try {
-      const API_BASE_URL = "https://pt-power-pipeline-api.azurewebsites.net";
-      const endpoint = `${API_BASE_URL}/api/projects`;
+      const endpoint = `${API_URL}/api/projects`;
       console.log('🔧 [DEBUG] Fetching from:', endpoint);
       console.log('🔧 [DEBUG] Token exists:', !!token);
       
@@ -2399,10 +2522,10 @@ const handleUpdateProject = async (updatedData) => {
     setSelectedExpertProject={setSelectedExpertProject}
     setSelectedProject={setSelectedProject}
     setShowProjectDetail={setShowProjectDetail}
-    fetchExpertAnalysis={fetchExpertAnalysis}
-    saveExpertAnalysis={saveExpertAnalysis}
-    fetchTransmissionInterconnection={fetchTransmissionInterconnection}
-    saveTransmissionInterconnection={saveTransmissionInterconnection}
+    fetchExpertAnalysis={fetchExpertAnalysisForProject}
+    saveExpertAnalysis={saveExpertAnalysisForProject}
+    fetchTransmissionInterconnection={fetchTransmissionData}
+    saveTransmissionInterconnection={saveTransmissionData}
     onSaveSuccess={() => {
       console.log('✅ Expert analysis saved!');
       setSelectedExpertProject(null);
