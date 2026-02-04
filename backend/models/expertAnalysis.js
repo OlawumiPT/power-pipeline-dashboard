@@ -22,26 +22,26 @@ class ExpertAnalysis {
           p.legacy_nameplate_capacity_mw,
           p.tech
         FROM ${schema}.expert_analysis ea
-        LEFT JOIN ${schema}.projects p ON ea.project_id::varchar = p.id::varchar
-        WHERE ea.project_id = $1 
+        LEFT JOIN ${schema}.projects p ON ea.project_codename = p.project_codename
+        WHERE ea.project_codename = $1 
         AND p.is_active = true
         LIMIT 1
       `;
       
-      console.log('🔍 Fetching expert analysis for project ID:', projectId);
+      console.log('🔍 Fetching expert analysis for project codename:', projectId);
       
       const result = await pool.query(query, [projectId]);
       
       if (result.rows.length === 0) {
-        console.log(`📭 No expert analysis found for project ID ${projectId}`);
+        console.log(`📭 No expert analysis found for project codename ${projectId}`);
         return null;
       }
       
       const expertAnalysis = result.rows[0];
       
       // Ensure scores are properly formatted
-      expertAnalysis.overall_score = parseFloat(expertAnalysis.overall_score) || 0;
-      expertAnalysis.thermal_score = parseFloat(expertAnalysis.thermal_score) || 0;
+      expertAnalysis.overall_project_score = parseFloat(expertAnalysis.overall_project_score) || 0;
+      expertAnalysis.thermal_operating_score = parseFloat(expertAnalysis.thermal_operating_score) || 0;
       expertAnalysis.redevelopment_score = parseFloat(expertAnalysis.redevelopment_score) || 0;
       expertAnalysis.infrastructure_score = parseFloat(expertAnalysis.infrastructure_score) || 0;
       
@@ -62,7 +62,7 @@ class ExpertAnalysis {
         }
       }
       
-      console.log(`✅ Found expert analysis for project ID ${projectId}`);
+      console.log(`✅ Found expert analysis for project codename ${projectId}`);
       return expertAnalysis;
     } catch (error) {
       console.error('❌ Error in getExpertAnalysisByProjectId:', error);
@@ -98,7 +98,7 @@ class ExpertAnalysis {
       } = analysisData;
       
       if (!projectId) {
-        throw new Error('Project ID is required');
+        throw new Error('Project codename is required');
       }
       
       const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
@@ -106,7 +106,7 @@ class ExpertAnalysis {
       // Check if expert analysis already exists
       const checkQuery = `
         SELECT id FROM ${schema}.expert_analysis 
-        WHERE project_id = $1
+        WHERE project_codename = $1
         LIMIT 1
       `;
       
@@ -120,10 +120,10 @@ class ExpertAnalysis {
           UPDATE ${schema}.expert_analysis
           SET 
             project_name = $2,
-            overall_score = $3,
+            overall_project_score = $3,
             overall_rating = $4,
             confidence = $5,
-            thermal_score = $6,
+            thermal_operating_score = $6,
             thermal_breakdown = $7,
             redevelopment_score = $8,
             redevelopment_breakdown = $9,
@@ -131,7 +131,7 @@ class ExpertAnalysis {
             edited_by = $11,
             edited_at = NOW(),
             updated_at = NOW()
-          WHERE project_id = $1
+          WHERE project_codename = $1
           RETURNING *
         `;
         
@@ -151,17 +151,17 @@ class ExpertAnalysis {
         
         console.log('🔄 Updating expert analysis with values:', values);
         result = await client.query(updateQuery, values);
-        console.log(`🔄 Updated expert analysis for project ID ${projectId}`);
+        console.log(`🔄 Updated expert analysis for project codename ${projectId}`);
       } else {
         // Create new
         const insertQuery = `
           INSERT INTO ${schema}.expert_analysis (
-            project_id,
+            project_codename,
             project_name,
-            overall_score,
+            overall_project_score,
             overall_rating,
             confidence,
-            thermal_score,
+            thermal_operating_score,
             thermal_breakdown,
             redevelopment_score,
             redevelopment_breakdown,
@@ -189,7 +189,7 @@ class ExpertAnalysis {
         
         console.log('✅ Creating new expert analysis with values:', values);
         result = await client.query(insertQuery, values);
-        console.log(`✅ Created new expert analysis for project ID ${projectId}`);
+        console.log(`✅ Created new expert analysis for project codename ${projectId}`);
       }
       
       await client.query('COMMIT');
@@ -389,7 +389,7 @@ class ExpertAnalysis {
       const query = `
         SELECT EXISTS(
           SELECT 1 FROM ${schema}.expert_analysis ea
-          JOIN ${schema}.projects p ON ea.project_id = p.id::varchar
+          JOIN ${schema}.projects p ON ea.project_codename = p.project_codename
           WHERE p.project_name ILIKE $1 
           OR p.project_codename ILIKE $1
           AND p.is_active = true
