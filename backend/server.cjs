@@ -1515,7 +1515,7 @@ app.listen(PORT, () => {
   console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
  // console.log(`📧 Email mode: ${emailServiceReady ? `Active (${emailService.mode})` : 'Inactive'}`);
   console.log(`🔧 Debug mode: ${DEBUG_MODE ? 'ENABLED' : 'DISABLED'}`);
-
+}); 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('💥 UNCAUGHT EXCEPTION:', err);
