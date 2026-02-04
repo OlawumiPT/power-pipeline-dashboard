@@ -99,7 +99,7 @@ class ExpertAnalysis {
       await client.query('BEGIN');
       
       const {
-        projectId, // This could be projects.id or project_codename
+        projectId, 
         projectName,
         overallScore,
         thermalScore,
@@ -286,6 +286,44 @@ class ExpertAnalysis {
       throw new Error(`Failed to save expert analysis: ${error.message}`);
     } finally {
       client.release();
+    }
+  }
+
+  // NEW METHOD: Get all expert analyses
+  static async getAllExpertAnalyses() {
+    try {
+      const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
+      
+      console.log('🔍 Getting ALL expert analyses from database');
+      
+      const query = `
+        SELECT * FROM ${schema}.expert_analysis 
+        ORDER BY overall_project_score DESC NULLS LAST, updated_at DESC
+      `;
+      
+      const result = await pool.query(query);
+      console.log(`✅ Found ${result.rows.length} expert analysis records`);
+      
+      // Add breakdown data to each row
+      return result.rows.map(row => {
+        row.thermal_breakdown = {
+          thermal_optimization: { score: parseFloat(row.thermal_optimization) || 1 },
+          environmental: { score: parseFloat(row.environmental_score) || 2 }
+        };
+        
+        row.redevelopment_breakdown = {
+          redev_market: { score: parseFloat(row.markets_score) || 2 },
+          interconnection: { score: parseFloat(row.ix) || 2 },
+          land_availability: { score: 2 },
+          utilities: { score: 2 }
+        };
+        
+        return row;
+      });
+      
+    } catch (error) {
+      console.error('❌ Error in getAllExpertAnalyses:', error);
+      throw new Error(`Failed to fetch all expert analyses: ${error.message}`);
     }
   }
 
