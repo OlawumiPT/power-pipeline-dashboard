@@ -372,7 +372,6 @@ const ExpertAnalysisModal = ({
     return result;
   }, []);
 
-  // FIXED: Handle save function - matches backend format
   const handleSave = useCallback(async () => {
     console.log('💾 === SAVE PROCESS START ===');
     console.log('1. Selected Project Details:', {
@@ -385,6 +384,21 @@ const ExpertAnalysisModal = ({
       thermal: selectedExpertProject.thermal,
       redev: selectedExpertProject.redev
     });
+    if (window.updateExpertScoresPanel) {
+  window.updateExpertScoresPanel();
+}
+  const updatedProject = {
+  ...selectedExpertProject,
+  expertAnalysis: savedResult.data
+};
+localStorage.setItem(`expert_analysis_${projectId}`, JSON.stringify(savedResult.data));
+
+// Show message that refresh is needed
+setTimeout(() => {
+  if (window.confirm('Changes saved successfully! Refresh the page to see updated scores?')) {
+    window.location.reload();
+  }
+}, 500);
     
     console.log('2. Edited Analysis Data:', editedAnalysis);
     console.log('3. Current Analysis Data:', analysisData);
