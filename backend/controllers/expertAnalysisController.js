@@ -1,6 +1,8 @@
 const expertAnalysis = require('../models/expertAnalysis');
 
-
+// @desc    Get expert analysis by project ID
+// @route   GET /api/expert-analysis
+// @access  Private
 const getExpertAnalysis = async (req, res) => {
   try {
     const { projectId } = req.query;
@@ -39,12 +41,12 @@ const getExpertAnalysis = async (req, res) => {
       id: analysisData.id,
       projectId: analysisData.project_codename,
       projectName: analysisData.project_name,
-      overallScore: parseFloat(analysisData.overall_project_score) || null,
+      overallScore: analysisData.overall_project_score !== null ? parseFloat(analysisData.overall_project_score) : null,
       overallRating: expertAnalysis.calculateRating(analysisData.overall_project_score) || null,
       ratingClass: expertAnalysis.calculateRating(analysisData.overall_project_score)?.toLowerCase() || null,
-      thermalScore: parseFloat(analysisData.thermal_operating_score) || null,
-      redevelopmentScore: parseFloat(analysisData.redevelopment_score) || null,
-      infrastructureScore: parseFloat(analysisData.infra) || null,
+      thermalScore: analysisData.thermal_operating_score !== null ? parseFloat(analysisData.thermal_operating_score) : null,
+      redevelopmentScore: analysisData.redevelopment_score !== null ? parseFloat(analysisData.redevelopment_score) : null,
+      infrastructureScore: analysisData.infra !== null ? parseFloat(analysisData.infra) : null,
       thermalBreakdown: analysisData.thermal_breakdown || null,
       redevelopmentBreakdown: analysisData.redevelopment_breakdown || null,
       createdAt: analysisData.created_at,
@@ -101,12 +103,12 @@ const saveExpertAnalysis = async (req, res) => {
     const analysisData = {
       projectId: projectId,
       projectName: projectName || null,
-      overallScore: parseFloat(overallScore) || null,
-      thermalScore: parseFloat(thermalScore) || null,
+      overallScore: overallScore !== undefined ? parseFloat(overallScore) : null,
+      thermalScore: thermalScore !== undefined ? parseFloat(thermalScore) : null,
       thermalBreakdown: thermalBreakdown || null,
-      redevelopmentScore: parseFloat(redevelopmentScore) || null,
+      redevelopmentScore: redevelopmentScore !== undefined ? parseFloat(redevelopmentScore) : null,
       redevelopmentBreakdown: redevelopmentBreakdown || null,
-      infrastructureScore: parseFloat(infrastructureScore) || null
+      infrastructureScore: infrastructureScore !== undefined ? parseFloat(infrastructureScore) : null
     };
     
     console.log('📤 Saving analysis data:', analysisData);
@@ -118,12 +120,12 @@ const saveExpertAnalysis = async (req, res) => {
       id: savedAnalysis.id,
       projectId: savedAnalysis.project_codename,
       projectName: savedAnalysis.project_name,
-      overallScore: parseFloat(savedAnalysis.overall_project_score) || null,
+      overallScore: savedAnalysis.overall_project_score !== null ? parseFloat(savedAnalysis.overall_project_score) : null,
       overallRating: expertAnalysis.calculateRating(savedAnalysis.overall_project_score) || null,
       ratingClass: expertAnalysis.calculateRating(savedAnalysis.overall_project_score)?.toLowerCase() || null,
-      thermalScore: parseFloat(savedAnalysis.thermal_operating_score) || null,
-      redevelopmentScore: parseFloat(savedAnalysis.redevelopment_score) || null,
-      infrastructureScore: parseFloat(savedAnalysis.infra) || null,
+      thermalScore: savedAnalysis.thermal_operating_score !== null ? parseFloat(savedAnalysis.thermal_operating_score) : null,
+      redevelopmentScore: savedAnalysis.redevelopment_score !== null ? parseFloat(savedAnalysis.redevelopment_score) : null,
+      infrastructureScore: savedAnalysis.infra !== null ? parseFloat(savedAnalysis.infra) : null,
       thermalBreakdown: savedAnalysis.thermal_breakdown || null,
       redevelopmentBreakdown: savedAnalysis.redevelopment_breakdown || null,
       createdAt: savedAnalysis.created_at,
@@ -169,7 +171,7 @@ const getAllExpertAnalyses = async (req, res) => {
     
     // Format response
     const formattedData = allAnalyses.map(row => {
-      const overallScore = parseFloat(row.overall_project_score) || null;
+      const overallScore = row.overall_project_score !== null ? parseFloat(row.overall_project_score) : null;
       
       return {
         id: row.id,
@@ -182,9 +184,9 @@ const getAllExpertAnalyses = async (req, res) => {
           overallScore: overallScore,
           overallRating: expertAnalysis.calculateRating(overallScore) || null,
           ratingClass: expertAnalysis.calculateRating(overallScore)?.toLowerCase() || null,
-          thermalScore: parseFloat(row.thermal_operating_score) || null,
-          redevelopmentScore: parseFloat(row.redevelopment_score) || null,
-          infrastructureScore: parseFloat(row.infra) || null,
+          thermalScore: row.thermal_operating_score !== null ? parseFloat(row.thermal_operating_score) : null,
+          redevelopmentScore: row.redevelopment_score !== null ? parseFloat(row.redevelopment_score) : null,
+          infrastructureScore: row.infra !== null ? parseFloat(row.infra) : null,
           thermalBreakdown: row.thermal_breakdown || null,
           redevelopmentBreakdown: row.redevelopment_breakdown || null,
           createdAt: row.created_at,
@@ -233,8 +235,8 @@ const getTransmissionInterconnection = async (req, res) => {
       id: item.id,
       site: item.site,
       poiVoltage: item.poi_voltage,
-      excessInjectionCapacity: parseFloat(item.excess_injection_capacity) || null,
-      excessWithdrawalCapacity: parseFloat(item.excess_withdrawal_capacity) || null,
+      excessInjectionCapacity: item.excess_injection_capacity !== null ? parseFloat(item.excess_injection_capacity) : null,
+      excessWithdrawalCapacity: item.excess_withdrawal_capacity !== null ? parseFloat(item.excess_withdrawal_capacity) : null,
       constraints: item.constraints,
       excessIXCapacity: item.excess_ix_capacity,
       projectId: item.project_id,
@@ -282,8 +284,8 @@ const saveTransmissionInterconnection = async (req, res) => {
       id: item.id,
       site: item.site,
       poiVoltage: item.poi_voltage,
-      excessInjectionCapacity: parseFloat(item.excess_injection_capacity) || null,
-      excessWithdrawalCapacity: parseFloat(item.excess_withdrawal_capacity) || null,
+      excessInjectionCapacity: item.excess_injection_capacity !== null ? parseFloat(item.excess_injection_capacity) : null,
+      excessWithdrawalCapacity: item.excess_withdrawal_capacity !== null ? parseFloat(item.excess_withdrawal_capacity) : null,
       constraints: item.constraints,
       excessIXCapacity: item.excess_ix_capacity,
       projectId: item.project_id,
