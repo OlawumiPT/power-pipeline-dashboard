@@ -144,39 +144,6 @@ class EmailService {
     }
   }
 
-  async sendTestEmail() {
-    try {
-      if (DEBUG_MODE) {
-        console.log('\n📧 [DEBUG EMAIL - TEST]:');
-        console.log('   To:', ADMIN_EMAIL);
-        console.log('   Subject: Power Pipeline - Email Service Test');
-        console.log('   Mode: debug\n');
-        return { success: true, debug: true };
-      }
-
-      const info = await this.transporter.sendMail({
-        from: `"Power Pipeline" <${this.fromEmail}>`,
-        to: ADMIN_EMAIL,
-        subject: `✅ Power Pipeline Email Test (${this.mode})`,
-        html: `
-          <h1>Email Service Working</h1>
-          <p>Mode: <strong>${this.mode.toUpperCase()}</strong></p>
-          <p>Domain Restriction: <strong>ACTIVE</strong> (only @power-transitions.com)</p>
-          <p>IT Action Required: Enable Office 365 SMTP AUTH</p>
-        `
-      });
-
-      console.log(`✅ Test email sent to ${ADMIN_EMAIL}`);
-      if (this.mode === 'ethereal') {
-        console.log(`📧 Preview: https://ethereal.email/message/${info.messageId}`);
-      }
-
-      return { success: true, messageId: info.messageId };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  }
-
   validateEmailDomain(email) {
     if (!email || typeof email !== 'string') return false;
     try {
@@ -382,17 +349,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ========== TEST ENDPOINTS ==========
-app.get('/api/test', (req, res) => {
-  res.json({
-    message: 'Power Pipeline API is running!',
-    schema: process.env.DB_SCHEMA || 'pipeline_dashboard',
-    admin_email: ADMIN_EMAIL,
-    email_service: emailServiceReady ? `Active (${emailService.mode})` : 'Inactive',
-    domain_restriction: 'Only @power-transitions.com allowed',
-    debug_mode: DEBUG_MODE ? 'ENABLED' : 'DISABLED'
-  });
-});
 
 // ============================================
 // DEBUG ENDPOINTS (ADDED - CRITICAL FOR DEBUGGING)
@@ -560,7 +516,7 @@ app.post('/api/auth/register', async (req, res) => {
     if (emailServiceReady) {
       const userEmailHtml = `
         <h2>Registration Submitted Successfully</h2>
-        <p>Thank you for registering with Power Pipeline Dashboard!</p>
+        <p>Thank you for registering with Power Transitions Platform!</p>
         <p>Your registration has been submitted for administrator approval.</p>
 
         <div style="background:#f8f9fa;padding:15px;border-radius:8px;margin:20px 0;">
@@ -1557,34 +1513,8 @@ app.listen(PORT, () => {
   console.log(`🗄️ Using schema: ${process.env.DB_SCHEMA || 'pipeline_dashboard'}`);
   console.log(`👤 Admin email: ${ADMIN_EMAIL}`);
   console.log(`🌐 Frontend URL: ${FRONTEND_URL}`);
-  console.log(`📧 Email mode: ${emailServiceReady ? `Active (${emailService.mode})` : 'Inactive'}`);
+ // console.log(`📧 Email mode: ${emailServiceReady ? `Active (${emailService.mode})` : 'Inactive'}`);
   console.log(`🔧 Debug mode: ${DEBUG_MODE ? 'ENABLED' : 'DISABLED'}`);
-
-  if (emailService.mode === 'ethereal') {
-    console.log(`📧 View sent emails at: https://ethereal.email/`);
-    console.log(`💡 Temporary service active while waiting for Office 365 SMTP fix`);
-  }
-
-  console.log('='.repeat(70));
-  console.log('📋 Available Endpoints:');
-  console.log('- GET  /health - Server health check');
-  console.log('- GET  /api/test - Server status');
-  console.log('- GET  /api/admin/debug-test - Admin debug route');
-  console.log('- POST /api/auth/register - Register new user (with email)');
-  console.log('- POST /api/auth/login - Login (approved users only)');
-  console.log('- POST /api/auth/forgot-password - Request password reset');
-  console.log('- GET  /api/admin/pending-users - Get pending users (admin)');
-  console.log('- GET  /api/admin/approve/:token - Approve user via email link');
-  console.log('- GET  /api/test-email - Test email service');
-  console.log('- GET  /api/projects - Projects API');
-  console.log('- GET  /api/expert-analysis - Expert analysis API');
-  console.log('- POST /api/expert-analysis - Save expert analysis');
-  console.log('- GET  /api/transmission-interconnection - Transmission data API');
-  console.log('- POST /api/transmission-interconnection - Save transmission data');
-  console.log('='.repeat(70));
-  console.log('✅ Ready to accept requests!');
-  console.log('='.repeat(70));
-});
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
