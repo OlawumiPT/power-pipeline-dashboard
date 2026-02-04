@@ -7,9 +7,10 @@ const getExpertAnalysis = async (req, res) => {
   try {
     const { projectId } = req.query;
     
-    console.log('🔍 GET /api/expert-analysis', { projectId });
+    console.log('🔍 GET /api/expert-analysis for projectId:', projectId);
     
     if (!projectId) {
+      console.log('❌ Project ID is required');
       return res.status(400).json({
         success: false,
         message: 'Project ID is required'
@@ -19,6 +20,7 @@ const getExpertAnalysis = async (req, res) => {
     const analysisData = await expertAnalysis.getExpertAnalysisByProjectId(projectId);
     
     if (!analysisData) {
+      console.log(`📭 No expert analysis found for projectId ${projectId}`);
       return res.status(200).json({
         success: true,
         message: 'No expert analysis found',
@@ -26,27 +28,40 @@ const getExpertAnalysis = async (req, res) => {
       });
     }
     
-    // Format response - ONLY using columns that exist in your table
+    console.log('✅ Found analysis data for project:', {
+      projectCodename: analysisData.project_codename,
+      projectName: analysisData.project_name,
+      overallScore: analysisData.overall_project_score,
+      thermalScore: analysisData.thermal_operating_score,
+      redevelopmentScore: analysisData.redevelopment_score
+    });
+    
+    // Format response with ALL breakdown fields
     const formattedResponse = {
       id: analysisData.id,
       projectId: analysisData.project_codename,
       projectName: analysisData.project_name,
       overallScore: parseFloat(analysisData.overall_project_score) || 0,
       overallRating: expertAnalysis.calculateRating(analysisData.overall_project_score) || 'N/A',
+      ratingClass: expertAnalysis.calculateRating(analysisData.overall_project_score)?.toLowerCase() || 'N/A',
       thermalScore: parseFloat(analysisData.thermal_operating_score) || 0,
-      thermalBreakdown: analysisData.thermal_breakdown || {
-        thermal_optimization: { score: parseFloat(analysisData.thermal_optimization) || 0 },
-        environmental: { score: parseFloat(analysisData.environmental_score) || 0 }
-      },
       redevelopmentScore: parseFloat(analysisData.redevelopment_score) || 0,
-      redevelopmentBreakdown: analysisData.redevelopment_breakdown || {
-        redev_market: { score: parseFloat(analysisData.markets_score) || 0 },
-        interconnection: { score: parseFloat(analysisData.ix) || 0 }
-      },
       infrastructureScore: parseFloat(analysisData.infra) || 0,
+      thermalBreakdown: analysisData.thermal_breakdown || {
+        thermal_optimization: { score: parseFloat(analysisData.thermal_optimization) || 1 },
+        environmental: { score: parseFloat(analysisData.environmental_score) || 2 }
+      },
+      redevelopmentBreakdown: analysisData.redevelopment_breakdown || {
+        redev_market: { score: parseFloat(analysisData.markets_score) || 2 },
+        interconnection: { score: parseFloat(analysisData.ix) || 2 },
+        land_availability: { score: 2 },
+        utilities: { score: 2 }
+      },
       createdAt: analysisData.created_at,
       updatedAt: analysisData.updated_at
     };
+    
+    console.log('📤 Sending formatted response for project:', formattedResponse.projectName);
     
     res.status(200).json({
       success: true,
@@ -80,6 +95,7 @@ const saveExpertAnalysis = async (req, res) => {
     
     console.log('💾 POST /api/expert-analysis', { 
       projectId, 
+      projectName,
       overallScore,
       thermalScore,
       redevelopmentScore
@@ -93,21 +109,25 @@ const saveExpertAnalysis = async (req, res) => {
     }
     
     const analysisData = {
-      projectId: projectId.toString(),
-      projectName,
+      projectId: projectId,
+      projectName: projectName || `Project ${projectId}`,
       overallScore: parseFloat(overallScore) || 0,
       thermalScore: parseFloat(thermalScore) || 0,
       thermalBreakdown: thermalBreakdown || {
-        thermal_optimization: { score: 0 },
-        environmental: { score: 0 }
+        thermal_optimization: { score: 1 },
+        environmental: { score: 2 }
       },
       redevelopmentScore: parseFloat(redevelopmentScore) || 0,
       redevelopmentBreakdown: redevelopmentBreakdown || {
-        redev_market: { score: 0 },
-        interconnection: { score: 0 }
+        redev_market: { score: 2 },
+        land_availability: { score: 2 },
+        utilities: { score: 2 },
+        interconnection: { score: 2 }
       },
       infrastructureScore: parseFloat(infrastructureScore) || 0
     };
+    
+    console.log('📤 Saving analysis data:', analysisData);
     
     const savedAnalysis = await expertAnalysis.saveExpertAnalysis(analysisData);
     
@@ -117,21 +137,30 @@ const saveExpertAnalysis = async (req, res) => {
       projectId: savedAnalysis.project_codename,
       projectName: savedAnalysis.project_name,
       overallScore: parseFloat(savedAnalysis.overall_project_score) || 0,
-      overallRating: expertAnalysis.calculateRating(savedAnalysis.overall_project_score),
+      overallRating: expertAnalysis.calculateRating(savedAnalysis.overall_project_score) || 'N/A',
+      ratingClass: expertAnalysis.calculateRating(savedAnalysis.overall_project_score)?.toLowerCase() || 'N/A',
       thermalScore: parseFloat(savedAnalysis.thermal_operating_score) || 0,
-      thermalBreakdown: savedAnalysis.thermal_breakdown || {
-        thermal_optimization: { score: parseFloat(savedAnalysis.thermal_optimization) || 0 },
-        environmental: { score: parseFloat(savedAnalysis.environmental_score) || 0 }
-      },
       redevelopmentScore: parseFloat(savedAnalysis.redevelopment_score) || 0,
-      redevelopmentBreakdown: savedAnalysis.redevelopment_breakdown || {
-        redev_market: { score: parseFloat(savedAnalysis.markets_score) || 0 },
-        interconnection: { score: parseFloat(savedAnalysis.ix) || 0 }
-      },
       infrastructureScore: parseFloat(savedAnalysis.infra) || 0,
+      thermalBreakdown: savedAnalysis.thermal_breakdown || {
+        thermal_optimization: { score: parseFloat(savedAnalysis.thermal_optimization) || 1 },
+        environmental: { score: parseFloat(savedAnalysis.environmental_score) || 2 }
+      },
+      redevelopmentBreakdown: savedAnalysis.redevelopment_breakdown || {
+        redev_market: { score: parseFloat(savedAnalysis.markets_score) || 2 },
+        interconnection: { score: parseFloat(savedAnalysis.ix) || 2 },
+        land_availability: { score: 2 },
+        utilities: { score: 2 }
+      },
       createdAt: savedAnalysis.created_at,
       updatedAt: savedAnalysis.updated_at
     };
+    
+    console.log('✅ Save successful, returning:', {
+      projectId: formattedResponse.projectId,
+      projectName: formattedResponse.projectName,
+      overallScore: formattedResponse.overallScore
+    });
     
     res.status(200).json({
       success: true,
