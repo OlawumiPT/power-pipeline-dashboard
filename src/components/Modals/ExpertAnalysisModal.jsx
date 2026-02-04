@@ -1,589 +1,1624 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
-import { X, Save, RefreshCw, Edit3 } from "lucide-react";
-import PropTypes from "prop-types";
-import axios from "axios";
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-/**
- * ExpertAnalysisModal
- * - Loads expert analysis + transmission data for a selected project.
- * - Allows editing the expert analysis + transmission data.
- * - Saves to backend and updates parent state through callback(s).
- */
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
-
-const ratingFromScore = (score) => {
-  const s = Number(score) || 0;
-  if (s >= 85) return "Excellent";
-  if (s >= 70) return "Good";
-  if (s >= 55) return "Moderate";
-  if (s >= 40) return "Low";
-  return "Very Low";
-};
-
-const clamp0to100 = (v) => {
-  const n = Number(v);
-  if (Number.isNaN(n)) return 0;
-  return Math.max(0, Math.min(100, n));
-};
-
-function KPI({ label, value }) {
-  return (
-    <div
-      style={{
-        background: "rgba(255,255,255,0.08)",
-        border: "1px solid rgba(255,255,255,0.12)",
-        borderRadius: 12,
-        padding: 12,
-      }}
-    >
-      <div style={{ fontSize: 12, opacity: 0.8 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 700, marginTop: 6 }}>{value}</div>
-    </div>
-  );
-}
-
-function SliderRow({ label, value, onChange, disabled }) {
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "220px 1fr 60px", gap: 12, alignItems: "center" }}>
-      <div style={{ fontSize: 13, opacity: 0.9 }}>{label}</div>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(clamp0to100(e.target.value))}
-        style={{ width: "100%" }}
-      />
-      <div style={{ fontSize: 13, textAlign: "right" }}>{value}</div>
-    </div>
-  );
-}
-
-function TextArea({ label, value, onChange, disabled, rows = 4 }) {
-  return (
-    <div style={{ display: "grid", gap: 8 }}>
-      <div style={{ fontSize: 13, opacity: 0.9 }}>{label}</div>
-      <textarea
-        rows={rows}
-        disabled={disabled}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: "100%",
-          borderRadius: 10,
-          padding: 10,
-          border: "1px solid rgba(255,255,255,0.15)",
-          background: "rgba(0,0,0,0.25)",
-          color: "white",
-          outline: "none",
-        }}
-      />
-    </div>
-  );
-}
-
-/**
- * Avoid cursor jumps while typing by:
- * - using defaultValue (uncontrolled)
- * - committing changes on blur
- * This prevents state updates on every keystroke.
- */
-const TransmissionEditTable = React.memo(function TransmissionEditTable({ transmissionData, setTransmissionData }) {
-  const handleBlurUpdate = useCallback(
-    (index, field, value) => {
-      const updated = [...transmissionData];
-      updated[index] = {
-        ...updated[index],
-        [field]: value,
-      };
-      setTransmissionData(updated);
-    },
-    [transmissionData, setTransmissionData]
-  );
-
-  const columns = [
-    { key: "line", label: "Line" },
-    { key: "kV", label: "kV" },
-    { key: "substations", label: "Substations" },
-    { key: "capacity_MVA", label: "Capacity (MVA)" },
-    { key: "distance_miles", label: "Distance (miles)" },
-  ];
-
-  return (
-    <div style={{ overflowX: "auto", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ background: "rgba(255,255,255,0.08)" }}>
-            {columns.map((c) => (
-              <th
-                key={c.key}
-                style={{
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  borderBottom: "1px solid rgba(255,255,255,0.12)",
-                }}
-              >
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {transmissionData?.map((row, index) => (
-            <tr key={index} style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-              {columns.map((c) => (
-                <td key={c.key} style={{ padding: "10px 12px" }}>
-                  <input
-                    type="text"
-                    defaultValue={row?.[c.key] ?? ""}
-                    onBlur={(e) => handleBlurUpdate(index, c.key, e.target.value)}
-                    style={{
-                      width: "100%",
-                      borderRadius: 8,
-                      padding: "8px 10px",
-                      border: "1px solid rgba(255,255,255,0.15)",
-                      background: "rgba(0,0,0,0.25)",
-                      color: "white",
-                      outline: "none",
-                    }}
-                  />
-                </td>
-              ))}
-            </tr>
-          ))}
-          {!transmissionData?.length && (
-            <tr>
-              <td colSpan={columns.length} style={{ padding: 14, opacity: 0.8 }}>
-                No transmission rows found.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-});
-
-function TransmissionViewTable({ transmissionData }) {
-  const columns = [
-    { key: "line", label: "Line" },
-    { key: "kV", label: "kV" },
-    { key: "substations", label: "Substations" },
-    { key: "capacity_MVA", label: "Capacity (MVA)" },
-    { key: "distance_miles", label: "Distance (miles)" },
-  ];
-
-  return (
-    <div style={{ overflowX: "auto", borderRadius: 12, border: "1px solid rgba(255,255,255,0.12)" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ background: "rgba(255,255,255,0.08)" }}>
-            {columns.map((c) => (
-              <th
-                key={c.key}
-                style={{
-                  textAlign: "left",
-                  padding: "10px 12px",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  borderBottom: "1px solid rgba(255,255,255,0.12)",
-                }}
-              >
-                {c.label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {transmissionData?.map((row, idx) => (
-            <tr key={idx} style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-              {columns.map((c) => (
-                <td key={c.key} style={{ padding: "10px 12px", fontSize: 13, opacity: 0.95 }}>
-                  {row?.[c.key] ?? ""}
-                </td>
-              ))}
-            </tr>
-          ))}
-          {!transmissionData?.length && (
-            <tr>
-              <td colSpan={columns.length} style={{ padding: 14, opacity: 0.8 }}>
-                No transmission rows found.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-export default function ExpertAnalysisModal({
-  project,
-  onClose,
-  onRefresh,
-  onUpdateProject,
-  onSaveSuccess,
-}) {
-  const projectName = project?.projectName || project?.name || "Project";
-  const projectId = project?.id || project?.project_id || project?.projectId || projectName;
-
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-
-  const [expertAnalysis, setExpertAnalysis] = useState(null);
-  const [transmissionData, setTransmissionData] = useState([]);
-
-  // Editable fields
-  const [overallScore, setOverallScore] = useState(0);
-  const [thermalScore, setThermalScore] = useState(0);
-  const [redevelopmentScore, setRedevelopmentScore] = useState(0);
-  const [infraScore, setInfraScore] = useState(0);
-  const [confidence, setConfidence] = useState(0);
-
-  const [summary, setSummary] = useState("");
-  const [recommendations, setRecommendations] = useState("");
-
-  const overallRating = useMemo(() => ratingFromScore(overallScore), [overallScore]);
-
-  const hydrateFromAnalysis = useCallback((analysis) => {
-    setExpertAnalysis(analysis);
-
-    setOverallScore(clamp0to100(analysis?.overall_score ?? analysis?.overallScore ?? 0));
-    setThermalScore(clamp0to100(analysis?.thermal_suitability_score ?? analysis?.thermalScore ?? 0));
-    setRedevelopmentScore(clamp0to100(analysis?.redevelopment_potential_score ?? analysis?.redevelopmentScore ?? 0));
-    setInfraScore(clamp0to100(analysis?.infrastructure_score ?? analysis?.infraScore ?? 0));
-    setConfidence(clamp0to100(analysis?.confidence_score ?? analysis?.confidence ?? 0));
-
-    setSummary(analysis?.summary ?? "");
-    setRecommendations(analysis?.recommendations ?? "");
+const ExpertAnalysisModal = ({ 
+  selectedExpertProject, 
+  setSelectedExpertProject,
+  currentUser = "PowerTrans Team",
+  authToken = null,
+  fetchExpertAnalysis,
+  saveExpertAnalysis,
+  fetchTransmissionInterconnection,
+  saveTransmissionInterconnection
+}) => {
+  if (!selectedExpertProject) return null;
+  
+  // Stable references
+  const projectRef = useRef(selectedExpertProject);
+  const isInitialLoad = useRef(true);
+  const originalAnalysisRef = useRef(null);
+  const originalTransmissionRef = useRef([]);
+  const transmissionInputRefs = useRef({});
+  
+  // Track if we need to refresh data on next mount
+  const lastProjectIdRef = useRef(null);
+  
+  // Generate default analysis
+  const generateDefaultAnalysis = useCallback((project) => {
+    const getNumericValue = (value, defaultValue = 0) => {
+      if (value === undefined || value === null) return defaultValue;
+      const num = parseFloat(value);
+      return isNaN(num) ? defaultValue : num;
+    };
+    
+    const overallScore = getNumericValue(
+      project.expertAnalysis?.overallScore || 
+      project.detailData?.["Overall Project Score"] || 
+      project.detailData?.overall_project_score || 
+      project.overall,
+      0
+    ).toFixed(1);
+    
+    const thermalScore = getNumericValue(
+      project.expertAnalysis?.thermalScore ||
+      project.detailData?.["Thermal Operating Score"] ||
+      project.detailData?.thermal_operating_score ||
+      project.thermal,
+      0
+    ).toFixed(1);
+    
+    const redevelopmentScore = getNumericValue(
+      project.expertAnalysis?.redevelopmentScore ||
+      project.detailData?.["Redevelopment Score"] ||
+      project.detailData?.redevelopment_score ||
+      project.redev,
+      0
+    ).toFixed(1);
+    
+    const projectName = project.expertAnalysis?.projectName ||
+                       project.detailData?.["Project Name"] ||
+                       project.detailData?.project_name ||
+                       project.asset ||
+                       `Project ${project.id || ""}`;
+    
+    const projectId = project.id || project.detailData?.id || "N/A";
+    
+    const defaultAnalysis = {
+      overallScore: overallScore,
+      overallRating: parseFloat(overallScore) >= 4.5 ? "Strong" : 
+                    parseFloat(overallScore) >= 3.0 ? "Moderate" : "Weak",
+      ratingClass: parseFloat(overallScore) >= 4.5 ? "strong" : 
+                  parseFloat(overallScore) >= 3.0 ? "moderate" : "weak",
+      thermalScore: thermalScore,
+      redevelopmentScore: redevelopmentScore,
+      projectName: projectName,
+      projectId: projectId,
+      thermalBreakdown: project.expertAnalysis?.thermalBreakdown || {
+        thermal_optimization: { score: 1 },
+        environmental: { score: 2 }
+      },
+      redevelopmentBreakdown: project.expertAnalysis?.redevelopmentBreakdown || {
+        redev_market: { score: 2 },
+        land_availability: { score: 2 },
+        utilities: { score: 2 },
+        interconnection: { score: 2 }
+      },
+      infrastructureScore: getNumericValue(project.expertAnalysis?.infrastructureScore, 2.0).toFixed(2),
+      confidence: project.expertAnalysis?.confidence || 75
+    };
+    
+    return defaultAnalysis;
   }, []);
 
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
+  // State
+  const [token] = useState(authToken || localStorage.getItem('token') || '');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedAnalysis, setEditedAnalysis] = useState(null);
+  const [saveStatus, setSaveStatus] = useState(null);
+  const [editedTransmissionData, setEditedTransmissionData] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [analysisData, setAnalysisData] = useState(() => {
+    const initialAnalysis = selectedExpertProject.expertAnalysis || generateDefaultAnalysis(selectedExpertProject);
+    return initialAnalysis;
+  });
+  
+  // Local state for transmission inputs
+  const [localTransmissionData, setLocalTransmissionData] = useState([]);
+  
+  // API Base URL
+  const API_BASE_URL = 'https://pt-power-pipeline-api.azurewebsites.net';
+  
+  // Get token
+  const getAuthToken = useCallback(() => {
+    return authToken || localStorage.getItem('token') || '';
+  }, [authToken]);
 
-      // 1) Expert analysis
-      const analysisResp = await axios.get(`${API_BASE_URL}/api/expert-analysis`, {
-        params: { project_id: projectId },
-      });
-      const analysis = analysisResp?.data || null;
-      hydrateFromAnalysis(analysis);
-
-      // 2) Transmission
-      const txResp = await axios.get(`${API_BASE_URL}/api/transmission`, {
-        params: { project_id: projectId },
-      });
-      setTransmissionData(Array.isArray(txResp?.data) ? txResp.data : []);
-    } catch (err) {
-      console.error("❌ Failed to load expert analysis modal data:", err);
-      // fallback safe defaults
-      hydrateFromAnalysis(null);
-      setTransmissionData([]);
-    } finally {
-      setLoading(false);
+  // Check if there are changes
+  const hasChanges = useCallback(() => {
+    if (!isEditing) return false;
+    
+    // Check analysis changes
+    if (originalAnalysisRef.current && editedAnalysis) {
+      const analysisChanged = JSON.stringify(originalAnalysisRef.current) !== JSON.stringify(editedAnalysis);
+      if (analysisChanged) return true;
     }
-  }, [projectId, hydrateFromAnalysis]);
+    
+    // Check transmission changes - use localTransmissionData
+    if (originalTransmissionRef.current && localTransmissionData) {
+      const transmissionChanged = JSON.stringify(originalTransmissionRef.current) !== JSON.stringify(localTransmissionData);
+      if (transmissionChanged) return true;
+    }
+    
+    return false;
+  }, [isEditing, editedAnalysis, localTransmissionData]);
 
+  // Refresh data
+  const refreshAllData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      
+      const projectId = selectedExpertProject.id;
+      
+      if (!projectId) {
+        return;
+      }
+      
+      // Refresh expert analysis
+      if (fetchExpertAnalysis) {
+        const freshAnalysis = await fetchExpertAnalysis(projectId);
+        
+        if (freshAnalysis) {
+          // Update analysis data
+          setAnalysisData(prev => ({
+            ...prev,
+            ...freshAnalysis,
+            thermalBreakdown: freshAnalysis.thermalBreakdown || prev.thermalBreakdown,
+            redevelopmentBreakdown: freshAnalysis.redevelopmentBreakdown || prev.redevelopmentBreakdown
+          }));
+          
+          // Update edited analysis if not in edit mode
+          if (!isEditing) {
+            setEditedAnalysis(prev => ({
+              ...prev,
+              ...freshAnalysis,
+              thermalBreakdown: freshAnalysis.thermalBreakdown || prev?.thermalBreakdown,
+              redevelopmentBreakdown: freshAnalysis.redevelopmentBreakdown || prev?.redevelopmentBreakdown
+            }));
+          }
+          
+          // Update original reference
+          originalAnalysisRef.current = JSON.parse(JSON.stringify({
+            ...(editedAnalysis || analysisData),
+            ...freshAnalysis
+          }));
+        }
+      }
+      
+      // Refresh transmission data
+      if (fetchTransmissionInterconnection) {
+        const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
+                           selectedExpertProject.detailData?.["Project Name"] ||
+                           selectedExpertProject.detailData?.project_name ||
+                           selectedExpertProject.asset ||
+                           "";
+        
+        const freshTransmission = await fetchTransmissionInterconnection(projectName);
+        
+        if (freshTransmission && Array.isArray(freshTransmission)) {
+          setEditedTransmissionData(freshTransmission);
+          setLocalTransmissionData(freshTransmission);
+          
+          // Update original reference
+          originalTransmissionRef.current = JSON.parse(JSON.stringify(freshTransmission));
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedExpertProject, fetchExpertAnalysis, fetchTransmissionInterconnection, isEditing, analysisData, editedAnalysis]);
+
+  // Fetch expert analysis
+  const fetchExpertAnalysisData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const projectId = selectedExpertProject.id;
+      
+      if (!projectId) {
+        return null;
+      }
+      
+      if (fetchExpertAnalysis) {
+        try {
+          const data = await fetchExpertAnalysis(projectId);
+          if (data) {
+            return data;
+          }
+        } catch (error) {
+          console.warn('Fetch expert analysis failed:', error);
+        }
+      }
+      
+      return null;
+      
+    } catch (error) {
+      console.error('Error fetching expert analysis:', error);
+      return null;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedExpertProject, fetchExpertAnalysis]);
+  
+  // Fetch transmission data
+  const fetchTransmissionData = useCallback(async () => {
+    try {
+      const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
+                       selectedExpertProject.detailData?.["Project Name"] ||
+                       selectedExpertProject.detailData?.project_name ||
+                       selectedExpertProject.asset ||
+                       "";
+      
+      if (!projectName) {
+        return [];
+      }
+      
+      if (fetchTransmissionInterconnection) {
+        try {
+          const data = await fetchTransmissionInterconnection(projectName);
+          
+          if (data && Array.isArray(data)) {
+            return data;
+          }
+        } catch (error) {
+          console.warn('Transmission fetch failed:', error);
+        }
+      }
+      
+      return [];
+      
+    } catch (error) {
+      console.error('Error fetching transmission data:', error);
+      return [];
+    }
+  }, [selectedExpertProject, fetchTransmissionInterconnection]);
+  
+  // Initialize all data - FIXED: Reset state when project changes
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const handleRefresh = async () => {
-    await fetchData();
-    if (typeof onRefresh === "function") onRefresh();
-  };
-
-  const handleSave = async () => {
-    try {
-      setSaving(true);
-
-      const updatedAnalysis = {
-        project_id: projectId,
-        project_name: projectName,
-        overall_score: clamp0to100(overallScore),
-        overall_rating: ratingFromScore(overallScore),
-
-        thermal_suitability_score: clamp0to100(thermalScore),
-        redevelopment_potential_score: clamp0to100(redevelopmentScore),
-        infrastructure_score: clamp0to100(infraScore),
-        confidence_score: clamp0to100(confidence),
-
-        summary: summary || "",
-        recommendations: recommendations || "",
-        updated_at: new Date().toISOString(),
-      };
-
-      // Save Expert Analysis
-      await axios.post(`${API_BASE_URL}/api/expert-analysis`, updatedAnalysis);
-
-      // Save Transmission (send as array)
-      await axios.post(`${API_BASE_URL}/api/transmission`, {
-        project_id: projectId,
-        rows: transmissionData || [],
-      });
-
-      // ✅ Update the selected project so card/list updates immediately
-      if (typeof onUpdateProject === "function") {
-        onUpdateProject(projectId, updatedAnalysis);
+    const initializeData = async () => {
+      if (!selectedExpertProject) return;
+      
+      const currentProjectId = selectedExpertProject.id;
+      
+      // Reset states when project changes
+      if (lastProjectIdRef.current !== currentProjectId) {
+        setIsEditing(false);
+        setSaveStatus(null);
+        isInitialLoad.current = true;
+        lastProjectIdRef.current = currentProjectId;
       }
-
-      // ✅ Notify parent (DashboardContent) if they provided callback
-      if (typeof onSaveSuccess === "function") {
-        onSaveSuccess(projectId, updatedAnalysis);
+      
+      let dbAnalysis = await fetchExpertAnalysisData();
+      let dbTransmission = await fetchTransmissionData();
+      
+      let initialAnalysis = generateDefaultAnalysis(selectedExpertProject);
+      
+      if (dbAnalysis) {
+        initialAnalysis = {
+          ...initialAnalysis,
+          ...dbAnalysis,
+          thermalBreakdown: dbAnalysis.thermalBreakdown || initialAnalysis.thermalBreakdown,
+          redevelopmentBreakdown: dbAnalysis.redevelopmentBreakdown || initialAnalysis.redevelopmentBreakdown
+        };
       }
+      
+      // Store original data for change detection
+      originalAnalysisRef.current = JSON.parse(JSON.stringify(initialAnalysis));
+      originalTransmissionRef.current = JSON.parse(JSON.stringify(dbTransmission || []));
+      
+      setEditedAnalysis(initialAnalysis);
+      setAnalysisData(initialAnalysis);
+      setEditedTransmissionData(dbTransmission || []);
+      setLocalTransmissionData(dbTransmission || []);
+      
+      isInitialLoad.current = false;
+    };
+    
+    initializeData();
+    
+    // Cleanup function
+    return () => {
+      // Optional: Reset some states when component unmounts
+    };
+  }, [selectedExpertProject]);
 
-      // ✅ Support the “pass callback inside selected project” pattern (your current approach)
-      if (typeof project?.onSaveSuccess === "function") {
-        project.onSaveSuccess(projectId, updatedAnalysis);
-      }
+  // Recalculate scores
+  const recalculateScores = useCallback((analysisData) => {
+    const thermalBreakdown = analysisData.thermalBreakdown || {};
+    const redevBreakdown = analysisData.redevelopmentBreakdown || {};
+    
+    const getSafeScore = (breakdown, key, defaultValue = 0) => {
+      const value = breakdown[key]?.score;
+      if (value === undefined || value === null) return defaultValue;
+      const num = parseInt(value);
+      return isNaN(num) ? defaultValue : num;
+    };
+    
+    let thermalScore = 0;
+    thermalScore += getSafeScore(thermalBreakdown, 'thermal_optimization', 1) * 0.05;
+    thermalScore += getSafeScore(thermalBreakdown, 'environmental', 2) * 0.15;
+    
+    let redevelopmentScore = 0;
+    redevelopmentScore += getSafeScore(redevBreakdown, 'redev_market', 2) * 0.40;
+    
+    const landScore = getSafeScore(redevBreakdown, 'land_availability', 2);
+    const utilitiesScore = getSafeScore(redevBreakdown, 'utilities', 2);
+    const infrastructureScore = (landScore + utilitiesScore) / 2;
+    redevelopmentScore += infrastructureScore * 0.30;
+    
+    redevelopmentScore += getSafeScore(redevBreakdown, 'interconnection', 2) * 0.30;
+    
+    const overallScore = (thermalScore + redevelopmentScore) * 2;
+    
+    const result = {
+      ...analysisData,
+      thermalScore: thermalScore.toFixed(2),
+      redevelopmentScore: redevelopmentScore.toFixed(2),
+      overallScore: overallScore.toFixed(2),
+      infrastructureScore: infrastructureScore.toFixed(2),
+      overallRating: overallScore >= 4.5 ? 'Strong' : overallScore >= 3.0 ? 'Moderate' : 'Weak',
+      confidence: overallScore >= 4.5 ? 85 : overallScore >= 3.0 ? 75 : 60
+    };
+    
+    return result;
+  }, []);
 
-      // Optional: persist in localStorage (safe fallback)
-      try {
-        const key = "expert_analyses";
-        const raw = localStorage.getItem(key);
-        const existing = raw ? JSON.parse(raw) : [];
-        const updated = Array.isArray(existing) ? [...existing] : [];
-        const idx = updated.findIndex((a) => a.project_id === projectId || a.projectId === projectId);
-        if (idx >= 0) updated[idx] = { ...updated[idx], ...updatedAnalysis };
-        else updated.push(updatedAnalysis);
-        localStorage.setItem(key, JSON.stringify(updated));
-      } catch (e) {
-        // ignore localStorage errors
-      }
-
-      setIsEditing(false);
-      await fetchData();
-    } catch (err) {
-      console.error("❌ Save failed:", err);
-      alert("Save failed. Please check the server logs and try again.");
-    } finally {
-      setSaving(false);
+  // Handle save - FIXED: Exit edit mode after save
+  const handleSave = useCallback(async () => {
+    console.log('💾 Save button clicked');
+    
+    // Check if there are changes
+    if (!hasChanges()) {
+      setSaveStatus('no-changes');
+      setTimeout(() => {
+        setSaveStatus(null);
+      }, 2000);
+      return;
     }
-  };
+    
+    if (saveStatus === 'saving') return;
+    
+    setSaveStatus('saving');
+    
+    try {
+      const currentAnalysisToSave = editedAnalysis || analysisData;
+      
+      if (!currentAnalysisToSave) {
+        throw new Error('No analysis data to save');
+      }
+      
+      const updatedAnalysis = recalculateScores(currentAnalysisToSave);
+      
+      const projectId = selectedExpertProject.id || 
+                       selectedExpertProject.detailData?.id || 
+                       selectedExpertProject.expertAnalysis?.projectId;
+      
+      if (!projectId) {
+        throw new Error('Project ID not found');
+      }
+      
+      // Sync local transmission data to parent state before saving
+      setEditedTransmissionData(localTransmissionData);
+      
+      const saveData = {
+        projectId: projectId,
+        projectName: updatedAnalysis.projectName,
+        overallScore: parseFloat(updatedAnalysis.overallScore) || 0,
+        overallRating: updatedAnalysis.overallRating || 'Moderate',
+        confidence: updatedAnalysis.confidence || 75,
+        thermalOperatingScore: parseFloat(updatedAnalysis.thermalScore) || 0,
+        thermalBreakdown: updatedAnalysis.thermalBreakdown || {
+          thermal_optimization: { score: 1 },
+          environmental: { score: 2 }
+        },
+        redevelopmentScore: parseFloat(updatedAnalysis.redevelopmentScore) || 0,
+        redevelopmentBreakdown: updatedAnalysis.redevelopmentBreakdown || {
+          redev_market: { score: 2 },
+          land_availability: { score: 2 },
+          utilities: { score: 2 },
+          interconnection: { score: 2 }
+        },
+        infrastructureScore: parseFloat(updatedAnalysis.infrastructureScore) || 0,
+        editedBy: currentUser,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      if (saveExpertAnalysis) {
+        const savedResult = await saveExpertAnalysis(saveData);
+        console.log('✅ Save successful:', savedResult);
+        
+        // Update original references with saved data
+        originalAnalysisRef.current = JSON.parse(JSON.stringify(updatedAnalysis));
+        originalTransmissionRef.current = JSON.parse(JSON.stringify(localTransmissionData));
+        
+        // Update all states with saved data
+        setAnalysisData(updatedAnalysis);
+        setEditedAnalysis(updatedAnalysis);
+       
+        setIsEditing(false);
+        
+        setSaveStatus('success');
+
+      if (selectedExpertProject.onSaveSuccess) {
+        selectedExpertProject.onSaveSuccess();
+      }
+
+      window.dispatchEvent(new Event('expertAnalysisUpdated'));
+
+      if (window.refreshDashboardData) {
+        window.refreshDashboardData();
+      }
+        
+        // Save transmission data
+        if (localTransmissionData.length > 0) {
+          if (saveTransmissionInterconnection) {
+            saveTransmissionInterconnection(projectId, localTransmissionData)
+              .then(() => console.log('✅ Transmission data saved'))
+              .catch(error => console.error('Transmission save error:', error));
+          }
+        }
+        
+        // Clear success message
+        setTimeout(() => {
+          setSaveStatus(null);
+        }, 2000);
+        
+      } else {
+        throw new Error('No save function provided');
+      }
+      
+    } catch (error) {
+      console.error('❌ Save error:', error);
+      
+      setSaveStatus('error');
+      
+      setTimeout(() => {
+        const errorMessage = error.message.includes('404') 
+          ? 'Save failed: API endpoint not found.'
+          : error.message.includes('401') || error.message.includes('403')
+          ? 'Save failed: Authentication error.'
+          : `Save failed: ${error.message}`;
+        
+        alert(`❌ ${errorMessage}`);
+      }, 100);
+    }
+  }, [selectedExpertProject, editedAnalysis, analysisData, saveStatus, recalculateScores, saveExpertAnalysis, saveTransmissionInterconnection, localTransmissionData, currentUser, hasChanges]);
+
+  // Handle modal close
+  const handleClose = useCallback(() => {
+    if (isEditing && window.refreshDashboardData) {
+      window.refreshDashboardData();
+    }
+    
+    setSelectedExpertProject(null);
+  }, [isEditing, setSelectedExpertProject]);
+
+  // Manual refresh
+  const handleManualRefresh = useCallback(async () => {
+    if (isEditing && hasChanges()) {
+      if (!window.confirm('You have unsaved changes. Refreshing will discard them. Continue?')) {
+        return;
+      }
+      setIsEditing(false);
+    }
+    
+    await refreshAllData();
+  }, [isEditing, hasChanges, refreshAllData]);
+
+  // Get score color class
+  const getScoreColorClass = useCallback((score) => {
+    const numScore = parseFloat(score) || 0;
+    if (numScore >= 2.5) return 'score-excellent';
+    if (numScore >= 1.5) return 'score-good';
+    if (numScore >= 0.5) return 'score-fair';
+    return 'score-poor';
+  }, []);
+
+  // Get score text
+  const getScoreText = useCallback((score) => {
+    const numScore = parseFloat(score) || 0;
+    if (numScore >= 2.5) return 'EXCELLENT';
+    if (numScore >= 1.5) return 'GOOD';
+    if (numScore >= 0.5) return 'FAIR';
+    return 'POOR';
+  }, []);
+
+  // Get rating color
+  const getRatingColor = useCallback((rating) => {
+    switch(rating?.toLowerCase()) {
+      case 'strong': return '#10b981';
+      case 'moderate': return '#f59e0b';
+      case 'weak': return '#ef4444';
+      default: return '#6b7280';
+    }
+  }, []);
+
+  // Handle score change
+  const handleScoreChange = useCallback((category, component, value) => {
+    const currentAnalysis = editedAnalysis || analysisData;
+    
+    const updated = { ...currentAnalysis };
+    
+    if (category === 'thermal') {
+      updated.thermalBreakdown = {
+        ...updated.thermalBreakdown,
+        [component]: {
+          ...updated.thermalBreakdown[component],
+          score: parseInt(value) || 0
+        }
+      };
+    } else if (category === 'redevelopment') {
+      updated.redevelopmentBreakdown = {
+        ...updated.redevelopmentBreakdown,
+        [component]: {
+          ...updated.redevelopmentBreakdown[component],
+          score: parseInt(value) || 0
+        }
+      };
+    }
+    
+    const recalculated = recalculateScores(updated);
+    
+    setEditedAnalysis(recalculated);
+  }, [editedAnalysis, analysisData, recalculateScores]);
+
+  // Handle transmission change
+  const handleLocalTransmissionChange = useCallback((index, field, value, event) => {
+    if (!isEditing) return;
+    
+    // Store the focused element before update
+    const focusedElement = document.activeElement;
+    const selectionStart = focusedElement.selectionStart;
+    const selectionEnd = focusedElement.selectionEnd;
+    
+    setLocalTransmissionData(prev => {
+      const newData = [...prev];
+      newData[index] = {
+        ...newData[index],
+        [field]: field === 'excessInjectionCapacity' || field === 'excessWithdrawalCapacity' 
+          ? parseFloat(value) || 0 
+          : value
+      };
+      return newData;
+    });
+    
+    // Restore focus and cursor position AFTER state update
+    setTimeout(() => {
+      if (focusedElement && focusedElement.tagName === 'INPUT') {
+        focusedElement.focus();
+        if (focusedElement.setSelectionRange) {
+          focusedElement.setSelectionRange(selectionStart, selectionEnd);
+        }
+      }
+    }, 0);
+  }, [isEditing]);
+
+  // Add new POI voltage entry
+  const addNewTransmissionEntry = useCallback((e) => {
+    if (!isEditing) return;
+    e.preventDefault();
+    
+    const projectName = selectedExpertProject?.expertAnalysis?.projectName || 
+                       selectedExpertProject.detailData?.["Project Name"] ||
+                       selectedExpertProject.detailData?.project_name ||
+                       selectedExpertProject.asset ||
+                       "";
+    
+    setLocalTransmissionData(prev => [
+      ...prev,
+      {
+        id: Date.now(),
+        site: projectName,
+        excessIXCapacity: true,
+        constraints: "-",
+        poiVoltage: "",
+        excessInjectionCapacity: 0,
+        excessWithdrawalCapacity: 0
+      }
+    ]);
+  }, [isEditing, selectedExpertProject]);
+
+  // Remove POI voltage entry
+  const removeTransmissionEntry = useCallback((index) => {
+    if (!isEditing) return;
+    
+    setLocalTransmissionData(prev => {
+      const newData = [...prev];
+      newData.splice(index, 1);
+      return newData;
+    });
+  }, [isEditing]);
+
+  // Memoized Transmission Edit Table
+  const TransmissionEditTable = React.memo(({ data, onFieldChange, onAdd, onRemove }) => {
+    const handleChange = useCallback((index, field, value, event) => {
+      onFieldChange(index, field, value, event);
+    }, [onFieldChange]);
+    
+    return (
+      <div className="transmission-edit">
+        <div className="transmission-table-container" style={{ overflowX: 'auto', marginBottom: '16px' }}>
+          <table className="transmission-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '25%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>POI Voltage</th>
+                <th style={{ width: '25%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Excess Injection Capacity (MW)</th>
+                <th style={{ width: '25%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Excess Withdrawal Capacity (MW)</th>
+                <th style={{ width: '15%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Constraints</th>
+                <th style={{ width: '10%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((item, index) => (
+                <tr key={`transmission-${item.id || index}`} style={{ borderBottom: '1px solid #4a5568' }}>
+                  <td style={{ padding: '12px' }}>
+                    <input
+                      type="text"
+                      defaultValue={item.poiVoltage || ''}
+                      onBlur={(e) => handleChange(index, 'poiVoltage', e.target.value)}
+                      placeholder="e.g., 69 kV"
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        fontSize: '14px',
+                        backgroundColor: '#2d3748',
+                        color: 'white',
+                        border: '1px solid #4a5568',
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <input
+                      type="number"
+                      defaultValue={item.excessInjectionCapacity || 0}
+                      onBlur={(e) => handleChange(index, 'excessInjectionCapacity', e.target.value)}
+                      placeholder="0.0"
+                      step="0.1"
+                      min="0"
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        fontSize: '14px',
+                        backgroundColor: '#2d3748',
+                        color: 'white',
+                        border: '1px solid #4a5568',
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <input
+                      type="number"
+                      defaultValue={item.excessWithdrawalCapacity || 0}
+                      onBlur={(e) => handleChange(index, 'excessWithdrawalCapacity', e.target.value)}
+                      placeholder="0.0"
+                      step="0.1"
+                      min="0"
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        fontSize: '14px',
+                        backgroundColor: '#2d3748',
+                        color: 'white',
+                        border: '1px solid #4a5568',
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <input
+                      type="text"
+                      defaultValue={item.constraints || '-'}
+                      onBlur={(e) => handleChange(index, 'constraints', e.target.value)}
+                      placeholder="e.g., None, 1, 2"
+                      style={{ 
+                        width: '100%', 
+                        padding: '10px 12px', 
+                        fontSize: '14px',
+                        backgroundColor: '#2d3748',
+                        color: 'white',
+                        border: '1px solid #4a5568',
+                        borderRadius: '6px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '12px' }}>
+                    <button 
+                      onClick={() => onRemove(index)}
+                      title="Remove this entry"
+                      style={{ 
+                        background: 'rgba(239, 68, 68, 0.1)',
+                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                        color: '#fca5a5',
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      🗑️ Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              
+              {data.length === 0 && (
+                <tr>
+                  <td colSpan="5" style={{ textAlign: 'center', color: '#a0aec0', fontStyle: 'italic', padding: '20px' }}>
+                    No transmission data available. Click "Add POI Voltage" to add new entries.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        
+        <div className="transmission-actions" style={{ display: 'flex', justifyContent: 'center', marginTop: '16px' }}>
+          <button 
+            onClick={onAdd}
+            style={{
+              background: 'rgba(34, 197, 94, 0.1)',
+              border: '1px solid rgba(34, 197, 94, 0.3)',
+              color: '#86efac',
+              padding: '10px 20px',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: '500',
+              fontSize: '14px'
+            }}
+          >
+            + Add POI Voltage
+          </button>
+        </div>
+      </div>
+    );
+  }, (prevProps, nextProps) => {
+    // Custom comparison to prevent unnecessary re-renders
+    if (prevProps.data.length !== nextProps.data.length) return false;
+    
+    // Check if any item actually changed
+    const prevData = prevProps.data;
+    const nextData = nextProps.data;
+    
+    for (let i = 0; i < prevData.length; i++) {
+      const prevItem = prevData[i];
+      const nextItem = nextData[i];
+      
+      // Compare only the values that matter for rendering
+      if (prevItem.poiVoltage !== nextItem.poiVoltage ||
+          prevItem.excessInjectionCapacity !== nextItem.excessInjectionCapacity ||
+          prevItem.excessWithdrawalCapacity !== nextItem.excessWithdrawalCapacity ||
+          prevItem.constraints !== nextItem.constraints) {
+        return false;
+      }
+    }
+    
+    return true;
+  });
+
+  const TransmissionViewTable = React.memo(({ data }) => (
+    <div className="transmission-view">
+      {data.length > 0 ? (
+        <div className="transmission-table-container" style={{ overflowX: 'auto' }}>
+          <table className="transmission-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+            <thead>
+              <tr>
+                <th style={{ width: '30%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>POI Voltage</th>
+                <th style={{ width: '30%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Excess Injection Capacity</th>
+                <th style={{ width: '30%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Excess Withdrawal Capacity</th>
+                <th style={{ width: '20%', background: '#1a202c', color: '#a0aec0', padding: '12px', textAlign: 'left' }}>Constraints</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((item, index) => (
+                <tr key={index} style={{ borderBottom: '1px solid #4a5568' }}>
+                  <td style={{ padding: '12px', color: '#e2e8f0' }}>{item.poiVoltage || ''}</td>
+                  <td style={{ padding: '12px', color: '#e2e8f0' }}>{parseFloat(item.excessInjectionCapacity || 0).toFixed(1)} MW</td>
+                  <td style={{ padding: '12px', color: '#e2e8f0' }}>{parseFloat(item.excessWithdrawalCapacity || 0).toFixed(1)} MW</td>
+                  <td style={{ padding: '12px', color: '#e2e8f0' }}>{item.constraints === "-" ? "None" : item.constraints || 'None'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '30px 20px', color: '#a0aec0' }}>
+          <div style={{ fontSize: '32px', marginBottom: '8px', opacity: '0.5' }}>📊</div>
+          <div>No transmission interconnection data available.</div>
+        </div>
+      )}
+    </div>
+  ));
+
+  // Current analysis data
+  const currentAnalysis = editedAnalysis || analysisData;
+  
+  // Use localTransmissionData for editing, editedTransmissionData for viewing
+  const displayTransmissionData = isEditing ? localTransmissionData : editedTransmissionData;
+  
+  // Loading overlay
+  if (isLoading && isInitialLoad.current) {
+    return (
+      <div className="modal-overlay" onClick={() => !isEditing && handleClose()}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{
+          background: '#1a1a1a',
+          borderRadius: '12px',
+          padding: '40px',
+          textAlign: 'center'
+        }}>
+          <div className="loading-spinner" style={{
+            width: '40px',
+            height: '40px',
+            border: '3px solid rgba(255,255,255,0.1)',
+            borderTopColor: '#3b82f6',
+            borderRadius: '50%',
+            margin: '0 auto 20px',
+            animation: 'spin 1s linear infinite'
+          }} />
+          <p style={{ color: '#a0aec0' }}>Loading expert analysis...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0,0,0,0.65)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 9999,
-        padding: 16,
-      }}
-      onMouseDown={(e) => {
-        // click outside to close
-        if (e.target === e.currentTarget) onClose?.();
-      }}
-    >
-      <div
-        style={{
-          width: "min(1100px, 100%)",
-          maxHeight: "92vh",
-          overflow: "auto",
-          borderRadius: 16,
-          background: "#0b1020",
-          color: "white",
-          border: "1px solid rgba(255,255,255,0.12)",
-          boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            position: "sticky",
-            top: 0,
-            zIndex: 2,
-            background: "linear-gradient(180deg, rgba(11,16,32,1) 0%, rgba(11,16,32,0.92) 100%)",
-            borderBottom: "1px solid rgba(255,255,255,0.10)",
-            padding: "14px 16px",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>Expert Analysis</div>
-            <div style={{ fontSize: 12, opacity: 0.8 }}>{projectName}</div>
+    <div className="modal-overlay" onClick={() => !isEditing && handleClose()}>
+      <div className="modal-content expert-analysis-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Save Status Overlay */}
+        {saveStatus && (
+          <div className="save-status-overlay" style={{
+            position: 'fixed',
+            top: '0',
+            left: '0',
+            right: '0',
+            bottom: '0',
+            background: 'rgba(0, 0, 0, 0.7)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10001
+          }}>
+            <div style={{
+              background: '#2d3748',
+              padding: '24px',
+              borderRadius: '12px',
+              border: '1px solid #4a5568',
+              textAlign: 'center',
+              boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
+            }}>
+              {saveStatus === 'saving' && (
+                <>
+                  <div style={{
+                    width: '50px',
+                    height: '50px',
+                    border: '3px solid rgba(59, 130, 246, 0.3)',
+                    borderTopColor: '#3b82f6',
+                    borderRadius: '50%',
+                    margin: '0 auto 16px',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                  <h3 style={{ color: 'white', margin: '0 0 8px' }}>Saving Changes</h3>
+                  <p style={{ color: '#a0aec0' }}>Please wait while we save your changes...</p>
+                </>
+              )}
+              {saveStatus === 'success' && (
+                <>
+                  <div style={{
+                    fontSize: '48px',
+                    marginBottom: '16px',
+                    color: '#10b981'
+                  }}>✓</div>
+                  <h3 style={{ color: 'white', margin: '0 0 8px' }}>Changes Saved!</h3>
+                  <p style={{ color: '#a0aec0' }}>Your changes have been saved successfully.</p>
+                </>
+              )}
+              {saveStatus === 'no-changes' && (
+                <>
+                  <div style={{
+                    fontSize: '48px',
+                    marginBottom: '16px',
+                    color: '#f59e0b'
+                  }}>ℹ️</div>
+                  <h3 style={{ color: 'white', margin: '0 0 8px' }}>No Changes Made</h3>
+                  <p style={{ color: '#a0aec0' }}>You haven't made any changes to save.</p>
+                </>
+              )}
+              {saveStatus === 'error' && (
+                <>
+                  <div style={{
+                    fontSize: '48px',
+                    marginBottom: '16px',
+                    color: '#ef4444'
+                  }}>✗</div>
+                  <h3 style={{ color: 'white', margin: '0 0 8px' }}>Save Failed</h3>
+                  <p style={{ color: '#a0aec0' }}>Unable to save changes. Please try again.</p>
+                </>
+              )}
+            </div>
           </div>
-
-          <button
-            onClick={() => setIsEditing((v) => !v)}
-            style={btnStyle("secondary")}
-            disabled={loading}
-            title="Toggle edit mode"
-          >
-            <Edit3 size={16} />
-            {isEditing ? "Viewing" : "Edit"}
-          </button>
-
-          <button onClick={handleRefresh} style={btnStyle("secondary")} disabled={loading || saving}>
-            <RefreshCw size={16} />
-            Refresh
-          </button>
-
-          <button onClick={handleSave} style={btnStyle("primary")} disabled={!isEditing || loading || saving}>
-            <Save size={16} />
-            {saving ? "Saving..." : "Save"}
-          </button>
-
-          <button onClick={onClose} style={btnStyle("danger")}>
-            <X size={16} />
-            Close
-          </button>
+        )}
+        
+        {/* Header */}
+        <div className="modal-header" style={{
+          padding: '20px',
+          background: 'linear-gradient(135deg, #2d3748 0%, #1a202c 100%)',
+          borderBottom: '1px solid #4a5568',
+          borderRadius: '12px 12px 0 0'
+        }}>
+          <div className="header-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+            <div className="header-left">
+              <h2 style={{ margin: '0', color: '#ffffff', fontSize: '24px', fontWeight: '600' }}>
+                {currentAnalysis?.projectName || 'Project'} - Expert Analysis
+              </h2>
+              <p className="subtitle" style={{ color: '#a0aec0', margin: '4px 0 0 0', fontSize: '14px' }}>
+                AI-powered assessment of all pipeline projects
+              </p>
+            </div>
+            <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button 
+                onClick={handleManualRefresh}
+                title="Refresh data from server"
+                style={{
+                  background: 'rgba(59, 130, 246, 0.1)',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  color: '#93c5fd',
+                  padding: '6px 12px',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '12px'
+                }}
+              >
+                🔄 Refresh
+              </button>
+              <button onClick={handleClose} style={{
+                background: 'none',
+                border: 'none',
+                color: '#a0aec0',
+                fontSize: '24px',
+                cursor: 'pointer',
+                padding: '0',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>×</button>
+            </div>
+          </div>
+          
+          <div className="edit-toggle" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {!isEditing ? (
+              <button onClick={() => {
+                // Store current state as original when entering edit mode
+                originalAnalysisRef.current = JSON.parse(JSON.stringify(currentAnalysis));
+                originalTransmissionRef.current = JSON.parse(JSON.stringify(editedTransmissionData));
+                setLocalTransmissionData(editedTransmissionData); // Sync local state
+                setIsEditing(true);
+              }} style={{
+                background: 'rgba(59, 130, 246, 0.1)',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                color: '#93c5fd',
+                padding: '8px 16px',
+                borderRadius: '6px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}>
+                <span>✏️</span> Enable Editing
+              </button>
+            ) : (
+              <div className="edit-mode-indicator" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  border: '1px solid rgba(245, 158, 11, 0.3)',
+                  color: '#fbbf24',
+                  padding: '4px 12px',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  fontWeight: '600'
+                }}>EDIT MODE</span>
+                <button onClick={() => {
+                  setIsEditing(false);
+                  setEditedAnalysis(JSON.parse(JSON.stringify(originalAnalysisRef.current)));
+                  setLocalTransmissionData(JSON.parse(JSON.stringify(originalTransmissionRef.current)));
+                }} style={{
+                  background: 'rgba(239, 68, 68, 0.1)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  color: '#fca5a5',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}>
+                  Cancel Edit
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-
-        {/* Body */}
-        <div style={{ padding: 16, display: "grid", gap: 18 }}>
-          {loading ? (
-            <div style={{ padding: 14, opacity: 0.85 }}>Loading expert analysis...</div>
-          ) : (
-            <>
-              {/* KPI Row */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0, 1fr))", gap: 12 }}>
-                <KPI label="Overall Score" value={overallScore} />
-                <KPI label="Overall Rating" value={overallRating} />
-                <KPI label="Thermal Suitability" value={thermalScore} />
-                <KPI label="Infrastructure" value={infraScore} />
-                <KPI label="Confidence" value={`${confidence}%`} />
+        
+        {/* Overall Score Summary */}
+        <div className="overall-score-section" style={{ padding: '20px', borderBottom: '1px solid #4a5568' }}>
+          <h3 style={{ color: '#ffffff', margin: '0 0 16px 0', fontSize: '18px' }}>Overall Score Summary</h3>
+          <div className="score-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+            <div className="score-card" style={{ 
+              background: '#2d3748', 
+              padding: '20px', 
+              borderRadius: '8px', 
+              border: '1px solid #4a5568',
+              textAlign: 'center'
+            }}>
+              <div style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                OVERALL SCORE
               </div>
-
-              {/* Scores */}
-              <div
-                style={{
-                  borderRadius: 16,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.05)",
-                  padding: 16,
-                  display: "grid",
-                  gap: 12,
-                }}
-              >
-                <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 4 }}>Scoring Breakdown</div>
-
-                <SliderRow label="Overall Score" value={overallScore} onChange={setOverallScore} disabled={!isEditing} />
-                <SliderRow
-                  label="Thermal Suitability Score"
-                  value={thermalScore}
-                  onChange={setThermalScore}
-                  disabled={!isEditing}
-                />
-                <SliderRow
-                  label="Redevelopment Potential Score"
-                  value={redevelopmentScore}
-                  onChange={setRedevelopmentScore}
-                  disabled={!isEditing}
-                />
-                <SliderRow
-                  label="Infrastructure Score"
-                  value={infraScore}
-                  onChange={setInfraScore}
-                  disabled={!isEditing}
-                />
-                <SliderRow label="Confidence Score (%)" value={confidence} onChange={setConfidence} disabled={!isEditing} />
+              <div style={{ 
+                fontSize: '28px', 
+                fontWeight: '700', 
+                marginBottom: '4px',
+                color: getScoreColorClass((currentAnalysis?.overallScore || 0) / 2) === 'score-excellent' ? '#10b981' :
+                       getScoreColorClass((currentAnalysis?.overallScore || 0) / 2) === 'score-good' ? '#f59e0b' :
+                       getScoreColorClass((currentAnalysis?.overallScore || 0) / 2) === 'score-fair' ? '#fbbf24' : '#ef4444'
+              }}>
+                {(parseFloat(currentAnalysis?.overallScore) || 0).toFixed(1)}/6.0
               </div>
-
-              {/* Narrative */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <div
-                  style={{
-                    borderRadius: 16,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    padding: 16,
-                    display: "grid",
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ fontSize: 14, fontWeight: 800 }}>Summary</div>
-                  <TextArea label="" value={summary} onChange={setSummary} disabled={!isEditing} rows={8} />
-                </div>
-
-                <div
-                  style={{
-                    borderRadius: 16,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    padding: 16,
-                    display: "grid",
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ fontSize: 14, fontWeight: 800 }}>Recommendations</div>
-                  <TextArea label="" value={recommendations} onChange={setRecommendations} disabled={!isEditing} rows={8} />
-                </div>
+              <div style={{ color: '#a0aec0', fontSize: '14px', marginBottom: '8px' }}>
+                {Math.round(((parseFloat(currentAnalysis?.overallScore) || 0) / 6) * 100)}%
               </div>
-
-              {/* Transmission */}
-              <div
-                style={{
-                  borderRadius: 16,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.05)",
-                  padding: 16,
-                  display: "grid",
-                  gap: 12,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                  <div style={{ fontSize: 14, fontWeight: 800 }}>Transmission Data</div>
-                  <div style={{ fontSize: 12, opacity: 0.8 }}>
-                    {isEditing ? "Edits are committed on field blur" : "Read-only view"}
+              <div style={{ 
+                fontWeight: '600', 
+                fontSize: '14px',
+                color: getRatingColor(currentAnalysis?.overallRating)
+              }}>
+                {currentAnalysis?.overallRating || 'N/A'}
+              </div>
+            </div>
+            
+            <div className="score-card" style={{ 
+              background: '#2d3748', 
+              padding: '20px', 
+              borderRadius: '8px', 
+              border: '1px solid #4a5568',
+              textAlign: 'center'
+            }}>
+              <div style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                THERMAL OPERATING SCORE
+              </div>
+              <div style={{ 
+                fontSize: '28px', 
+                fontWeight: '700', 
+                marginBottom: '4px',
+                color: getScoreColorClass(currentAnalysis?.thermalScore || 0) === 'score-excellent' ? '#10b981' :
+                       getScoreColorClass(currentAnalysis?.thermalScore || 0) === 'score-good' ? '#f59e0b' :
+                       getScoreColorClass(currentAnalysis?.thermalScore || 0) === 'score-fair' ? '#fbbf24' : '#ef4444'
+              }}>
+                {(parseFloat(currentAnalysis?.thermalScore) || 0).toFixed(2)}/3.0
+              </div>
+              <div style={{ color: '#a0aec0', fontSize: '14px', marginBottom: '8px' }}>
+                {Math.round(((parseFloat(currentAnalysis?.thermalScore) || 0) / 3) * 100)}%
+              </div>
+              <div style={{ fontWeight: '600', fontSize: '14px' }}>
+                {getScoreText(parseFloat(currentAnalysis?.thermalScore) || 0)}
+              </div>
+            </div>
+            
+            <div className="score-card" style={{ 
+              background: '#2d3748', 
+              padding: '20px', 
+              borderRadius: '8px', 
+              border: '1px solid #4a5568',
+              textAlign: 'center'
+            }}>
+              <div style={{ color: '#a0aec0', fontSize: '12px', fontWeight: '600', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                REDEVELOPMENT
+              </div>
+              <div style={{ 
+                fontSize: '28px', 
+                fontWeight: '700', 
+                marginBottom: '4px',
+                color: getScoreColorClass(currentAnalysis?.redevelopmentScore || 0) === 'score-excellent' ? '#10b981' :
+                       getScoreColorClass(currentAnalysis?.redevelopmentScore || 0) === 'score-good' ? '#f59e0b' :
+                       getScoreColorClass(currentAnalysis?.redevelopmentScore || 0) === 'score-fair' ? '#fbbf24' : '#ef4444'
+              }}>
+                {(parseFloat(currentAnalysis?.redevelopmentScore) || 0).toFixed(2)}/3.0
+              </div>
+              <div style={{ color: '#a0aec0', fontSize: '14px', marginBottom: '8px' }}>
+                {Math.round(((parseFloat(currentAnalysis?.redevelopmentScore) || 0) / 3) * 100)}%
+              </div>
+              <div style={{ fontWeight: '600', fontSize: '14px' }}>
+                {getScoreText(parseFloat(currentAnalysis?.redevelopmentScore) || 0)}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Expert Analysis Cards */}
+        <div className="expert-cards-section" style={{ padding: '20px' }}>
+          <h3 style={{ color: '#ffffff', margin: '0 0 8px 0', fontSize: '18px' }}>Expert Analysis Cards</h3>
+          <p style={{ color: '#a0aec0', margin: '0 0 20px 0', fontSize: '14px' }}>
+            Click info buttons for scoring criteria details
+          </p>
+          
+          <div className="cards-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
+            {/* Left Card - Thermal Operating Assessment */}
+            <div style={{ background: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px' }}>
+              <div style={{ padding: '16px', background: 'rgba(0, 0, 0, 0.2)', borderBottom: '1px solid #4a5568' }}>
+                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '16px' }}>Thermal Operating Assessment</h4>
+                <p style={{ color: '#a0aec0', fontSize: '13px', margin: '0 0 8px 0' }}>
+                  Evaluation of existing plant operations and market position
+                </p>
+                <span style={{ display: 'inline-block', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
+                  Weight: 50%
+                </span>
+              </div>
+              
+              <div style={{ padding: '16px' }}>
+                {/* M&A Thermal Optimization */}
+                <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      M&A
+                    </span>
+                    <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Thermal Optimization Potential</h5>
+                  </div>
+                  <div>
+                    {isEditing ? (
+                      <select 
+                        value={currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
+                        onChange={(e) => handleScoreChange('thermal', 'thermal_optimization', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          fontSize: '14px',
+                          backgroundColor: '#2d3748',
+                          color: 'white',
+                          border: '1px solid #4a5568',
+                          borderRadius: '6px',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        <option value="1">1 - No identifiable value add</option>
+                        <option value="2">2 - Readily apparent value add</option>
+                      </select>
+                    ) : (
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#2d3748',
+                        borderRadius: '6px',
+                        border: '1px solid #4a5568',
+                        marginBottom: '8px'
+                      }}>
+                        Score: {currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 5%</span>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>
+                        Contribution: {(((currentAnalysis?.thermalBreakdown?.thermal_optimization?.score || 1) * 0.05).toFixed(2))}
+                      </span>
+                    </div>
                   </div>
                 </div>
-
-                {isEditing ? (
-                  <TransmissionEditTable
-                    transmissionData={transmissionData}
-                    setTransmissionData={setTransmissionData}
-                  />
-                ) : (
-                  <TransmissionViewTable transmissionData={transmissionData} />
-                )}
+                
+                {/* Environmental Considerations */}
+                <div style={{ marginBottom: '0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      Env
+                    </span>
+                    <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Environmental Considerations</h5>
+                  </div>
+                  <div>
+                    {isEditing ? (
+                      <select 
+                        value={currentAnalysis?.thermalBreakdown?.environmental?.score || 2}
+                        onChange={(e) => handleScoreChange('thermal', 'environmental', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          fontSize: '14px',
+                          backgroundColor: '#2d3748',
+                          color: 'white',
+                          border: '1px solid #4a5568',
+                          borderRadius: '6px',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        <option value="0">0 - Known and not mitigable</option>
+                        <option value="1">1 - Not known</option>
+                        <option value="2">2 - Known, mitigable, no cost advantage</option>
+                        <option value="3">3 - Known, mitigable, PT has cost advantage</option>
+                      </select>
+                    ) : (
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#2d3748',
+                        borderRadius: '6px',
+                        border: '1px solid #4a5568',
+                        marginBottom: '8px'
+                      }}>
+                        Score: {currentAnalysis?.thermalBreakdown?.environmental?.score || 2}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 15%</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </>
+            </div>
+            
+            {/* Right Card - Redevelopment Assessment */}
+            <div style={{ background: '#2d3748', border: '1px solid #4a5568', borderRadius: '8px' }}>
+              <div style={{ padding: '16px', background: 'rgba(0, 0, 0, 0.2)', borderBottom: '1px solid #4a5568' }}>
+                <h4 style={{ margin: '0 0 4px 0', color: '#ffffff', fontSize: '16px' }}>Redevelopment Assessment</h4>
+                <p style={{ color: '#a0aec0', fontSize: '13px', margin: '0 0 8px 0' }}>
+                  Evaluation of future development potential and infrastructure
+                </p>
+                <span style={{ display: 'inline-block', background: 'rgba(59, 130, 246, 0.1)', color: '#93c5fd', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '500' }}>
+                  Weight: 50%
+                </span>
+              </div>
+              
+              <div style={{ padding: '16px' }}>
+                {/* Market Position */}
+                <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      Mkt
+                    </span>
+                    <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Market Position</h5>
+                  </div>
+                  <div>
+                    {isEditing ? (
+                      <select 
+                        value={currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
+                        onChange={(e) => handleScoreChange('redevelopment', 'redev_market', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          fontSize: '14px',
+                          backgroundColor: '#2d3748',
+                          color: 'white',
+                          border: '1px solid #4a5568',
+                          borderRadius: '6px',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        <option value="0">0 - Challenging</option>
+                        <option value="1">1 - Uncertain</option>
+                        <option value="2">2 - Secondary</option>
+                        <option value="3">3 - Primary</option>
+                      </select>
+                    ) : (
+                      <div style={{
+                        padding: '12px',
+                        backgroundColor: '#2d3748',
+                        borderRadius: '6px',
+                        border: '1px solid #4a5568',
+                        marginBottom: '8px'
+                      }}>
+                        Score: {currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 40%</span>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>
+                        Contribution: {(((currentAnalysis?.redevelopmentBreakdown?.redev_market?.score || 2) * 0.40).toFixed(2))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Infrastructure */}
+                <div style={{ marginBottom: '20px', paddingBottom: '20px', borderBottom: '1px solid #4a5568' }}>
+                  <h5 style={{ margin: '0 0 12px 0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Infrastructure</h5>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', margin: '12px 0' }}>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', color: '#a0aec0', fontSize: '12px', fontWeight: '500' }}>Land Availability</label>
+                      {isEditing ? (
+                        <select 
+                          value={currentAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
+                          onChange={(e) => handleScoreChange('redevelopment', 'land_availability', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            fontSize: '14px',
+                            backgroundColor: '#2d3748',
+                            color: 'white',
+                            border: '1px solid #4a5568',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          <option value="0">0 - No land available</option>
+                          <option value="1">1 - No onsite, available nearby</option>
+                          <option value="2">2 - Some onsite + nearby parcel</option>
+                          <option value="3">3 - Sufficient land onsite</option>
+                        </select>
+                      ) : (
+                        <div style={{
+                          padding: '12px',
+                          backgroundColor: '#2d3748',
+                          borderRadius: '6px',
+                          border: '1px solid #4a5568'
+                        }}>
+                          Score: {currentAnalysis?.redevelopmentBreakdown?.land_availability?.score || 2}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', marginBottom: '8px', color: '#a0aec0', fontSize: '12px', fontWeight: '500' }}>Utilities</label>
+                      {isEditing ? (
+                        <select 
+                          value={currentAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
+                          onChange={(e) => handleScoreChange('redevelopment', 'utilities', e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '12px',
+                            fontSize: '14px',
+                            backgroundColor: '#2d3748',
+                            color: 'white',
+                            border: '1px solid #4a5568',
+                            borderRadius: '6px'
+                          }}
+                        >
+                          <option value="-1">-1 - N/A - BESS and Solar</option>
+                          <option value="0">0 - No clear path</option>
+                          <option value="1">1 - Utilities available but expensive</option>
+                          <option value="2">2 - Utilities nearby, low cost</option>
+                          <option value="3">3 - Sufficient utilities onsite</option>
+                        </select>
+                      ) : (
+                        <div style={{
+                          padding: '12px',
+                          backgroundColor: '#2d3748',
+                          borderRadius: '6px',
+                          border: '1px solid #4a5568'
+                        }}>
+                          Score: {currentAnalysis?.redevelopmentBreakdown?.utilities?.score || 2}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '12px', borderTop: '1px solid #4a5568' }}>
+                    <span style={{ fontWeight: '500', color: '#e2e8f0' }}>Infrastructure Score:</span>
+                    <span style={{ 
+                      fontWeight: '600',
+                      color: getScoreColorClass(currentAnalysis?.infrastructureScore || 0) === 'score-excellent' ? '#10b981' :
+                             getScoreColorClass(currentAnalysis?.infrastructureScore || 0) === 'score-good' ? '#f59e0b' :
+                             getScoreColorClass(currentAnalysis?.infrastructureScore || 0) === 'score-fair' ? '#fbbf24' : '#ef4444'
+                    }}>
+                      {(parseFloat(currentAnalysis?.infrastructureScore) || 0).toFixed(2)}/3.0
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Interconnection */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                    <span style={{ background: '#4a5568', color: '#e2e8f0', width: '24px', height: '24px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600' }}>
+                      IX
+                    </span>
+                    <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Interconnection (IX)</h5>
+                  </div>
+                  <div>
+
+                    
+                    {/* In the Interconnection section, change the select options to: */}
+                  {isEditing ? (
+                    <select 
+                      value={currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                      onChange={(e) => handleScoreChange('redevelopment', 'interconnection', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '12px',
+                        fontSize: '14px',
+                        backgroundColor: '#2d3748',
+                        color: 'white',
+                        border: '1px solid #4a5568',
+                        borderRadius: '6px',
+                        marginBottom: '8px'
+                      }}
+                    >
+                      <option value="0">0 - Major upgrades needed</option>
+                      <option value="1">1 - Minimal upgrades needed</option>
+                      <option value="2">2 - No upgrades needed (Unsecured)</option>
+                      <option value="3">3 - Secured IX Rights</option>
+                    </select>
+                  ) : (
+                    <div style={{
+                      padding: '12px',
+                      backgroundColor: '#2d3748',
+                      borderRadius: '6px',
+                      border: '1px solid #4a5568',
+                      marginBottom: '8px'
+                    }}>
+                      Score: {currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                    </div>
+                  )}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 30%</span>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Transmission Data Section */}
+                <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid #4a5568' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Transmission Interconnection Details</h5>
+                    {displayTransmissionData.length > 0 && (
+                      <span style={{
+                        background: 'rgba(34, 197, 94, 0.1)',
+                        border: '1px solid rgba(34, 197, 94, 0.3)',
+                        color: '#86efac',
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}>
+                        <span style={{ color: '#22c55e', fontSize: '16px' }}>●</span> Excess IX Capacity Available
+                      </span>
+                    )}
+                  </div>
+                  
+                  {isEditing ? (
+                    <TransmissionEditTable 
+                      data={displayTransmissionData}
+                      onFieldChange={handleLocalTransmissionChange}
+                      onAdd={addNewTransmissionEntry}
+                      onRemove={removeTransmissionEntry}
+                    />
+                  ) : (
+                    <TransmissionViewTable data={displayTransmissionData} />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Action Buttons */}
+        <div style={{ 
+          padding: '20px', 
+          borderTop: '1px solid #4a5568', 
+          background: 'rgba(0, 0, 0, 0.2)',
+          borderRadius: '0 0 12px 12px'
+        }}>
+          {isEditing ? (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button 
+                onClick={handleSave}
+                disabled={saveStatus === 'saving'}
+                style={{
+                  background: saveStatus === 'saving' ? 'rgba(107, 114, 128, 0.5)' : 'rgba(59, 130, 246, 0.9)',
+                  border: saveStatus === 'saving' ? '1px solid rgba(107, 114, 128, 0.5)' : '1px solid rgba(59, 130, 246, 0.9)',
+                  color: 'white',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  cursor: saveStatus === 'saving' ? 'not-allowed' : 'pointer',
+                  fontWeight: '500',
+                  fontSize: '14px',
+                  minWidth: '120px'
+                }}
+              >
+                {saveStatus === 'saving' ? '💾 Saving...' : '💾 Save Changes'}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <button 
+                onClick={handleClose}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.1)',
+                  border: '1px solid rgba(255, 255, 255, 0.2)',
+                  color: '#e2e8f0',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  fontSize: '14px'
+                }}
+              >
+                Back to Scores
+              </button>
+              <button 
+                onClick={() => {
+                  alert('Report generation feature would be implemented here.');
+                }}
+                style={{
+                  background: 'rgba(59, 130, 246, 0.9)',
+                  border: '1px solid rgba(59, 130, 246, 0.9)',
+                  color: 'white',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  fontSize: '14px'
+                }}
+              >
+                📄 Generate Report
+              </button>
+            </div>
           )}
         </div>
+        
+        {/* CSS Styles */}
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+          
+          .expert-analysis-modal {
+            max-width: 1200px;
+            width: 95%;
+            max-height: 90vh;
+            overflow-y: auto;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+          }
+          
+          .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+          }
+          
+          /* Input focus styles */
+          input:focus {
+            outline: none;
+            border-color: #63b3ed !important;
+            box-shadow: 0 0 0 2px rgba(99, 179, 237, 0.1);
+          }
+          
+          /* Scrollbar styling */
+          .expert-analysis-modal::-webkit-scrollbar {
+            width: 10px;
+          }
+          
+          .expert-analysis-modal::-webkit-scrollbar-track {
+            background: #1a202c;
+            border-radius: 5px;
+          }
+          
+          .expert-analysis-modal::-webkit-scrollbar-thumb {
+            background: #4a5568;
+            border-radius: 5px;
+          }
+          
+          .expert-analysis-modal::-webkit-scrollbar-thumb:hover {
+            background: #63b3ed;
+          }
+          
+          @media (max-width: 1024px) {
+            .cards-container {
+              grid-template-columns: 1fr !important;
+            }
+            
+            .score-grid {
+              grid-template-columns: 1fr !important;
+            }
+          }
+          
+          @media (max-width: 768px) {
+            .infra-grid {
+              grid-template-columns: 1fr !important;
+            }
+            
+            .header-top {
+              flex-direction: column !important;
+              gap: 12px !important;
+            }
+            
+            .header-right {
+              width: 100% !important;
+              justify-content: space-between !important;
+            }
+          }
+        `}</style>
       </div>
     </div>
   );
-}
-
-function btnStyle(variant) {
-  const base = {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    borderRadius: 10,
-    padding: "10px 12px",
-    fontSize: 13,
-    fontWeight: 800,
-    border: "1px solid rgba(255,255,255,0.15)",
-    cursor: "pointer",
-    background: "rgba(255,255,255,0.08)",
-    color: "white",
-  };
-
-  if (variant === "primary") {
-    return { ...base, background: "rgba(0, 200, 140, 0.18)", border: "1px solid rgba(0,200,140,0.35)" };
-  }
-  if (variant === "danger") {
-    return { ...base, background: "rgba(255, 80, 80, 0.16)", border: "1px solid rgba(255,80,80,0.35)" };
-  }
-  return base;
-}
-
-ExpertAnalysisModal.propTypes = {
-  project: PropTypes.object,
-  onClose: PropTypes.func,
-  onRefresh: PropTypes.func,
-  onUpdateProject: PropTypes.func,
-  onSaveSuccess: PropTypes.func,
 };
+
+export default ExpertAnalysisModal;
