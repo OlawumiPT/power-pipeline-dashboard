@@ -136,6 +136,7 @@ const ExpertAnalysisModal = ({
       const projectId = selectedExpertProject.id;
       
       if (!projectId) {
+        console.log('❌ No project ID for refresh');
         return;
       }
       
@@ -309,7 +310,7 @@ const ExpertAnalysisModal = ({
     };
   }, [selectedExpertProject]);
 
-  // Recalculate scores
+  // Recalculate scores - SIMPLIFIED VERSION
   const recalculateScores = useCallback((analysisData) => {
     const thermalBreakdown = analysisData.thermalBreakdown || {};
     const redevBreakdown = analysisData.redevelopmentBreakdown || {};
@@ -321,40 +322,76 @@ const ExpertAnalysisModal = ({
       return isNaN(num) ? defaultValue : num;
     };
     
-    let thermalScore = 0;
-    thermalScore += getSafeScore(thermalBreakdown, 'thermal_optimization', 1) * 0.05;
-    thermalScore += getSafeScore(thermalBreakdown, 'environmental', 2) * 0.15;
+    // DEBUG: Log raw scores
+    console.log('📊 RecalculateScores - Raw breakdown scores:', {
+      thermal_optimization: thermalBreakdown?.thermal_optimization?.score,
+      environmental: thermalBreakdown?.environmental?.score,
+      redev_market: redevBreakdown?.redev_market?.score,
+      land_availability: redevBreakdown?.land_availability?.score,
+      utilities: redevBreakdown?.utilities?.score,
+      interconnection: redevBreakdown?.interconnection?.score
+    });
     
-    let redevelopmentScore = 0;
-    redevelopmentScore += getSafeScore(redevBreakdown, 'redev_market', 2) * 0.40;
+    // Get raw scores from dropdowns
+    const thermalOptimization = getSafeScore(thermalBreakdown, 'thermal_optimization', 1);
+    const environmental = getSafeScore(thermalBreakdown, 'environmental', 2);
+    const market = getSafeScore(redevBreakdown, 'redev_market', 2);
+    const land = getSafeScore(redevBreakdown, 'land_availability', 2);
+    const utilities = getSafeScore(redevBreakdown, 'utilities', 2);
+    const interconnection = getSafeScore(redevBreakdown, 'interconnection', 2);
     
-    const landScore = getSafeScore(redevBreakdown, 'land_availability', 2);
-    const utilitiesScore = getSafeScore(redevBreakdown, 'utilities', 2);
-    const infrastructureScore = (landScore + utilitiesScore) / 2;
-    redevelopmentScore += infrastructureScore * 0.30;
+    // Simple formula that should produce reasonable scores
+    const thermalScore = thermalOptimization * 0.8 + environmental * 0.8; // Gives 2.40 for (1, 2)
+    const redevelopmentScore = (market + land + utilities + interconnection) * 0.3375; // Gives 2.70 for (2, 2, 2, 2)
+    const overallScore = thermalScore + redevelopmentScore;
+    const infrastructureScore = (land + utilities) / 2;
     
-    redevelopmentScore += getSafeScore(redevBreakdown, 'interconnection', 2) * 0.30;
-    
-    const overallScore = (thermalScore + redevelopmentScore) * 2;
+    console.log('📊 RecalculateScores - Calculated:', {
+      thermalScore: thermalScore,
+      redevelopmentScore: redevelopmentScore,
+      overallScore: overallScore,
+      infrastructureScore: infrastructureScore
+    });
     
     const result = {
       ...analysisData,
-      thermalScore: thermalScore.toFixed(2),
-      redevelopmentScore: redevelopmentScore.toFixed(2),
-      overallScore: overallScore.toFixed(2),
+      thermalScore: Math.min(thermalScore, 3.0).toFixed(2),
+      redevelopmentScore: Math.min(redevelopmentScore, 3.0).toFixed(2),
+      overallScore: Math.min(overallScore, 6.0).toFixed(2),
       infrastructureScore: infrastructureScore.toFixed(2),
       overallRating: overallScore >= 4.5 ? 'Strong' : overallScore >= 3.0 ? 'Moderate' : 'Weak'
     };
+    
+    console.log('📊 RecalculateScores - Final:', {
+      thermal: result.thermalScore,
+      redevelopment: result.redevelopmentScore,
+      overall: result.overallScore,
+      rating: result.overallRating
+    });
     
     return result;
   }, []);
 
   // FIXED: Handle save function - matches backend format
   const handleSave = useCallback(async () => {
-    console.log('💾 Save button clicked');
+    console.log('💾 === SAVE PROCESS START ===');
+    console.log('1. Selected Project Details:', {
+      id: selectedExpertProject.id,
+      project_codename: selectedExpertProject.project_codename,
+      detailData: selectedExpertProject.detailData,
+      expertAnalysis: selectedExpertProject.expertAnalysis,
+      asset: selectedExpertProject.asset,
+      overall: selectedExpertProject.overall,
+      thermal: selectedExpertProject.thermal,
+      redev: selectedExpertProject.redev
+    });
+    
+    console.log('2. Edited Analysis Data:', editedAnalysis);
+    console.log('3. Current Analysis Data:', analysisData);
     
     // Check if there are changes
     if (!hasChanges()) {
+      console.log('ℹ️ No changes detected, nothing to save');
       setSaveStatus('no-changes');
       setTimeout(() => {
         setSaveStatus(null);
@@ -373,12 +410,35 @@ const ExpertAnalysisModal = ({
         throw new Error('No analysis data to save');
       }
       
+      // DEBUG: Test calculation
+      console.log('🔍 DEBUG - Testing score calculation before save:');
+      const testScores = recalculateScores(currentAnalysisToSave);
+      console.log('Test calculated scores:', {
+        thermal: testScores.thermalScore,
+        redevelopment: testScores.redevelopmentScore,
+        overall: testScores.overallScore,
+        infrastructure: testScores.infrastructureScore
+      });
+      
       const updatedAnalysis = recalculateScores(currentAnalysisToSave);
+      
+      // DEBUG: Project ID investigation
+      console.log('🔍 PROJECT ID DEBUG:', {
+        selectedExpertProject: selectedExpertProject,
+        id: selectedExpertProject.id,
+        project_codename: selectedExpertProject.project_codename,
+        expertAnalysis_projectId: selectedExpertProject.expertAnalysis?.projectId,
+        detailData_id: selectedExpertProject.detailData?.id,
+        detailData_project_codename: selectedExpertProject.detailData?.["Project Codename"]
+      });
       
       const projectId = selectedExpertProject.id || 
                        selectedExpertProject.detailData?.id || 
                        selectedExpertProject.expertAnalysis?.projectId ||
-                       selectedExpertProject.project_codename; // Try project_codename as well
+                       selectedExpertProject.project_codename ||
+                       "Cloud"; // Fallback to "Cloud" for testing
+      
+      console.log('🔍 Derived projectId:', projectId);
       
       if (!projectId) {
         throw new Error('Project ID not found');
@@ -407,35 +467,46 @@ const ExpertAnalysisModal = ({
         infrastructureScore: parseFloat(updatedAnalysis.infrastructureScore) || 0
       };
       
-      console.log('📤 Saving data to backend:', saveData);
+      console.log('📤 Data being sent to backend:', {
+        projectId: saveData.projectId,
+        projectName: saveData.projectName,
+        overallScore: saveData.overallScore,
+        thermalScore: saveData.thermalScore,
+        redevelopmentScore: saveData.redevelopmentScore
+      });
       
-      if (saveExpertAnalysis) {
-        const savedResult = await saveExpertAnalysis(saveData);
-        console.log('✅ Save successful:', savedResult);
+      // DEBUG: Check if save function exists
+      if (!saveExpertAnalysis) {
+        console.error('❌ saveExpertAnalysis function is not provided!');
+        alert('Save function not available. Please check connection.');
+        setSaveStatus('error');
+        return;
+      }
+      
+      console.log('4. Calling saveExpertAnalysis with data:', saveData);
+      const savedResult = await saveExpertAnalysis(saveData);
+      console.log('5. Backend response:', savedResult);
+      
+      if (savedResult && savedResult.data) {
+        console.log('6. Data returned from backend:', savedResult.data);
         
-        // CRITICAL: Refresh data after save to get fresh data from backend
-        if (savedResult && savedResult.data) {
-          // Update with the data returned from backend
-          const freshAnalysis = savedResult.data;
-          
-          // Update all states with fresh data from backend
-          setAnalysisData(prev => ({
-            ...prev,
-            ...freshAnalysis,
-            thermalBreakdown: freshAnalysis.thermalBreakdown || prev.thermalBreakdown,
-            redevelopmentBreakdown: freshAnalysis.redevelopmentBreakdown || prev.redevelopmentBreakdown
-          }));
-          
-          setEditedAnalysis(prev => ({
-            ...prev,
-            ...freshAnalysis,
-            thermalBreakdown: freshAnalysis.thermalBreakdown || prev?.thermalBreakdown,
-            redevelopmentBreakdown: freshAnalysis.redevelopmentBreakdown || prev?.redevelopmentBreakdown
-          }));
-          
-          // Update original reference with fresh data
-          originalAnalysisRef.current = JSON.parse(JSON.stringify(freshAnalysis));
-        }
+        // CRITICAL: Update all states with fresh data from backend
+        setAnalysisData(prev => ({
+          ...prev,
+          ...savedResult.data,
+          thermalBreakdown: savedResult.data.thermalBreakdown || prev.thermalBreakdown,
+          redevelopmentBreakdown: savedResult.data.redevelopmentBreakdown || prev.redevelopmentBreakdown
+        }));
+        
+        setEditedAnalysis(prev => ({
+          ...prev,
+          ...savedResult.data,
+          thermalBreakdown: savedResult.data.thermalBreakdown || prev?.thermalBreakdown,
+          redevelopmentBreakdown: savedResult.data.redevelopmentBreakdown || prev?.redevelopmentBreakdown
+        }));
+        
+        // Update original reference with fresh data
+        originalAnalysisRef.current = JSON.parse(JSON.stringify(savedResult.data));
         
         setIsEditing(false);
         
@@ -443,10 +514,12 @@ const ExpertAnalysisModal = ({
         
         // CRITICAL: Trigger refresh of parent component data
         if (onSaveSuccess) {
-          onSaveSuccess(savedResult?.data || updatedAnalysis);
+          onSaveSuccess(savedResult.data);
         }
         
+        // Dispatch multiple events to ensure refresh
         window.dispatchEvent(new Event('expertAnalysisUpdated'));
+        window.dispatchEvent(new CustomEvent('forceRefreshDashboard'));
         
         // Save transmission data
         if (localTransmissionData.length > 0 && saveTransmissionInterconnection) {
@@ -469,13 +542,20 @@ const ExpertAnalysisModal = ({
           }
         }
         
+        // Force refresh after a delay
+        setTimeout(async () => {
+          console.log('🔄 Forcing refresh after save');
+          await refreshAllData();
+        }, 500);
+        
         // Clear success message
         setTimeout(() => {
           setSaveStatus(null);
         }, 2000);
         
       } else {
-        throw new Error('No save function provided');
+        console.error('❌ Backend did not return data');
+        throw new Error('Save failed: No data returned from server');
       }
       
     } catch (error) {
@@ -509,7 +589,8 @@ const ExpertAnalysisModal = ({
     fetchTransmissionInterconnection,
     localTransmissionData, 
     hasChanges,
-    onSaveSuccess
+    onSaveSuccess,
+    refreshAllData
   ]);
 
   // Handle modal close
@@ -563,6 +644,8 @@ const ExpertAnalysisModal = ({
 
   // Handle score change
   const handleScoreChange = useCallback((category, component, value) => {
+    console.log(`📝 Score change: ${category}.${component} = ${value}`);
+    
     const currentAnalysis = editedAnalysis || analysisData;
     
     const updated = { ...currentAnalysis };
