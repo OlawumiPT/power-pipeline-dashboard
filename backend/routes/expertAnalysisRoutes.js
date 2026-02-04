@@ -30,7 +30,6 @@ router.get('/transmission-interconnection', protect, getTransmissionInterconnect
 router.post('/transmission-interconnection', protect, saveTransmissionInterconnection);
 
 // Route to get ALL expert analyses
-// Note: This becomes /api/expert-analyses (not /api/api/expert-analyses)
 router.get('/expert-analyses', protect, getAllExpertAnalyses);
 
 module.exports = router;
