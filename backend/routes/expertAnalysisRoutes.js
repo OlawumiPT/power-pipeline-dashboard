@@ -5,7 +5,8 @@ const {
   saveExpertAnalysis,
   getTransmissionInterconnection,
   saveTransmissionInterconnection,
-  getAllExpertAnalyses 
+  getAllExpertAnalyses,
+  deleteTransmissionInterconnection // ADDED: Import the delete function
 } = require('../controllers/expertAnalysisController');
 
 // Check if auth middleware exists
@@ -189,6 +190,7 @@ router.post('/expert-analysis', protect, saveExpertAnalysis);
 // Transmission Interconnection Routes
 router.get('/transmission-interconnection', protect, getTransmissionInterconnection);
 router.post('/transmission-interconnection', protect, saveTransmissionInterconnection);
+router.delete('/transmission-interconnection/:id', protect, deleteTransmissionInterconnection); // ADDED: Delete route
 
 // Route to get ALL expert analyses
 router.get('/expert-analyses', protect, getAllExpertAnalyses);
