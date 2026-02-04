@@ -1,4 +1,5 @@
 const expertAnalysis = require('../models/expertAnalysis');
+const { pool } = require('../utils/db'); // Import pool
 
 // @desc    Get expert analysis by project ID
 // @route   GET /api/expert-analysis
@@ -191,7 +192,7 @@ const getAllExpertAnalyses = async (req, res) => {
     
     const schema = process.env.DB_SCHEMA || 'pipeline_dashboard';
     
-    // Get all expert analyses
+    // Get all expert analyses using pool directly
     const query = `
       SELECT * FROM ${schema}.expert_analysis 
       ORDER BY overall_project_score DESC NULLS LAST, updated_at DESC
@@ -214,8 +215,8 @@ const getAllExpertAnalyses = async (req, res) => {
           projectId: row.project_codename,
           projectName: row.project_name,
           overallScore: overallScore,
-          overallRating: calculateRating(overallScore),
-          ratingClass: calculateRating(overallScore).toLowerCase(),
+          overallRating: expertAnalysis.calculateRating(overallScore),
+          ratingClass: expertAnalysis.calculateRating(overallScore).toLowerCase(),
           thermalScore: parseFloat(row.thermal_operating_score) || 0,
           redevelopmentScore: parseFloat(row.redevelopment_score) || 0,
           infrastructureScore: parseFloat(row.infra) || 0,
@@ -352,5 +353,6 @@ module.exports = {
   getExpertAnalysis,
   saveExpertAnalysis,
   getTransmissionInterconnection,
-  saveTransmissionInterconnection
+  saveTransmissionInterconnection,
+  getAllExpertAnalyses  
 };
