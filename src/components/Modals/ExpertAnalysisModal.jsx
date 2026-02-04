@@ -8,7 +8,8 @@ const ExpertAnalysisModal = ({
   fetchExpertAnalysis,
   saveExpertAnalysis,
   fetchTransmissionInterconnection,
-  saveTransmissionInterconnection
+  saveTransmissionInterconnection,
+  onSaveSuccess
 }) => {
   if (!selectedExpertProject) return null;
   
@@ -82,8 +83,7 @@ const ExpertAnalysisModal = ({
         utilities: { score: 2 },
         interconnection: { score: 2 }
       },
-      infrastructureScore: getNumericValue(project.expertAnalysis?.infrastructureScore, 2.0).toFixed(2),
-      confidence: project.expertAnalysis?.confidence || 75
+      infrastructureScore: getNumericValue(project.expertAnalysis?.infrastructureScore, 2.0).toFixed(2)
     };
     
     return defaultAnalysis;
@@ -103,9 +103,6 @@ const ExpertAnalysisModal = ({
   
   // Local state for transmission inputs
   const [localTransmissionData, setLocalTransmissionData] = useState([]);
-  
-  // API Base URL
-  const API_BASE_URL = 'https://pt-power-pipeline-api.azurewebsites.net';
   
   // Get token
   const getAuthToken = useCallback(() => {
@@ -263,7 +260,7 @@ const ExpertAnalysisModal = ({
     }
   }, [selectedExpertProject, fetchTransmissionInterconnection]);
   
-  // Initialize all data - FIXED: Reset state when project changes
+  // Initialize all data
   useEffect(() => {
     const initializeData = async () => {
       if (!selectedExpertProject) return;
@@ -346,14 +343,13 @@ const ExpertAnalysisModal = ({
       redevelopmentScore: redevelopmentScore.toFixed(2),
       overallScore: overallScore.toFixed(2),
       infrastructureScore: infrastructureScore.toFixed(2),
-      overallRating: overallScore >= 4.5 ? 'Strong' : overallScore >= 3.0 ? 'Moderate' : 'Weak',
-      confidence: overallScore >= 4.5 ? 85 : overallScore >= 3.0 ? 75 : 60
+      overallRating: overallScore >= 4.5 ? 'Strong' : overallScore >= 3.0 ? 'Moderate' : 'Weak'
     };
     
     return result;
   }, []);
 
-  // Handle save - FIXED: Exit edit mode after save
+  // FIXED: Handle save function - matches backend format
   const handleSave = useCallback(async () => {
     console.log('💾 Save button clicked');
     
@@ -381,7 +377,8 @@ const ExpertAnalysisModal = ({
       
       const projectId = selectedExpertProject.id || 
                        selectedExpertProject.detailData?.id || 
-                       selectedExpertProject.expertAnalysis?.projectId;
+                       selectedExpertProject.expertAnalysis?.projectId ||
+                       selectedExpertProject.project_codename; // Try project_codename as well
       
       if (!projectId) {
         throw new Error('Project ID not found');
@@ -390,13 +387,12 @@ const ExpertAnalysisModal = ({
       // Sync local transmission data to parent state before saving
       setEditedTransmissionData(localTransmissionData);
       
+      // CRITICAL FIX: Send data in the format your backend expects
       const saveData = {
         projectId: projectId,
         projectName: updatedAnalysis.projectName,
         overallScore: parseFloat(updatedAnalysis.overallScore) || 0,
-        overallRating: updatedAnalysis.overallRating || 'Moderate',
-        confidence: updatedAnalysis.confidence || 75,
-        thermalOperatingScore: parseFloat(updatedAnalysis.thermalScore) || 0,
+        thermalScore: parseFloat(updatedAnalysis.thermalScore) || 0,
         thermalBreakdown: updatedAnalysis.thermalBreakdown || {
           thermal_optimization: { score: 1 },
           environmental: { score: 2 }
@@ -408,43 +404,68 @@ const ExpertAnalysisModal = ({
           utilities: { score: 2 },
           interconnection: { score: 2 }
         },
-        infrastructureScore: parseFloat(updatedAnalysis.infrastructureScore) || 0,
-        editedBy: currentUser,
-        lastUpdated: new Date().toISOString()
+        infrastructureScore: parseFloat(updatedAnalysis.infrastructureScore) || 0
       };
+      
+      console.log('📤 Saving data to backend:', saveData);
       
       if (saveExpertAnalysis) {
         const savedResult = await saveExpertAnalysis(saveData);
         console.log('✅ Save successful:', savedResult);
         
-        // Update original references with saved data
-        originalAnalysisRef.current = JSON.parse(JSON.stringify(updatedAnalysis));
-        originalTransmissionRef.current = JSON.parse(JSON.stringify(localTransmissionData));
+        // CRITICAL: Refresh data after save to get fresh data from backend
+        if (savedResult && savedResult.data) {
+          // Update with the data returned from backend
+          const freshAnalysis = savedResult.data;
+          
+          // Update all states with fresh data from backend
+          setAnalysisData(prev => ({
+            ...prev,
+            ...freshAnalysis,
+            thermalBreakdown: freshAnalysis.thermalBreakdown || prev.thermalBreakdown,
+            redevelopmentBreakdown: freshAnalysis.redevelopmentBreakdown || prev.redevelopmentBreakdown
+          }));
+          
+          setEditedAnalysis(prev => ({
+            ...prev,
+            ...freshAnalysis,
+            thermalBreakdown: freshAnalysis.thermalBreakdown || prev?.thermalBreakdown,
+            redevelopmentBreakdown: freshAnalysis.redevelopmentBreakdown || prev?.redevelopmentBreakdown
+          }));
+          
+          // Update original reference with fresh data
+          originalAnalysisRef.current = JSON.parse(JSON.stringify(freshAnalysis));
+        }
         
-        // Update all states with saved data
-        setAnalysisData(updatedAnalysis);
-        setEditedAnalysis(updatedAnalysis);
-       
         setIsEditing(false);
         
         setSaveStatus('success');
-
-      if (selectedExpertProject.onSaveSuccess) {
-        selectedExpertProject.onSaveSuccess();
-      }
-
-      window.dispatchEvent(new Event('expertAnalysisUpdated'));
-
-      if (window.refreshDashboardData) {
-        window.refreshDashboardData();
-      }
+        
+        // CRITICAL: Trigger refresh of parent component data
+        if (onSaveSuccess) {
+          onSaveSuccess(savedResult?.data || updatedAnalysis);
+        }
+        
+        window.dispatchEvent(new Event('expertAnalysisUpdated'));
         
         // Save transmission data
-        if (localTransmissionData.length > 0) {
-          if (saveTransmissionInterconnection) {
-            saveTransmissionInterconnection(projectId, localTransmissionData)
-              .then(() => console.log('✅ Transmission data saved'))
-              .catch(error => console.error('Transmission save error:', error));
+        if (localTransmissionData.length > 0 && saveTransmissionInterconnection) {
+          try {
+            await saveTransmissionInterconnection(projectId, localTransmissionData);
+            console.log('✅ Transmission data saved');
+            
+            // Refresh transmission data after save
+            if (fetchTransmissionInterconnection) {
+              const projectName = updatedAnalysis.projectName;
+              const freshTransmission = await fetchTransmissionInterconnection(projectName);
+              if (freshTransmission) {
+                setEditedTransmissionData(freshTransmission);
+                setLocalTransmissionData(freshTransmission);
+                originalTransmissionRef.current = JSON.parse(JSON.stringify(freshTransmission));
+              }
+            }
+          } catch (error) {
+            console.error('Transmission save error:', error);
           }
         }
         
@@ -471,8 +492,25 @@ const ExpertAnalysisModal = ({
         
         alert(`❌ ${errorMessage}`);
       }, 100);
+      
+      // Reset save status after showing error
+      setTimeout(() => {
+        setSaveStatus(null);
+      }, 3000);
     }
-  }, [selectedExpertProject, editedAnalysis, analysisData, saveStatus, recalculateScores, saveExpertAnalysis, saveTransmissionInterconnection, localTransmissionData, currentUser, hasChanges]);
+  }, [
+    selectedExpertProject, 
+    editedAnalysis, 
+    analysisData, 
+    saveStatus, 
+    recalculateScores, 
+    saveExpertAnalysis, 
+    saveTransmissionInterconnection,
+    fetchTransmissionInterconnection,
+    localTransmissionData, 
+    hasChanges,
+    onSaveSuccess
+  ]);
 
   // Handle modal close
   const handleClose = useCallback(() => {
@@ -901,6 +939,20 @@ const ExpertAnalysisModal = ({
                   }}>✓</div>
                   <h3 style={{ color: 'white', margin: '0 0 8px' }}>Changes Saved!</h3>
                   <p style={{ color: '#a0aec0' }}>Your changes have been saved successfully.</p>
+                  <button 
+                    onClick={() => setSaveStatus(null)}
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.9)',
+                      border: '1px solid rgba(59, 130, 246, 0.9)',
+                      color: 'white',
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      marginTop: '16px'
+                    }}
+                  >
+                    OK
+                  </button>
                 </>
               )}
               {saveStatus === 'no-changes' && (
@@ -912,6 +964,20 @@ const ExpertAnalysisModal = ({
                   }}>ℹ️</div>
                   <h3 style={{ color: 'white', margin: '0 0 8px' }}>No Changes Made</h3>
                   <p style={{ color: '#a0aec0' }}>You haven't made any changes to save.</p>
+                  <button 
+                    onClick={() => setSaveStatus(null)}
+                    style={{
+                      background: 'rgba(59, 130, 246, 0.9)',
+                      border: '1px solid rgba(59, 130, 246, 0.9)',
+                      color: 'white',
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      marginTop: '16px'
+                    }}
+                  >
+                    OK
+                  </button>
                 </>
               )}
               {saveStatus === 'error' && (
@@ -923,6 +989,20 @@ const ExpertAnalysisModal = ({
                   }}>✗</div>
                   <h3 style={{ color: 'white', margin: '0 0 8px' }}>Save Failed</h3>
                   <p style={{ color: '#a0aec0' }}>Unable to save changes. Please try again.</p>
+                  <button 
+                    onClick={() => setSaveStatus(null)}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.9)',
+                      border: '1px solid rgba(239, 68, 68, 0.9)',
+                      color: 'white',
+                      padding: '8px 16px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      marginTop: '16px'
+                    }}
+                  >
+                    OK
+                  </button>
                 </>
               )}
             </div>
@@ -1390,41 +1470,37 @@ const ExpertAnalysisModal = ({
                     <h5 style={{ margin: '0', color: '#e2e8f0', fontSize: '14px', fontWeight: '600' }}>Interconnection (IX)</h5>
                   </div>
                   <div>
-
-                    
-                    {/* In the Interconnection section, change the select options to: */}
-                  {isEditing ? (
-                    <select 
-                      value={currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
-                      onChange={(e) => handleScoreChange('redevelopment', 'interconnection', e.target.value)}
-                      style={{
-                        width: '100%',
+                    {isEditing ? (
+                      <select 
+                        value={currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                        onChange={(e) => handleScoreChange('redevelopment', 'interconnection', e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '12px',
+                          fontSize: '14px',
+                          backgroundColor: '#2d3748',
+                          color: 'white',
+                          border: '1px solid #4a5568',
+                          borderRadius: '6px',
+                          marginBottom: '8px'
+                        }}
+                      >
+                        <option value="0">0 - Major upgrades needed</option>
+                        <option value="1">1 - Minimal upgrades needed</option>
+                        <option value="2">2 - No upgrades needed (Unsecured)</option>
+                        <option value="3">3 - Secured IX Rights</option>
+                      </select>
+                    ) : (
+                      <div style={{
                         padding: '12px',
-                        fontSize: '14px',
                         backgroundColor: '#2d3748',
-                        color: 'white',
-                        border: '1px solid #4a5568',
                         borderRadius: '6px',
+                        border: '1px solid #4a5568',
                         marginBottom: '8px'
-                      }}
-                    >
-                      <option value="0">0 - Major upgrades needed</option>
-                      <option value="1">1 - Minimal upgrades needed</option>
-                      <option value="2">2 - No upgrades needed (Unsecured)</option>
-                      <option value="3">3 - Secured IX Rights</option>
-                    </select>
-                  ) : (
-                    <div style={{
-                      padding: '12px',
-                      backgroundColor: '#2d3748',
-                      borderRadius: '6px',
-                      border: '1px solid #4a5568',
-                      marginBottom: '8px'
-                    }}>
-                      Score: {currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
-                    </div>
-                  )}
-
+                      }}>
+                        Score: {currentAnalysis?.redevelopmentBreakdown?.interconnection?.score || 2}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#a0aec0', fontSize: '12px' }}>Weight: 30%</span>
                     </div>
