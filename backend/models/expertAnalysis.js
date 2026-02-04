@@ -66,23 +66,27 @@ class ExpertAnalysis {
         redevelopmentScore: expertAnalysis.redevelopment_score
       });
       
-      // Create complete breakdown objects using the ACTUAL column names from your database
-      expertAnalysis.thermal_breakdown = {
-        thermal_optimization: { score: parseFloat(expertAnalysis.thermal_optimization) || 1 },
-        environmental: { score: parseFloat(expertAnalysis.environmental_score) || 2 }
-      };
+      // Only create breakdown objects if values exist in database
+      if (expertAnalysis.thermal_optimization !== null || expertAnalysis.environmental_score !== null) {
+        expertAnalysis.thermal_breakdown = {
+          thermal_optimization: { score: parseFloat(expertAnalysis.thermal_optimization) },
+          environmental: { score: parseFloat(expertAnalysis.environmental_score) }
+        };
+      }
       
       // Determine which market score column exists
-      const marketScoreValue = parseFloat(expertAnalysis.markets_score) || 
-                               parseFloat(expertAnalysis.market_score) || 
-                               2;
+      const marketsScore = expertAnalysis.markets_score !== null ? parseFloat(expertAnalysis.markets_score) : null;
+      const marketScore = expertAnalysis.market_score !== null ? parseFloat(expertAnalysis.market_score) : null;
+      const ixScore = expertAnalysis.ix !== null ? parseFloat(expertAnalysis.ix) : null;
       
-      expertAnalysis.redevelopment_breakdown = {
-        redev_market: { score: marketScoreValue },
-        interconnection: { score: parseFloat(expertAnalysis.ix) || 2 },
-        land_availability: { score: 2 }, // Default value
-        utilities: { score: 2 } // Default value
-      };
+      if (marketsScore !== null || marketScore !== null || ixScore !== null) {
+        expertAnalysis.redevelopment_breakdown = {
+          redev_market: { score: marketsScore || marketScore },
+          interconnection: { score: ixScore },
+          land_availability: { score: null },
+          utilities: { score: null }
+        };
+      }
       
       return expertAnalysis;
       
@@ -99,7 +103,7 @@ class ExpertAnalysis {
       await client.query('BEGIN');
       
       const {
-        projectId, 
+        projectId, // This could be projects.id or project_codename
         projectName,
         overallScore,
         thermalScore,
@@ -164,11 +168,19 @@ class ExpertAnalysis {
       
       const checkResult = await client.query(checkQuery, [actualProjectCodename]);
       
-      // Extract breakdown scores with defaults
-      const thermalOptimizationScore = thermalBreakdown?.thermal_optimization?.score || 1;
-      const environmentalScore = thermalBreakdown?.environmental?.score || 2;
-      const marketScore = redevelopmentBreakdown?.redev_market?.score || 2;
-      const interconnectionScore = redevelopmentBreakdown?.interconnection?.score || 2;
+      // Extract breakdown scores if provided
+      const thermalOptimizationScore = thermalBreakdown?.thermal_optimization?.score !== undefined 
+        ? parseFloat(thermalBreakdown.thermal_optimization.score) 
+        : null;
+      const environmentalScore = thermalBreakdown?.environmental?.score !== undefined 
+        ? parseFloat(thermalBreakdown.environmental.score) 
+        : null;
+      const marketScore = redevelopmentBreakdown?.redev_market?.score !== undefined 
+        ? parseFloat(redevelopmentBreakdown.redev_market.score) 
+        : null;
+      const interconnectionScore = redevelopmentBreakdown?.interconnection?.score !== undefined 
+        ? parseFloat(redevelopmentBreakdown.interconnection.score) 
+        : null;
       
       console.log('📊 Breakdown scores extracted:', {
         thermalOptimization: thermalOptimizationScore,
@@ -180,7 +192,7 @@ class ExpertAnalysis {
       let result;
       
       if (checkResult.rows.length > 0) {
-        // Update existing record - Use markets_score column (not market_score)
+        // Update existing record
         const updateQuery = `
           UPDATE ${schema}.expert_analysis
           SET 
@@ -200,22 +212,22 @@ class ExpertAnalysis {
         
         const values = [
           actualProjectCodename,
-          actualProjectName || `Project ${actualProjectCodename}`,
-          parseFloat(overallScore) || 0,
-          parseFloat(thermalScore) || 0,
-          parseFloat(redevelopmentScore) || 0,
-          parseFloat(infrastructureScore) || 0,
-          parseFloat(thermalOptimizationScore) || 0,
-          parseFloat(environmentalScore) || 0,
-          parseFloat(marketScore) || 0,
-          parseFloat(interconnectionScore) || 0
+          actualProjectName,
+          overallScore,
+          thermalScore,
+          redevelopmentScore,
+          infrastructureScore,
+          thermalOptimizationScore,
+          environmentalScore,
+          marketScore,
+          interconnectionScore
         ];
         
         console.log('🔄 Updating expert analysis with values:', values);
         result = await client.query(updateQuery, values);
         console.log(`🔄 Updated expert analysis for project codename "${actualProjectCodename}"`);
       } else {
-        // Create new record - Use markets_score column (not market_score)
+        // Create new record
         const insertQuery = `
           INSERT INTO ${schema}.expert_analysis (
             project_codename,
@@ -236,15 +248,15 @@ class ExpertAnalysis {
         
         const values = [
           actualProjectCodename,
-          actualProjectName || `Project ${actualProjectCodename}`,
-          parseFloat(overallScore) || 0,
-          parseFloat(thermalScore) || 0,
-          parseFloat(redevelopmentScore) || 0,
-          parseFloat(infrastructureScore) || 0,
-          parseFloat(thermalOptimizationScore) || 0,
-          parseFloat(environmentalScore) || 0,
-          parseFloat(marketScore) || 0,
-          parseFloat(interconnectionScore) || 0
+          actualProjectName,
+          overallScore,
+          thermalScore,
+          redevelopmentScore,
+          infrastructureScore,
+          thermalOptimizationScore,
+          environmentalScore,
+          marketScore,
+          interconnectionScore
         ];
         
         console.log('✅ Creating new expert analysis with values:', values);
@@ -256,18 +268,22 @@ class ExpertAnalysis {
       
       const savedAnalysis = result.rows[0];
       
-      // Create complete breakdown objects for response
-      savedAnalysis.thermal_breakdown = {
-        thermal_optimization: { score: parseFloat(savedAnalysis.thermal_optimization) || thermalOptimizationScore },
-        environmental: { score: parseFloat(savedAnalysis.environmental_score) || environmentalScore }
-      };
+      // Create breakdown objects for response if values exist
+      if (savedAnalysis.thermal_optimization !== null || savedAnalysis.environmental_score !== null) {
+        savedAnalysis.thermal_breakdown = {
+          thermal_optimization: { score: parseFloat(savedAnalysis.thermal_optimization) },
+          environmental: { score: parseFloat(savedAnalysis.environmental_score) }
+        };
+      }
       
-      savedAnalysis.redevelopment_breakdown = {
-        redev_market: { score: parseFloat(savedAnalysis.markets_score) || marketScore },
-        interconnection: { score: parseFloat(savedAnalysis.ix) || interconnectionScore },
-        land_availability: { score: redevelopmentBreakdown?.land_availability?.score || 2 },
-        utilities: { score: redevelopmentBreakdown?.utilities?.score || 2 }
-      };
+      if (savedAnalysis.markets_score !== null || savedAnalysis.ix !== null) {
+        savedAnalysis.redevelopment_breakdown = {
+          redev_market: { score: parseFloat(savedAnalysis.markets_score) },
+          interconnection: { score: parseFloat(savedAnalysis.ix) },
+          land_availability: { score: redevelopmentBreakdown?.land_availability?.score || null },
+          utilities: { score: redevelopmentBreakdown?.utilities?.score || null }
+        };
+      }
       
       console.log('✅ Save completed, returning data:', {
         projectCodename: savedAnalysis.project_codename,
@@ -304,19 +320,23 @@ class ExpertAnalysis {
       const result = await pool.query(query);
       console.log(`✅ Found ${result.rows.length} expert analysis records`);
       
-      // Add breakdown data to each row
+      // Add breakdown data to each row only if values exist
       return result.rows.map(row => {
-        row.thermal_breakdown = {
-          thermal_optimization: { score: parseFloat(row.thermal_optimization) || 1 },
-          environmental: { score: parseFloat(row.environmental_score) || 2 }
-        };
+        if (row.thermal_optimization !== null || row.environmental_score !== null) {
+          row.thermal_breakdown = {
+            thermal_optimization: { score: parseFloat(row.thermal_optimization) },
+            environmental: { score: parseFloat(row.environmental_score) }
+          };
+        }
         
-        row.redevelopment_breakdown = {
-          redev_market: { score: parseFloat(row.markets_score) || 2 },
-          interconnection: { score: parseFloat(row.ix) || 2 },
-          land_availability: { score: 2 },
-          utilities: { score: 2 }
-        };
+        if (row.markets_score !== null || row.ix !== null) {
+          row.redevelopment_breakdown = {
+            redev_market: { score: parseFloat(row.markets_score) },
+            interconnection: { score: parseFloat(row.ix) },
+            land_availability: { score: null },
+            utilities: { score: null }
+          };
+        }
         
         return row;
       });
@@ -421,10 +441,10 @@ class ExpertAnalysis {
           const values = [
             item.site || projectName,
             item.poiVoltage || '',
-            parseFloat(item.excessInjectionCapacity) || 0,
-            parseFloat(item.excessWithdrawalCapacity) || 0,
-            item.constraints || '-',
-            item.excessIXCapacity !== undefined ? item.excessIXCapacity : true,
+            item.excessInjectionCapacity !== undefined ? parseFloat(item.excessInjectionCapacity) : null,
+            item.excessWithdrawalCapacity !== undefined ? parseFloat(item.excessWithdrawalCapacity) : null,
+            item.constraints || null,
+            item.excessIXCapacity !== undefined ? item.excessIXCapacity : null,
             projectId
           ];
           
@@ -455,6 +475,8 @@ class ExpertAnalysis {
 
   // Helper function to calculate rating based on score
   static calculateRating(score) {
+    if (score === null || score === undefined) return null;
+    
     const numericScore = parseFloat(score) || 0;
     const percent = (numericScore / 6) * 100;
     
