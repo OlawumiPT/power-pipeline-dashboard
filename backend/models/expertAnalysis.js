@@ -66,14 +66,19 @@ class ExpertAnalysis {
         redevelopmentScore: expertAnalysis.redevelopment_score
       });
       
-      // Create complete breakdown objects
+      // Create complete breakdown objects using the ACTUAL column names from your database
       expertAnalysis.thermal_breakdown = {
         thermal_optimization: { score: parseFloat(expertAnalysis.thermal_optimization) || 1 },
         environmental: { score: parseFloat(expertAnalysis.environmental_score) || 2 }
       };
       
+      // Determine which market score column exists
+      const marketScoreValue = parseFloat(expertAnalysis.markets_score) || 
+                               parseFloat(expertAnalysis.market_score) || 
+                               2;
+      
       expertAnalysis.redevelopment_breakdown = {
-        redev_market: { score: parseFloat(expertAnalysis.markets_score) || 2 },
+        redev_market: { score: marketScoreValue },
         interconnection: { score: parseFloat(expertAnalysis.ix) || 2 },
         land_availability: { score: 2 }, // Default value
         utilities: { score: 2 } // Default value
@@ -164,22 +169,18 @@ class ExpertAnalysis {
       const environmentalScore = thermalBreakdown?.environmental?.score || 2;
       const marketScore = redevelopmentBreakdown?.redev_market?.score || 2;
       const interconnectionScore = redevelopmentBreakdown?.interconnection?.score || 2;
-      const landAvailabilityScore = redevelopmentBreakdown?.land_availability?.score || 2;
-      const utilitiesScore = redevelopmentBreakdown?.utilities?.score || 2;
       
       console.log('📊 Breakdown scores extracted:', {
         thermalOptimization: thermalOptimizationScore,
         environmental: environmentalScore,
         market: marketScore,
-        interconnection: interconnectionScore,
-        landAvailability: landAvailabilityScore,
-        utilities: utilitiesScore
+        interconnection: interconnectionScore
       });
       
       let result;
       
       if (checkResult.rows.length > 0) {
-        // Update existing record - ONLY columns that exist in your table
+        // Update existing record - Use markets_score column (not market_score)
         const updateQuery = `
           UPDATE ${schema}.expert_analysis
           SET 
@@ -214,7 +215,7 @@ class ExpertAnalysis {
         result = await client.query(updateQuery, values);
         console.log(`🔄 Updated expert analysis for project codename "${actualProjectCodename}"`);
       } else {
-        // Create new record - ONLY columns that exist in your table
+        // Create new record - Use markets_score column (not market_score)
         const insertQuery = `
           INSERT INTO ${schema}.expert_analysis (
             project_codename,
@@ -264,15 +265,17 @@ class ExpertAnalysis {
       savedAnalysis.redevelopment_breakdown = {
         redev_market: { score: parseFloat(savedAnalysis.markets_score) || marketScore },
         interconnection: { score: parseFloat(savedAnalysis.ix) || interconnectionScore },
-        land_availability: { score: landAvailabilityScore },
-        utilities: { score: utilitiesScore }
+        land_availability: { score: redevelopmentBreakdown?.land_availability?.score || 2 },
+        utilities: { score: redevelopmentBreakdown?.utilities?.score || 2 }
       };
       
       console.log('✅ Save completed, returning data:', {
         projectCodename: savedAnalysis.project_codename,
         overallScore: savedAnalysis.overall_project_score,
         thermalScore: savedAnalysis.thermal_operating_score,
-        redevelopmentScore: savedAnalysis.redevelopment_score
+        redevelopmentScore: savedAnalysis.redevelopment_score,
+        marketsScore: savedAnalysis.markets_score,
+        ix: savedAnalysis.ix
       });
       
       return savedAnalysis;
