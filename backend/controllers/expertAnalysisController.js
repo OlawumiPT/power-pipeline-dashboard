@@ -7,7 +7,7 @@ const getExpertAnalysis = async (req, res) => {
   try {
     const { projectId } = req.query;
     
-    console.log('🔍 API Request: GET /api/expert-analysis', { projectId });
+    console.log('🔍 GET /api/expert-analysis', { projectId });
     
     if (!projectId) {
       return res.status(400).json({
@@ -21,12 +21,12 @@ const getExpertAnalysis = async (req, res) => {
     if (!analysisData) {
       return res.status(200).json({
         success: true,
-        message: 'No expert analysis found for this project',
+        message: 'No expert analysis found',
         data: null
       });
     }
     
-    // Format the response to match frontend expectations
+    // Format response - ONLY using columns that exist in your table
     const formattedResponse = {
       id: analysisData.id,
       projectId: analysisData.project_codename,
@@ -34,41 +34,18 @@ const getExpertAnalysis = async (req, res) => {
       overallScore: parseFloat(analysisData.overall_project_score) || 0,
       overallRating: expertAnalysis.calculateRating(analysisData.overall_project_score) || 'N/A',
       thermalScore: parseFloat(analysisData.thermal_operating_score) || 0,
-      thermalBreakdown: {
-        thermal_optimization: { 
-          score: parseFloat(analysisData.thermal_optimization) || 0 
-        },
-        environmental: { 
-          score: parseFloat(analysisData.environmental_score) || 0 
-        }
+      thermalBreakdown: analysisData.thermal_breakdown || {
+        thermal_optimization: { score: parseFloat(analysisData.thermal_optimization) || 0 },
+        environmental: { score: parseFloat(analysisData.environmental_score) || 0 }
       },
       redevelopmentScore: parseFloat(analysisData.redevelopment_score) || 0,
-      redevelopmentBreakdown: {
-        redev_market: { 
-          score: parseFloat(analysisData.markets_score) || 0 
-        },
-        land_availability: { score: 0 },
-        utilities: { score: 0 },
-        interconnection: { 
-          score: parseFloat(analysisData.ix) || 0 
-        }
+      redevelopmentBreakdown: analysisData.redevelopment_breakdown || {
+        redev_market: { score: parseFloat(analysisData.markets_score) || 0 },
+        interconnection: { score: parseFloat(analysisData.ix) || 0 }
       },
       infrastructureScore: parseFloat(analysisData.infra) || 0,
       createdAt: analysisData.created_at,
-      updatedAt: analysisData.updated_at,
-      // Include project details for reference
-      projectDetails: {
-        actualProjectName: analysisData.actual_project_name,
-        projectCodename: analysisData.project_codename,
-        projectOverallScore: analysisData.project_overall_score,
-        projectThermalScore: analysisData.project_thermal_score,
-        projectRedevScore: analysisData.project_redev_score,
-        iso: analysisData.iso,
-        plantOwner: analysisData.plant_owner,
-        location: analysisData.location,
-        legacyNameplateCapacityMW: analysisData.legacy_nameplate_capacity_mw,
-        tech: analysisData.tech
-      }
+      updatedAt: analysisData.updated_at
     };
     
     res.status(200).json({
@@ -76,7 +53,7 @@ const getExpertAnalysis = async (req, res) => {
       data: formattedResponse
     });
   } catch (error) {
-    console.error('❌ Error in getExpertAnalysis controller:', error);
+    console.error('❌ Error in getExpertAnalysis:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -101,9 +78,8 @@ const saveExpertAnalysis = async (req, res) => {
       infrastructureScore
     } = req.body;
     
-    console.log('💾 API Request: POST /api/expert-analysis', { 
+    console.log('💾 POST /api/expert-analysis', { 
       projectId, 
-      projectName: projectName?.substring(0, 50) + '...',
       overallScore,
       thermalScore,
       redevelopmentScore
@@ -128,8 +104,6 @@ const saveExpertAnalysis = async (req, res) => {
       redevelopmentScore: parseFloat(redevelopmentScore) || 0,
       redevelopmentBreakdown: redevelopmentBreakdown || {
         redev_market: { score: 0 },
-        land_availability: { score: 0 },
-        utilities: { score: 0 },
         interconnection: { score: 0 }
       },
       infrastructureScore: parseFloat(infrastructureScore) || 0
@@ -137,7 +111,7 @@ const saveExpertAnalysis = async (req, res) => {
     
     const savedAnalysis = await expertAnalysis.saveExpertAnalysis(analysisData);
     
-    // Format response to match frontend expectations
+    // Format response - ONLY using columns that exist
     const formattedResponse = {
       id: savedAnalysis.id,
       projectId: savedAnalysis.project_codename,
@@ -152,8 +126,6 @@ const saveExpertAnalysis = async (req, res) => {
       redevelopmentScore: parseFloat(savedAnalysis.redevelopment_score) || 0,
       redevelopmentBreakdown: savedAnalysis.redevelopment_breakdown || {
         redev_market: { score: parseFloat(savedAnalysis.markets_score) || 0 },
-        land_availability: { score: 0 },
-        utilities: { score: 0 },
         interconnection: { score: parseFloat(savedAnalysis.ix) || 0 }
       },
       infrastructureScore: parseFloat(savedAnalysis.infra) || 0,
@@ -167,7 +139,7 @@ const saveExpertAnalysis = async (req, res) => {
       data: formattedResponse
     });
   } catch (error) {
-    console.error('❌ Error in saveExpertAnalysis controller:', error);
+    console.error('❌ Error in saveExpertAnalysis:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -183,7 +155,7 @@ const getTransmissionInterconnection = async (req, res) => {
   try {
     const { project } = req.query;
     
-    console.log('🔍 API Request: GET /api/transmission-interconnection', { project });
+    console.log('🔍 GET /api/transmission-interconnection', { project });
     
     if (!project) {
       return res.status(400).json({
@@ -204,15 +176,8 @@ const getTransmissionInterconnection = async (req, res) => {
       constraints: item.constraints,
       excessIXCapacity: item.excess_ix_capacity,
       projectId: item.project_id,
-      notes: item.notes,
       createdAt: item.created_at,
-      updatedAt: item.updated_at,
-      projectDetails: {
-        actualProjectName: item.actual_project_name,
-        projectCodename: item.project_codename,
-        iso: item.iso,
-        plantOwner: item.plant_owner
-      }
+      updatedAt: item.updated_at
     }));
     
     res.status(200).json({
@@ -220,7 +185,7 @@ const getTransmissionInterconnection = async (req, res) => {
       data: formattedData
     });
   } catch (error) {
-    console.error('❌ Error in getTransmissionInterconnection controller:', error);
+    console.error('❌ Error in getTransmissionInterconnection:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -236,7 +201,7 @@ const saveTransmissionInterconnection = async (req, res) => {
   try {
     const { projectId, transmissionData } = req.body;
     
-    console.log('💾 API Request: POST /api/transmission-interconnection', { 
+    console.log('💾 POST /api/transmission-interconnection', { 
       projectId,
       dataCount: transmissionData?.length || 0
     });
@@ -248,17 +213,7 @@ const saveTransmissionInterconnection = async (req, res) => {
       });
     }
     
-    if (!transmissionData || !Array.isArray(transmissionData)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Transmission data must be an array'
-      });
-    }
-    
-    const savedData = await expertAnalysis.saveTransmissionInterconnection(
-      projectId, 
-      transmissionData
-    );
+    const savedData = await expertAnalysis.saveTransmissionInterconnection(projectId, transmissionData);
     
     // Format response
     const formattedData = savedData.map(item => ({
@@ -277,11 +232,10 @@ const saveTransmissionInterconnection = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Transmission data saved successfully',
-      data: formattedData,
-      count: formattedData.length
+      data: formattedData
     });
   } catch (error) {
-    console.error('❌ Error in saveTransmissionInterconnection controller:', error);
+    console.error('❌ Error in saveTransmissionInterconnection:', error);
     res.status(500).json({
       success: false,
       message: 'Server error',
