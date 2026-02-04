@@ -45,6 +45,9 @@ class ExpertAnalysis {
       expertAnalysis.redevelopment_score = parseFloat(expertAnalysis.redevelopment_score) || 0;
       expertAnalysis.infrastructure_score = parseFloat(expertAnalysis.infrastructure_score) || 0;
       
+      // Calculate rating based on score
+      expertAnalysis.overall_rating = this.calculateRating(expertAnalysis.overall_project_score);
+      
       // Parse JSONB fields if needed
       if (expertAnalysis.thermal_breakdown && typeof expertAnalysis.thermal_breakdown === 'string') {
         try {
@@ -80,7 +83,7 @@ class ExpertAnalysis {
         projectId: analysisData.projectId,
         projectName: analysisData.projectName?.substring(0, 50) + '...',
         overallScore: analysisData.overallScore,
-        overallRating: analysisData.overallRating
+        confidence: analysisData.confidence
       });
       
       const {
@@ -115,20 +118,19 @@ class ExpertAnalysis {
       let result;
       
       if (checkResult.rows.length > 0) {
-        // Update existing
+        // Update existing - REMOVED overall_rating field
         const updateQuery = `
           UPDATE ${schema}.expert_analysis
           SET 
             project_name = $2,
             overall_project_score = $3,
-            overall_rating = $4,
-            confidence = $5,
-            thermal_operating_score = $6,
-            thermal_breakdown = $7,
-            redevelopment_score = $8,
-            redevelopment_breakdown = $9,
-            infrastructure_score = $10,
-            edited_by = $11,
+            confidence = $4,
+            thermal_operating_score = $5,
+            thermal_breakdown = $6,
+            redevelopment_score = $7,
+            redevelopment_breakdown = $8,
+            infrastructure_score = $9,
+            edited_by = $10,
             edited_at = NOW(),
             updated_at = NOW()
           WHERE project_codename = $1
@@ -139,7 +141,6 @@ class ExpertAnalysis {
           projectId,
           projectName || `Project ${projectId}`,
           parseFloat(overallScore) || 0,
-          overallRating || 'N/A',
           parseInt(confidence) || 0,
           parseFloat(thermalScore) || 0,
           thermalBreakdown ? JSON.stringify(thermalBreakdown) : '{}',
@@ -153,13 +154,12 @@ class ExpertAnalysis {
         result = await client.query(updateQuery, values);
         console.log(`🔄 Updated expert analysis for project codename ${projectId}`);
       } else {
-        // Create new
+        // Create new - REMOVED overall_rating field
         const insertQuery = `
           INSERT INTO ${schema}.expert_analysis (
             project_codename,
             project_name,
             overall_project_score,
-            overall_rating,
             confidence,
             thermal_operating_score,
             thermal_breakdown,
@@ -169,7 +169,7 @@ class ExpertAnalysis {
             edited_by,
             created_at,
             updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
           RETURNING *
         `;
         
@@ -177,7 +177,6 @@ class ExpertAnalysis {
           projectId,
           projectName || `Project ${projectId}`,
           parseFloat(overallScore) || 0,
-          overallRating || 'N/A',
           parseInt(confidence) || 0,
           parseFloat(thermalScore) || 0,
           thermalBreakdown ? JSON.stringify(thermalBreakdown) : '{}',
@@ -402,6 +401,15 @@ class ExpertAnalysis {
       console.error('❌ Error in checkExpertAnalysisExists:', error);
       return false;
     }
+  }
+
+  // Helper function to calculate rating based on score
+  static calculateRating(score) {
+    const percent = (score / 6) * 100;
+    if (percent >= 85) return 'STRONG';
+    if (percent >= 70) return 'GOOD';
+    if (percent >= 50) return 'FAIR';
+    return 'POOR';
   }
 }
 
